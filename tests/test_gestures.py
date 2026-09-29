@@ -46,20 +46,39 @@ class GestureTests(unittest.TestCase):
         self.step(1.0)
         self.assertEqual(self.events, ["quad_click"])
 
-    def test_long_press_fires_while_held_and_release_is_swallowed(self):
+    def test_long_press_arms_while_held_and_fires_on_release(self):
+        # Regression RC1: acting while the button was still down leaked the
+        # release to the next screen owner.
+        armed = []
+        self.rec._on_armed = armed.append
         self.rec.press()
         self.step(0.69)
-        self.assertEqual(self.events, [])
+        self.assertEqual((self.events, armed), ([], []))
         self.step(0.02)
-        self.assertEqual(self.events, ["long_press"])
+        self.assertEqual(self.events, [])            # nothing happens while held
+        self.assertEqual(armed, [True])              # only visual feedback
+        self.step(2.0)
+        self.assertEqual(self.events, [])
         self.rec.release()
+        self.assertEqual(self.events, ["long_press"])
+        self.assertEqual(armed, [True, False])
         self.step(1.0)
         self.assertEqual(self.events, ["long_press"])
+
+    def test_reset_while_armed_cancels_the_long_press(self):
+        self.rec.press()
+        self.step(0.8)
+        self.rec.reset()                             # e.g. the screen changed owner
+        self.rec.release()
+        self.step(1.0)
+        self.assertEqual(self.events, [])
 
     def test_click_then_long_press_flushes_click_first(self):
         self.click()
         self.rec.press()
         self.step(0.8)
+        self.assertEqual(self.events, ["single_click"])
+        self.rec.release()
         self.assertEqual(self.events, ["single_click", "long_press"])
 
     def test_release_without_press_ignored(self):

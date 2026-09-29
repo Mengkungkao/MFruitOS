@@ -74,6 +74,9 @@ class EventStream:
                 log.warning("event stream protocol error: %s", exc)
             if self.connected:
                 self.connected = False
+                if self._stop.is_set():
+                    log.info("Daemon event stream closed")
+                    break  # our own shutdown, not a lost connection
                 log.warning("Lost daemon event stream")
                 self._emit("_disconnected", {})
             if self._stop.wait(backoff):

@@ -6,7 +6,7 @@ import re
 from typing import Callable
 
 from mfruitos.launcher.ui.components import (LIST_BOTTOM, LIST_TOP, ROW_H, Item, back_item,
-                                             draw_header, draw_list)
+                                             draw_list)
 from mfruitos.launcher.ui.painter import Painter
 from mfruitos.launcher.ui.screens.base import ListScreen, Screen
 from mfruitos.launcher.ui.theme import MARGIN, SCREEN_W
@@ -17,9 +17,11 @@ class MessageScreen(ListScreen):
     """Title, wrapped message text, then a short list of actions."""
 
     def __init__(self, os, title: str, message: str, actions: list[Item] | None = None,
-                 tone: str = "", icon: str = ""):
+                 tone: str = "", icon: str = "", page: str = ""):
         super().__init__(os)
-        self.title = title
+        # A short page label goes in the status bar; the full title becomes a heading.
+        self.title = page or title
+        self.heading = title if page else ""
         self.message = message
         self.actions = actions if actions is not None else [Item("OK", kind="back", icon="check")]
         self.tone = tone
@@ -30,17 +32,21 @@ class MessageScreen(ListScreen):
 
     def draw(self, p: Painter) -> None:
         t = p.theme
-        p.text(MARGIN + 2, 31, self.title, 20, "bold", t.text,
-               max_width=SCREEN_W - 2 * MARGIN - (28 if self.icon else 0))
         items = self.current_items()
         list_top = max(LIST_TOP + 20, LIST_BOTTOM - ROW_H * len(items))
         x = MARGIN + 2
-        y = LIST_TOP
+        y = LIST_TOP + 2
         color = {"error": t.error, "warning": t.warning, "success": t.success}.get(self.tone, t.text)
+        if self.heading:
+            for line in p.wrap(self.heading, 16, "bold", SCREEN_W - 2 * MARGIN - 4, 2):
+                p.text(x, y, line, 16, "bold", t.text)
+                y += 21
+            y += 4
         if self.icon:
-            p.icon(self.icon, SCREEN_W - MARGIN - 20, 33, 20, color)
+            p.icon(self.icon, x, y + 1, 18, color)
+            x += 26
         room = max(1, (list_top - y - 6) // 18)
-        for line in p.wrap(self.message, 14, "regular", SCREEN_W - 2 * MARGIN - 4, room):
+        for line in p.wrap(self.message, 14, "regular", SCREEN_W - MARGIN - 2 - x, room):
             p.text(x, y, line, 14, "regular", t.text if not line.startswith("  ") else t.text_muted)
             y += 18
         draw_list(p, items, self.selected, top=list_top)
@@ -54,7 +60,8 @@ def confirm(os, title: str, message: str, confirm_label: str, on_confirm: Callab
     actions = [Item("Cancel", kind="back", icon="back"),
                Item(confirm_label, accept, kind="danger" if danger else "action",
                     icon="trash" if danger else "check")]
-    return MessageScreen(os, title, message, actions, tone="warning" if danger else "")
+    return MessageScreen(os, title, message, actions, tone="warning" if danger else "",
+                         page="Confirm")
 
 
 class ChoiceScreen(ListScreen):
@@ -122,21 +129,21 @@ class RangeScreen(Screen):
 
     def draw(self, p: Painter) -> None:
         t = p.theme
-        draw_header(p, self.title)
-        p.text(SCREEN_W // 2, 104, f"{self.value}{self.unit}", 44, "bold", t.text, anchor="mm")
+        p.text(SCREEN_W // 2, 96, f"{self.value}{self.unit}", 44, "bold", t.text, anchor="mm")
         fraction = (self.value - self.low) / max(1, self.high - self.low)
-        p.progress((MARGIN + 6, 150, SCREEN_W - MARGIN - 6, 162), fraction)
-        p.text(SCREEN_W // 2, 186, "tap +  ·  2× −", 13, "medium", t.text_muted, anchor="mm")
-        p.text(SCREEN_W // 2, 206, "hold to save  ·  4× cancel", 12, "regular", t.text_faint,
+        p.progress((MARGIN + 6, 142, SCREEN_W - MARGIN - 6, 154), fraction)
+        p.text(SCREEN_W // 2, 180, "tap +  ·  2× −", 13, "medium", t.text_muted, anchor="mm")
+        p.text(SCREEN_W // 2, 200, "hold to save  ·  4× cancel", 12, "regular", t.text_faint,
                anchor="mm")
 
 
 class ProgressScreen(ListScreen):
     """Shows a long-running job (install, update, check) step by step."""
 
-    def __init__(self, os, title: str, steps: list[tuple[str, str]]):
+    def __init__(self, os, title: str, steps: list[tuple[str, str]], page: str = "Update"):
         super().__init__(os)
-        self.title = title
+        self.title = page
+        self.heading = title
         self.steps = steps                  # [(key, label)]
         self.state: dict[str, str] = {}     # key -> running | done | failed
         self.detail = ""
@@ -218,11 +225,12 @@ class ProgressScreen(ListScreen):
 
     def draw(self, p: Painter) -> None:
         t = p.theme
-        draw_header(p, self.title)
+        p.text(MARGIN + 2, LIST_TOP, self.heading, 16, "bold", t.text,
+               max_width=SCREEN_W - 2 * MARGIN - 4)
         if not self.running:
             self._draw_result(p)
             return
-        y = LIST_TOP
+        y = LIST_TOP + 26
         compact = len(self.steps) > 5
         step_h = 17 if compact else 21
         for key, label in self.steps:
@@ -250,13 +258,14 @@ class ProgressScreen(ListScreen):
         t = p.theme
         ok = self.result_tone == "success"
         color = t.success if ok else t.error
-        p.icon("check" if ok else "cross", MARGIN + 2, LIST_TOP + 2, 22, color)
+        top = LIST_TOP + 28
+        p.icon("check" if ok else "cross", MARGIN + 2, top + 2, 20, color)
         failed = next((label for key, label in self.steps if self.state.get(key) == "failed"), "")
-        p.text(MARGIN + 32, LIST_TOP + 4, "Done" if ok else f"Failed at {failed or 'start'}",
-               16, "bold", color)
+        p.text(MARGIN + 30, top + 3, "Done" if ok else f"Failed at {failed or 'start'}",
+               15, "bold", color)
         items = self.current_items()
         list_top = LIST_BOTTOM - ROW_H * len(items)
-        y = LIST_TOP + 34
+        y = top + 30
         room = max(1, (list_top - y - 4) // 17)
         for line in p.wrap(self.result_text, 13, "medium", SCREEN_W - 2 * MARGIN - 8, room):
             p.text(MARGIN + 4, y, line, 13, "medium", t.text)
@@ -326,10 +335,44 @@ class LogScreen(Screen):
     def draw(self, p: Painter) -> None:
         t = p.theme
         lines = self._wrap(p)
-        draw_header(p, self.title, f"{min(len(lines), self.top + self.page)}/{len(lines)}")
         y = LIST_TOP
         for line in lines[self.top:self.top + self.page]:
             color = t.error if "ERROR" in line or "Traceback" in line else (
                 t.warning if "WARN" in line else t.text_muted)
             p.text(MARGIN, y, line, 11, "regular", color)
             y += self.LINE_H
+
+
+class LoadingScreen(Screen):
+    """"Opening <app>" — the last frame MFruit OS draws before an app starts.
+
+    With Whisplay's user interface in the background (whisplay-daemon-mfruit.py)
+    the daemon keeps this frame on the LCD until the app draws its own, so the
+    user never sees the daemon's desktop while an app starts up. It is static:
+    MFruit OS no longer owns the screen once the app is starting.
+    """
+
+    show_status = True
+
+    def __init__(self, os, app_id: str, name: str, icon_text: str = "", icon_path: str = ""):
+        super().__init__(os)
+        self.title = ""
+        self.app_id = app_id
+        self.name = name
+        self.icon_text = icon_text
+        self.icon_path = icon_path
+
+    def handle(self, action: str) -> bool:
+        return True
+
+    def footer(self, p: Painter) -> None:
+        pass
+
+    def draw(self, p: Painter) -> None:
+        t = p.theme
+        size = 76
+        p.app_icon(self.app_id, self.icon_text or self.name[:2], self.icon_path,
+                   (SCREEN_W - size) // 2, 70, size)
+        p.text(SCREEN_W // 2, 168, self.name, 20, "bold", t.text, anchor="ma",
+               max_width=SCREEN_W - 2 * MARGIN)
+        p.text(SCREEN_W // 2, 198, "Opening…", 14, "medium", t.text_muted, anchor="ma")

@@ -1,4 +1,4 @@
-"""Shared screen chrome: status bar, header, footer hints, list view, toast."""
+"""Shared screen chrome: status bar (page name, WiFi, battery), footer hints, list, toast."""
 
 from __future__ import annotations
 
@@ -8,9 +8,8 @@ from typing import Any, Callable
 from mfruitos.launcher.ui.painter import Painter
 from mfruitos.launcher.ui.theme import CORNER_INSET, MARGIN, SCREEN_W
 
-STATUS_Y = 7
-TITLE_Y = 31
-LIST_TOP = 62
+STATUS_Y = 9
+LIST_TOP = 40
 LIST_BOTTOM = 248
 FOOTER_Y = 256
 ROW_H = 36
@@ -27,47 +26,59 @@ class StatusInfo:
     daemon_ok: bool = True
 
 
-def draw_status_bar(p: Painter, status: StatusInfo) -> None:
+def _draw_wifi(p: Painter, x: int, y: int, level: int) -> None:
+    """Three arcs, lit according to signal strength (0 = disconnected)."""
     t = p.theme
-    p.text(CORNER_INSET + 4, STATUS_Y, status.time_text, 14, "semibold", t.text)
-    x = SCREEN_W - CORNER_INSET - 4
+    cx, cy = x + 8, y + 13
+    for index, radius in enumerate((4, 8, 12)):
+        lit = level >= index + 1
+        color = t.text if lit else t.surface_hi
+        p.draw.arc((cx - radius, cy - radius, cx + radius, cy + radius), 225, 315, fill=color,
+                   width=2)
+    p.draw.ellipse((cx - 1, cy - 1, cx + 1, cy + 1), fill=t.text if level else t.text_faint)
+    if level == 0:
+        p.draw.line((x + 1, y + 2, x + 15, y + 14), fill=t.warning, width=2)
+
+
+def _draw_battery(p: Painter, x: int, y: int, status: StatusInfo) -> int:
+    """Battery outline, fill and percentage right-aligned at ``x``; returns the new x."""
+    t = p.theme
+    label = f"{status.battery}%"
+    x -= p.text_width(label, 13, "medium")
+    p.text(x, y + 1, label, 13, "medium", t.text)
+    x -= 27
+    body = (x, y + 4, x + 21, y + 14)
+    p.rounded(body, 2, outline=t.text_muted, width=1)
+    p.rect((body[2] + 1, y + 7, body[2] + 2, y + 11), t.text_muted)
+    fill_w = max(1, int(17 * status.battery / 100))
+    color = t.error if status.battery <= 15 else (t.success if status.charging else t.text)
+    p.rect((x + 2, y + 6, x + 2 + fill_w, y + 12), color)
+    if status.charging:
+        p.icon("bolt", x + 5, y + 3, 12, t.bg)
+    return x
+
+
+def draw_status_bar(p: Painter, status: StatusInfo, title: str = "") -> None:
+    """Page name on the left; WiFi signal and battery on the right."""
+    t = p.theme
+    x = SCREEN_W - CORNER_INSET
     if status.battery is not None:
-        label = f"{status.battery}%"
-        x -= p.text_width(label, 12, "medium")
-        p.text(x, STATUS_Y + 1, label, 12, "medium", t.text_muted)
-        x -= 25
-        body = (x, STATUS_Y + 3, x + 19, STATUS_Y + 12)
-        p.rounded(body, 2, outline=t.text_muted, width=1)
-        p.rect((body[2] + 1, STATUS_Y + 6, body[2] + 2, STATUS_Y + 9), t.text_muted)
-        fill_w = max(1, int(15 * status.battery / 100))
-        color = t.error if status.battery <= 15 else (t.success if status.charging else t.text)
-        p.rect((x + 2, STATUS_Y + 5, x + 2 + fill_w, STATUS_Y + 10), color)
-        if status.charging:
-            p.icon("bolt", x + 4, STATUS_Y + 2, 11, t.bg)
-        x -= 6
+        x = _draw_battery(p, x, STATUS_Y, status) - 8
     if status.wifi_level is not None:
-        x -= 16
-        if status.wifi_level == 0:
-            p.icon("wifi", x, STATUS_Y, 15, t.text_faint)
-        else:
-            p.icon("wifi", x, STATUS_Y, 15, t.text if status.wifi_level >= 2 else t.warning)
+        x -= 17
+        _draw_wifi(p, x, STATUS_Y, status.wifi_level)
         x -= 6
     if not status.daemon_ok:
-        x -= 14
-        p.icon("warning", x, STATUS_Y + 1, 13, t.warning)
+        x -= 15
+        p.icon("warning", x, STATUS_Y + 2, 14, t.warning)
+        x -= 4
     elif status.busy:
-        x -= 14
-        p.icon("download", x, STATUS_Y + 1, 13, t.accent)
-
-
-def draw_header(p: Painter, title: str, subtitle: str = "") -> None:
-    p.text(MARGIN + 2, TITLE_Y, title, 20, "bold", p.theme.text, max_width=SCREEN_W - 2 * MARGIN)
-    if subtitle:
-        width = p.text_width(title, 20, "bold")
-        room = SCREEN_W - MARGIN * 2 - width - 10
-        if room > 30:
-            p.text(SCREEN_W - MARGIN - 2, TITLE_Y + 6, subtitle, 12, "medium",
-                   p.theme.text_muted, anchor="ra", max_width=room)
+        x -= 15
+        p.icon("download", x, STATUS_Y + 2, 14, t.accent)
+        x -= 4
+    if title:
+        left = CORNER_INSET - 4
+        p.text(left, STATUS_Y - 1, title, 17, "bold", t.text, max_width=max(20, x - left - 6))
 
 
 def draw_footer(p: Painter, hints: list[tuple[str, str]]) -> None:

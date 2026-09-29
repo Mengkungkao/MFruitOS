@@ -58,7 +58,8 @@ class UpdaterScreen(ListScreen):
             rows.append(Item(f"Update all ({count})", os.update_all, icon="download", tone="accent"))
         rows += [
             Item("Install app", lambda: os.push(InstallAppScreen(os)), kind="nav", icon="package"),
-            Item("Check now", lambda: os.check_updates(), icon="refresh", enabled=not up.busy),
+            Item("Check now", lambda: os.check_updates(), icon="refresh", enabled=not up.busy,
+                 subtitle="Checking…" if up.busy else f"Last check {when(up.last_check)}"),
             back_item(),
         ]
         return rows

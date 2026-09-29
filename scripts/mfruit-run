@@ -1,11 +1,16 @@
 #!/bin/sh
-# mfruit-run <app_id> — launch an MFruit OS managed app.
+# mfruit-run <app_id> — the launch gate and runner for apps started by whisplay-daemon.
 #
-# This is the launch_command MFruit OS registers with whisplay-daemon for
-# apps it installed. It runs the entrypoint from
-# ~/.whisplay-os/apps/<id>/current, appends output to
-# ~/.whisplay-os/logs/<id>.log and records pid / exit code in
-# ~/.whisplay-os/state/runs/<id>.json (the daemon does not report exit codes).
+# MFruit OS registers every app it manages with this command, both packages it
+# installed and daemon apps it adopted. While MFruit OS runs, an app starts
+# only with the one-shot ticket MFruit OS writes just before it asks the
+# daemon to launch that app; any other start (for example a press on the
+# daemon's own desktop while another app is starting up) is denied. When
+# MFruit OS is not running, the gate is open and the daemon desktop works as
+# before.
+#
+# The runner records pid, session and exit code in
+# ~/.whisplay-os/state/runs/<id>.json (the daemon reports neither).
 set -u
 
 APP_ID="${1:-}"
@@ -13,54 +18,101 @@ case "$APP_ID" in
   ""|*[!a-z0-9_-]*) echo "mfruit-run: invalid app id '$APP_ID'" >&2; exit 64 ;;
 esac
 
-OS_HOME="${WHISPLAY_OS_HOME:-$HOME/.whisplay-os}"
+# Replaced with the real data directory when MFruit OS installs this script:
+# the daemon may run with a different $HOME than the launcher.
+DEFAULT_HOME="@MFRUIT_HOME@"
+case "$DEFAULT_HOME" in @*) DEFAULT_HOME="$HOME/.whisplay-os" ;; esac
+OS_HOME="${WHISPLAY_OS_HOME:-$DEFAULT_HOME}"
+STATE_DIR="$OS_HOME/state"
 APP_ROOT="$OS_HOME/apps/$APP_ID"
-APP_DIR="$APP_ROOT/current"
-LOG="$OS_HOME/logs/$APP_ID.log"
-STATE_DIR="$OS_HOME/state/runs"
-STATE="$STATE_DIR/$APP_ID.json"
-mkdir -p "$OS_HOME/logs" "$STATE_DIR" "$APP_ROOT/data" 2>/dev/null
+ADOPTED="$OS_HOME/adopted/$APP_ID"
+RUNS="$STATE_DIR/runs"
+STATE="$RUNS/$APP_ID.json"
+mkdir -p "$OS_HOME/logs" "$RUNS" 2>/dev/null
 
 write_state() {
   printf '%s\n' "$1" > "$STATE.tmp.$$" && mv "$STATE.tmp.$$" "$STATE"
 }
 
+deny() {
+  printf '%s DENIED %s: %s (parent pid %s)\n' "$(date '+%F %T')" "$APP_ID" "$1" "$PPID" \
+    >> "$OS_HOME/logs/launch-gate.log"
+  echo "mfruit-run: not starting $APP_ID: $1" >&2
+  exit 0
+}
+
+launcher_alive() {
+  # MFruit OS holds an flock on launcher.lock for as long as it runs; the kernel
+  # drops it when the process dies, so a crash can never leave the gate closed.
+  [ -e "$STATE_DIR/launcher.lock" ] || return 1
+  if command -v flock >/dev/null 2>&1; then
+    ! flock -n "$STATE_DIR/launcher.lock" true 2>/dev/null
+  else
+    pid=$(cat "$STATE_DIR/launcher.pid" 2>/dev/null) || return 1
+    [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+  fi
+}
+
+# ----------------------------------------------------------------- the gate
+SESSION=""
+if launcher_alive && [ "$(cat "$STATE_DIR/launch-policy" 2>/dev/null)" != "open" ]; then
+  TICKET="$STATE_DIR/tickets/$APP_ID"
+  CLAIM="$TICKET.claim.$$"
+  # mv is atomic: exactly one start can claim a ticket.
+  mv "$TICKET" "$CLAIM" 2>/dev/null || deny "not requested by MFruit OS (no launch ticket)"
+  read -r SESSION EXPIRES < "$CLAIM"
+  rm -f "$CLAIM"
+  [ "$(date +%s)" -le "${EXPIRES:-0}" ] || deny "launch ticket expired (session $SESSION)"
+fi
+
+# ------------------------------------------------------------ what to run
 STARTED=$(date +%s)
-if [ ! -d "$APP_DIR" ]; then
-  echo "mfruit-run: $APP_ID is not installed ($APP_DIR missing)" >&2
-  write_state "{\"app_id\":\"$APP_ID\",\"state\":\"exited\",\"exit_code\":127,\"started_at\":$STARTED,\"ended_at\":$STARTED}"
+if [ -d "$APP_ROOT/current" ]; then
+  # A package installed by MFruit OS.
+  APP_DIR="$APP_ROOT/current"
+  LOG="$OS_HOME/logs/$APP_ID.log"
+  ENTRY=$(head -n 1 "$APP_DIR/.mfruit-entrypoint" 2>/dev/null)
+  case "$ENTRY" in
+    ""|/*|*..*|*[!A-Za-z0-9._/-]*)
+      echo "mfruit-run: invalid entrypoint '$ENTRY' for $APP_ID" >&2
+      write_state "{\"app_id\":\"$APP_ID\",\"session\":\"$SESSION\",\"state\":\"exited\",\"exit_code\":65,\"started_at\":$STARTED,\"ended_at\":$STARTED}"
+      exit 65 ;;
+  esac
+  TARGET="$APP_DIR/$ENTRY"
+  if [ -x "$TARGET" ]; then
+    set -- "$TARGET"
+  else
+    case "$TARGET" in
+      *.py) set -- python3 "$TARGET" ;;
+      *.sh) set -- /bin/bash "$TARGET" ;;
+      *) set -- "$TARGET" ;;
+    esac
+  fi
+  export WHISPLAY_APP_ID="$APP_ID" WHISPLAY_OS_APP_DIR="$APP_DIR"
+  export WHISPLAY_OS_APP_DATA="$APP_ROOT/data" PYTHONUNBUFFERED=1
+  mkdir -p "$APP_ROOT/data" 2>/dev/null
+  cd "$APP_DIR" || exit 66
+elif [ -f "$ADOPTED/command" ]; then
+  # A daemon app adopted by MFruit OS: run its original launch command.
+  # Output goes wherever the daemon sends it (e.g. daemon-app.log), as before.
+  LOG=""
+  CWD=$(cat "$ADOPTED/cwd" 2>/dev/null)
+  if [ -n "$CWD" ]; then cd "$CWD" 2>/dev/null || cd "$HOME"; fi
+  set -- /bin/sh -c "$(cat "$ADOPTED/command")"
+else
+  echo "mfruit-run: $APP_ID is not installed" >&2
+  write_state "{\"app_id\":\"$APP_ID\",\"session\":\"$SESSION\",\"state\":\"exited\",\"exit_code\":127,\"started_at\":$STARTED,\"ended_at\":$STARTED}"
   exit 127
 fi
 
-ENTRY=$(head -n 1 "$APP_DIR/.mfruit-entrypoint" 2>/dev/null)
-case "$ENTRY" in
-  ""|/*|*..*|*[!A-Za-z0-9._/-]*)
-    echo "mfruit-run: invalid entrypoint '$ENTRY' for $APP_ID" >&2
-    write_state "{\"app_id\":\"$APP_ID\",\"state\":\"exited\",\"exit_code\":65,\"started_at\":$STARTED,\"ended_at\":$STARTED}"
-    exit 65 ;;
-esac
-TARGET="$APP_DIR/$ENTRY"
-
-if [ -x "$TARGET" ]; then
-  set -- "$TARGET"
+# -------------------------------------------------------------------- run
+write_state "{\"app_id\":\"$APP_ID\",\"session\":\"$SESSION\",\"state\":\"running\",\"pid\":$$,\"started_at\":$STARTED}"
+if [ -n "$LOG" ]; then
+  printf '=== %s start %s session=%s ===\n' "$(date '+%F %T')" "$APP_ID" "$SESSION" >> "$LOG"
+  "$@" >> "$LOG" 2>&1 &
 else
-  case "$TARGET" in
-    *.py) set -- python3 "$TARGET" ;;
-    *.sh) set -- /bin/bash "$TARGET" ;;
-    *) set -- "$TARGET" ;;
-  esac
+  "$@" &
 fi
-
-write_state "{\"app_id\":\"$APP_ID\",\"state\":\"running\",\"pid\":$$,\"started_at\":$STARTED}"
-printf '=== %s start %s ===\n' "$(date '+%F %T')" "$APP_ID" >> "$LOG"
-
-export WHISPLAY_APP_ID="$APP_ID"
-export WHISPLAY_OS_APP_DIR="$APP_DIR"
-export WHISPLAY_OS_APP_DATA="$APP_ROOT/data"
-export PYTHONUNBUFFERED=1
-cd "$APP_DIR" || exit 66
-
-"$@" >> "$LOG" 2>&1 &
 CHILD=$!
 trap 'kill -TERM "$CHILD" 2>/dev/null' TERM INT HUP
 wait "$CHILD"
@@ -72,6 +124,6 @@ while kill -0 "$CHILD" 2>/dev/null; do
 done
 
 ENDED=$(date +%s)
-write_state "{\"app_id\":\"$APP_ID\",\"state\":\"exited\",\"pid\":$$,\"started_at\":$STARTED,\"ended_at\":$ENDED,\"exit_code\":$RC}"
-printf '=== %s exit %s code=%s ===\n' "$(date '+%F %T')" "$APP_ID" "$RC" >> "$LOG"
+write_state "{\"app_id\":\"$APP_ID\",\"session\":\"$SESSION\",\"state\":\"exited\",\"pid\":$$,\"started_at\":$STARTED,\"ended_at\":$ENDED,\"exit_code\":$RC}"
+[ -n "$LOG" ] && printf '=== %s exit %s code=%s ===\n' "$(date '+%F %T')" "$APP_ID" "$RC" >> "$LOG"
 exit "$RC"

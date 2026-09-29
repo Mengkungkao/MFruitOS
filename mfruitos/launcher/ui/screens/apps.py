@@ -14,8 +14,7 @@ STATUS_TAGS = {
     "update": ("Update", "accent"),
     "installed": ("On", None),
 }
-KIND_LABELS = {"os": "Installed by MFruit OS", "daemon": "Registered with daemon",
-               "system": "Daemon page"}
+KIND_LABELS = {"os": "Package", "daemon": "Daemon app", "system": "Daemon page"}
 
 
 def status_tag(app: AppEntry) -> tuple[str, str | None]:
@@ -71,10 +70,12 @@ class AppDetailScreen(ListScreen):
         os = self.os
         settings = os.settings
         label, tone = status_tag(app)
-        rows = [Item("Status", kind="info", value=label, tone=tone, subtitle=KIND_LABELS.get(app.kind))]
+        kind = KIND_LABELS.get(app.kind, "")
+        rows = [Item("Status", kind="info", value=label, tone=tone,
+                     subtitle=f"{kind} · {app.version}" if app.version else kind)]
         if app.broken:
             rows.append(Item("Problem", kind="info", subtitle=app.broken, tone="error", icon="warning"))
-        rows.append(Item("Open", lambda: os.launch_app(app.id), icon="play",
+        rows.append(Item("Open", lambda: os.launch_app(app.id, source="settings"), icon="play",
                          enabled=app.launchable,
                          data={"disabled_reason": "App is disabled" if not app.enabled else app.broken}))
         rows.append(Item("Enabled", self._toggle_enabled, kind="toggle", value=app.enabled))
@@ -84,6 +85,10 @@ class AppDetailScreen(ListScreen):
                          value=settings.get("apps.default_app") == app.id))
         rows.append(Item("Autostart", lambda: self._flag("autostart", not app.autostart),
                          kind="toggle", value=app.autostart))
+        rows.append(Item("Keep running", lambda: self._flag("background", not app.background),
+                         kind="toggle", value=app.background,
+                         subtitle="Stays on when you leave it" if app.background
+                         else "Closed completely when you leave it"))
         rows.append(Item("Move up", lambda: self._move(-1), icon="up"))
         rows.append(Item("Move down", lambda: self._move(1), icon="down"))
         if app.running:

@@ -25,10 +25,12 @@ def _status(rt, args):
             "title": getattr(rt.router.top, "title", ""),
             "backlight": rt.backlight.state, "apps": len(rt.registry.apps()),
             "updates": rt.updater.update_count(), "direct_display": rt.direct is not None,
-            "stats": dict(rt.stats, loop_wakeups=rt.loop.wakeups)}
+            "stats": dict(rt.stats, loop_wakeups=rt.loop.wakeups),
+            "session": rt.apps.describe()}
 
 
 def _summon(rt, args):
+    rt.lifecycle.set_gate("gate")
     rt.focus.summon()
     return {"ok": True}
 
@@ -77,9 +79,11 @@ def _launch(rt, args):
     app_id = args.get("app_id", "")
     if rt.registry.get(app_id) is None:
         return {"ok": False, "error": f"unknown app {app_id!r}"}
+    if rt.apps.busy:
+        rt.apps.request_launch(app_id, "app", "control")  # refused and logged
+        return {"ok": False, "error": f"busy: {rt.apps.describe()}"}
     rt.router.home()
-    rt.launch_app(app_id)
-    return {"ok": True}
+    return {"ok": rt.launch_app(app_id, source="control")}
 
 
 def _reload(rt, args):

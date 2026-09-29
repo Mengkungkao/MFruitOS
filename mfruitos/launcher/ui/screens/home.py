@@ -26,6 +26,7 @@ class HomeEntry:
 
 
 class HomeScreen(Screen):
+    title = "Apps"
     select_label = "open"
 
     def __init__(self, os):
@@ -89,11 +90,6 @@ class HomeScreen(Screen):
     def draw(self, p: Painter) -> None:
         t = p.theme
         entries = self.entries()
-        title = self.os.settings.get("system.home_title") or "MFruit OS"
-        p.text(MARGIN + 2, 31, title, 20, "bold", t.text, max_width=150)
-        if entries:
-            p.text(SCREEN_W - MARGIN - 2, 37, f"{self.selected + 1} / {len(entries)}", 12,
-                   "medium", t.text_faint, anchor="ra")
         if not entries:
             return
         self.selected = min(self.selected, len(entries) - 1)
@@ -104,8 +100,12 @@ class HomeScreen(Screen):
             y += h + GAP
         total = y - GAP
         visible = LIST_BOTTOM - LIST_TOP
-        context = ROW_H + GAP if self.selected > 0 else 0
-        offset = max(0, min(tops[self.selected] - context, max(0, total - visible)))
+        # Scroll in whole rows: one row of context above the selected card,
+        # never a half-cut row under the status bar.
+        first = max(0, self.selected - 1)
+        while first > 0 and total - tops[first - 1] <= visible:
+            first -= 1
+        offset = tops[first]
         for index, entry in enumerate(entries):
             top = LIST_TOP + tops[index] - offset
             if top + heights[index] < LIST_TOP or top > LIST_BOTTOM:
@@ -114,12 +114,9 @@ class HomeScreen(Screen):
                 self._draw_card(p, entry, top)
             else:
                 self._draw_row(p, entry, top)
+        # Keep rows that scrolled out of the list area off the status bar and footer.
         p.rect((0, LIST_BOTTOM + 1, SCREEN_W, 280), t.bg)
         p.rect((0, 0, SCREEN_W, LIST_TOP - 3), t.bg)
-        # redraw the header over any row that scrolled beneath it
-        p.text(MARGIN + 2, 31, title, 20, "bold", t.text, max_width=150)
-        p.text(SCREEN_W - MARGIN - 2, 37, f"{self.selected + 1} / {len(entries)}", 12,
-               "medium", t.text_faint, anchor="ra")
 
     def _tile(self, p: Painter, entry: HomeEntry, x: int, y: int, size: int) -> None:
         t = p.theme
@@ -167,6 +164,8 @@ class HomeScreen(Screen):
         x = left + 58
         p.text(x, top + 10, entry.name, 17, "semibold", t.text, max_width=right - x - 10)
         text, tone = self._subtitle(entry)
+        if getattr(self.os, "hold_armed", False):
+            text, tone = "Release to open", "accent"
         color = {"error": t.error, "success": t.success, "accent": t.accent}.get(tone, t.text_muted)
         p.text(x, top + 33, text, 12, "medium", color, max_width=right - x - 10)
 

@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 from mfruitos import OS_NAME, __version__
-from mfruitos.launcher.ui.components import FOOTER_Y, Item, back_item, draw_header
+from mfruitos.launcher.ui.components import FOOTER_Y, Item, back_item
 from mfruitos.launcher.ui.painter import Painter
 from mfruitos.launcher.ui.screens.base import ListScreen, Screen
 from mfruitos.launcher.ui.theme import SCREEN_H, SCREEN_W
 from mfruitos.launcher.navigation.gestures import gesture_label
 from mfruitos.system import diagnostics, system_info
 
-CHECK_ORDER = ("Whisplay Daemon", "Display", "Button", "RGB LED", "Audio", "Network", "Storage",
+CHECK_ORDER = ("Whisplay Daemon", "Whisplay UI", "Display", "Button", "RGB LED", "Audio", "Network", "Storage",
                "Internet", "GitHub")
 
 
@@ -35,6 +35,7 @@ class DiagnosticsScreen(ListScreen):
             client = os.client
             results = [
                 diagnostics.check_daemon(client),
+                diagnostics.check_daemon_ui(),
                 diagnostics.check_display(os.focus.has_focus),
                 diagnostics.check_button(client),
                 diagnostics.check_led(client, os.led.current),
@@ -170,8 +171,8 @@ class ButtonTestScreen(Screen):
 
     def draw(self, p: Painter) -> None:
         t = p.theme
-        draw_header(p, self.title, f"{self.presses} presses")
-        cx, cy = SCREEN_W // 2, 110
+        cx, cy = SCREEN_W // 2, 98
+        p.text(cx, 48, f"{self.presses} presses", 12, "medium", t.text_muted, anchor="ma")
         color = t.accent if self.pressed else t.surface_hi
         p.draw.ellipse((cx - 34, cy - 34, cx + 34, cy + 34), fill=color)
         p.text(cx, cy, "DOWN" if self.pressed else "UP", 14, "bold",

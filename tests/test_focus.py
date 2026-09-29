@@ -6,6 +6,7 @@ from fake_daemon import FakeDaemon
 from mfruitos.daemon.client import WhisplayDaemonClient
 from mfruitos.daemon.events import EventStream
 from mfruitos.launcher import focus as focus_mod
+from mfruitos.core.application_manager import ApplicationManager
 from mfruitos.launcher.focus import APP, DESKTOP, HOME, LOCKED, OFFLINE, SYSTEM, ForegroundManager
 from mfruitos.launcher.loop import EventLoop
 
@@ -24,19 +25,27 @@ class Recorder:
     def names(self):
         return [c[0] for c in self.calls]
 
+    def ended(self, app_id=None, outcome=None):
+        return [c[1] for c in self.calls if c[0] == "on_session_ended"
+                and (app_id is None or c[1].app_id == app_id)
+                and (outcome is None or c[1].outcome == outcome)]
+
 
 class FocusIntegrationTests(unittest.TestCase):
     def setUp(self):
         self.daemon = FakeDaemon().start()
         self.daemon.handle({"cmd": "app.register", "payload": {"app_id": OS_ID}}, None)
-        for app_id in ("good", "crashy", "ghost", "handoff"):
+        for app_id in ("good", "crashy", "ghost", "intruded"):
             self.daemon.handle({"cmd": "app.register", "payload": {"app_id": app_id}}, None)
         self.daemon.behaviour.update({"crashy": "crash", "ghost": "headless",
-                                      "handoff": "handoff:whisplay-wifi"})
+                                      "intruded": "intruded:whisplay-wifi"})
         self.loop = EventLoop()
         self.client = WhisplayDaemonClient(self.daemon.socket_path, timeout=2)
         self.listener = Recorder()
-        self.fm = ForegroundManager(self.client, self.loop, OS_ID, self.listener)
+        self.manager = ApplicationManager()
+        self.manager.listener = self.listener
+        self.fm = ForegroundManager(self.client, self.loop, OS_ID, self.listener, manager=self.manager,
+                                    is_page=lambda a: a.startswith("whisplay-"))
         self.stream = EventStream(self.daemon.socket_path,
                                   lambda n, p: self.loop.post(self.fm.on_event, n, p))
         self.stream.start()
@@ -67,73 +76,69 @@ class FocusIntegrationTests(unittest.TestCase):
         self.assertEqual(self.daemon.read_frame(OS_ID)[:2], b"\xff\xff")
 
     def test_launch_app_and_return_home(self):
-        self.fm.launch("good")
+        self.manager.request_launch("good")
         self.wait_for(lambda: self.fm.phase == "foreground", "app foreground")
         self.assertEqual(self.daemon.foreground, "good")
         self.assertFalse(self.fm.has_focus)
         self.daemon.app_exits("good")
         self.wait_for(lambda: self.fm.has_focus, "focus back")
         self.assertEqual(self.fm.mode, HOME)
-        self.assertIn(("on_app_returned", "good", APP), self.listener.calls)
+        self.assertEqual(len(self.listener.ended("good", "exited")), 1)
         self.assertEqual(self.daemon.foreground, OS_ID)
 
     def test_own_release_does_not_steal_back_during_launch(self):
         self.daemon.launch_delay = 0.4
-        self.fm.launch("good")
+        self.manager.request_launch("good")
         self.settle(0.2)  # desktop_entered from our own release has been processed
         self.assertEqual(self.fm.mode, APP)
         self.assertFalse(self.fm.has_focus)
         self.wait_for(lambda: self.daemon.foreground == "good", "app foreground")
 
     def test_launch_failure_detected(self):
-        self.fm.launch("crashy")
+        self.manager.request_launch("crashy")
         self.wait_for(lambda: self.fm.has_focus, "focus back after crash")
-        failed = [c for c in self.listener.calls if c[0] == "on_launch_failed"]
-        self.assertEqual(failed[0][1], "crashy")
+        self.assertEqual(len(self.listener.ended("crashy", "failed")), 1)
 
-    def test_handoff_to_daemon_page_is_not_a_failure(self):
-        # Regression (seen on hardware with ConnectWifi): the launched app opens a
-        # daemon page and exits. That must not be reported as a failed launch.
-        self.fm.launch("handoff")
-        self.wait_for(lambda: self.fm.target == "whisplay-wifi", "follow the hand-off")
-        self.settle(0.5)
-        self.assertNotIn("on_launch_failed", self.listener.names())
-        self.assertFalse(self.fm.has_focus)
-        self.daemon.internal_back("whisplay-wifi")
-        self.wait_for(lambda: self.fm.has_focus, "back home after the page")
-        self.assertNotIn("on_launch_failed", self.listener.names())
+    def test_intruder_during_launch_is_evicted(self):
+        # RC2 (replaces the wrong "hand-off" theory): a daemon page that takes the
+        # screen while the requested app starts is closed; the requested app wins.
+        self.manager.request_launch("intruded")
+        self.wait_for(lambda: self.daemon.foreground == "intruded", "requested app on screen", 6)
+        self.wait_for(lambda: self.manager.state == "RUNNING", "session running")
+        self.assertEqual(self.listener.ended(), [])
+        self.assertIn(("app.exit.request", {"app_id": "whisplay-wifi"}), self.daemon.commands)
 
     def test_headless_app_detected(self):
         old = focus_mod.PENDING_TIMEOUT_SEC
         focus_mod.PENDING_TIMEOUT_SEC = 0.8
         self.daemon.pending_timeout = 0.5
         try:
-            self.fm.launch("ghost")
+            self.manager.request_launch("ghost")
             self.wait_for(lambda: self.fm.has_focus, "focus back after headless")
         finally:
             focus_mod.PENDING_TIMEOUT_SEC = old
-        self.assertIn(("on_app_headless", "ghost"), self.listener.calls)
+        self.assertEqual(len(self.listener.ended("ghost", "headless")), 1)
 
     def test_unknown_app_launch_rejected(self):
-        self.fm.launch("nope")
+        self.manager.request_launch("nope")
         self.wait_for(lambda: self.fm.has_focus, "focus back")
         self.settle(0.3)
-        self.assertIn("on_launch_failed", self.listener.names())
+        self.assertEqual(len(self.listener.ended("nope", "failed")), 1)
         # Regression: the echo of our own release must not drop the fresh focus.
         self.assertEqual(self.listener.names().count("on_focus_gained"), 2)
         self.assertTrue(self.fm.has_focus)
 
     def test_system_page_round_trip(self):
-        self.fm.launch("whisplay-wifi", system_page=True)
+        self.manager.request_launch("whisplay-wifi", "page")
         self.settle(0.2)
         self.assertEqual(self.fm.mode, SYSTEM)
         self.assertEqual(self.daemon.foreground, "whisplay-wifi")
         self.daemon.internal_back("whisplay-wifi")
         self.wait_for(lambda: self.fm.has_focus, "back from wifi page")
-        self.assertIn(("on_app_returned", "whisplay-wifi", SYSTEM), self.listener.calls)
+        self.assertEqual(len(self.listener.ended("whisplay-wifi", "exited")), 1)
 
     def test_app_releasing_focus_but_staying_alive(self):
-        self.fm.launch("good")
+        self.manager.request_launch("good")
         self.wait_for(lambda: self.fm.phase == "foreground", "app foreground")
         self.daemon.app_releases("good")
         self.wait_for(lambda: self.fm.has_focus, "focus back")
@@ -144,7 +149,7 @@ class FocusIntegrationTests(unittest.TestCase):
         self.daemon.release()
         self.wait_for(lambda: ("on_button", False) in self.listener.calls, "button")
         self.assertIn(("on_button", True), self.listener.calls)
-        self.fm.launch("good")
+        self.manager.request_launch("good")
         self.wait_for(lambda: self.fm.phase == "foreground", "app foreground")
         count = len([c for c in self.listener.calls if c[0] == "on_button"])
         self.daemon.press()
@@ -153,7 +158,7 @@ class FocusIntegrationTests(unittest.TestCase):
         self.assertEqual(count, len([c for c in self.listener.calls if c[0] == "on_button"]))
 
     def test_screen_lock_and_unlock(self):
-        self.fm.launch("whisplay-volume", system_page=True)
+        self.manager.request_launch("whisplay-volume", "page")
         self.settle(0.1)
         self.daemon.lock_screen()
         self.wait_for(lambda: self.fm.mode == LOCKED, "locked")
@@ -192,6 +197,38 @@ class FocusIntegrationTests(unittest.TestCase):
         self.daemon.app_releases(OS_ID)
         self.wait_for(lambda: self.fm.has_focus and self.daemon.foreground == OS_ID,
                       "re-acquired after revoke")
+
+
+
+class AdoptionTests(unittest.TestCase):
+    def test_adopt_and_restore_round_trip(self):
+        import os
+        import shutil
+        import tempfile
+        from mfruitos.launcher.app_manager.lifecycle import AppLifecycle
+        from mfruitos.paths import Paths
+        tmp = tempfile.mkdtemp()
+        daemon = FakeDaemon().start()
+        try:
+            paths = Paths(os.path.join(tmp, "os"), os.path.join(tmp, "d"))
+            paths.ensure()
+            life = AppLifecycle(WhisplayDaemonClient(daemon.socket_path), paths)
+            original = {"app_id": "walkie", "display_name": "WalkieTalkie", "icon": "WT",
+                        "launch_command": "/home/u/WalkieTalkie/run.sh", "cwd": "/home/u/WalkieTalkie",
+                        "exit_gesture": "none", "priority": 45, "use_daemon_default_log": True,
+                        "disable_esc_exit_key": True}
+            self.assertTrue(life.adopt(original))
+            adopted = daemon.apps["walkie"]
+            self.assertIn("mfruit-run", adopted["launch_command"])
+            for key in ("cwd", "exit_gesture", "priority", "disable_esc_exit_key", "icon"):
+                self.assertEqual(adopted[key], original[key], key)
+            self.assertFalse(life.adopt(dict(original, launch_command=adopted["launch_command"])))
+            self.assertEqual(life.restore_adopted(), 1)
+            self.assertEqual(daemon.apps["walkie"]["launch_command"], original["launch_command"])
+            self.assertFalse(life.is_adopted("walkie"))
+        finally:
+            daemon.stop()
+            shutil.rmtree(tmp, ignore_errors=True)
 
 
 if __name__ == "__main__":

@@ -38,6 +38,26 @@ def check_daemon(client: WhisplayDaemonClient) -> CheckResult:
     return CheckResult("Whisplay Daemon", True, f"{ms:.0f} ms")
 
 
+def daemon_ui_in_background() -> bool:
+    """True if whisplay-daemon runs through MFruit OS's background wrapper."""
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit():
+            continue
+        try:
+            with open(f"/proc/{pid}/cmdline", "rb") as fp:
+                if b"whisplay-daemon-mfruit" in fp.read():
+                    return True
+        except OSError:
+            continue
+    return False
+
+
+def check_daemon_ui() -> CheckResult:
+    if daemon_ui_in_background():
+        return CheckResult("Whisplay UI", True, "background")
+    return CheckResult("Whisplay UI", None, "visible (run install.sh)")
+
+
 def check_display(has_focus: bool) -> CheckResult:
     return CheckResult("Display", has_focus, "OK" if has_focus else "no framebuffer")
 

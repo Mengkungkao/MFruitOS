@@ -59,6 +59,9 @@ class AppEntry:
     exit_gesture: str = "quad_click"
     env: dict = field(default_factory=dict)
     disable_esc_exit_key: bool = False
+    adopted: bool = False          # daemon app routed through the MFruit launch gate
+    background: bool = False       # keep running after the user leaves it
+    background_default: bool = False
     enabled: bool = True
     hidden: bool = False
     autostart: bool = False
@@ -157,6 +160,8 @@ class AppRegistry:
             entry.enabled = flags["enabled"]
             entry.hidden = flags["hidden"]
             entry.autostart = flags["autostart"]
+            explicit = self.settings.app_flag_explicit(entry.id, "background")
+            entry.background = explicit if explicit is not None else entry.background_default
             latest = self._latest.get(entry.id, "")
             entry.latest_version = latest if entry.kind == "os" else ""
 
@@ -165,6 +170,13 @@ class AppRegistry:
                  sum(1 for e in entries.values() if e.kind == "os"),
                  "online" if self.daemon_online else "offline")
         return self.all()
+
+    def daemon_registrations(self) -> dict[str, dict]:
+        """Persisted daemon registrations (``~/.whisplay-daemon/app/*.json``)."""
+        return self._scan_daemon_files()
+
+    def _adopted_registration(self, app_id: str) -> dict | None:
+        return _read_json(os.path.join(self.paths.home, "adopted", app_id, "registration.json"))
 
     def _scan_daemon_files(self) -> dict[str, dict]:
         result: dict[str, dict] = {}
@@ -188,6 +200,13 @@ class AppRegistry:
         return result
 
     def _daemon_entry(self, app_id: str, info: dict, config: dict, registered: bool) -> AppEntry:
+        original = None
+        if is_wrapper_command(str(config.get("launch_command") or ""), app_id):
+            original = self._adopted_registration(app_id)
+        if original:
+            # Adopted: show the app's own command and folder, not the gate.
+            config = dict(config, launch_command=original.get("launch_command", ""),
+                          cwd=original.get("cwd", config.get("cwd", "")))
         entry = AppEntry(
             id=app_id,
             name=str(info.get("display_name") or config.get("display_name") or app_id)[:40],
@@ -200,6 +219,7 @@ class AppRegistry:
             registered=registered,
             running=bool(info.get("running")),
             foreground=bool(info.get("foreground")),
+            adopted=bool(original),
         )
         if config:
             if not entry.launch_command:
@@ -269,6 +289,7 @@ class AppRegistry:
         entry.exit_gesture = manifest.exit_gesture
         entry.env = dict(manifest.env)
         entry.disable_esc_exit_key = manifest.disable_esc_exit_key
+        entry.background_default = manifest.background
         entry.repository = entry.repository or manifest.repository
         entry.branch = entry.branch or manifest.branch
         entry.cwd = current

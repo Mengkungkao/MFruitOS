@@ -147,7 +147,7 @@ SCHEMA: dict[str, tuple[Any, Callable[[Any], Any]]] = {
     "apps.default_app": ("", _app_id_or_empty),
 }
 
-APP_FLAGS = {"enabled": True, "hidden": False, "autostart": False}
+APP_FLAGS = {"enabled": True, "hidden": False, "autostart": False, "background": False}
 
 
 def defaults_tree() -> dict:
@@ -253,7 +253,9 @@ class Settings:
                     continue
                 clean = {}
                 for flag, default in APP_FLAGS.items():
-                    value = flags.get(flag, default)
+                    if flag not in flags:
+                        continue  # keep "never set" distinguishable from the default
+                    value = flags[flag]
                     clean[flag] = value if isinstance(value, bool) else default
                 data["applications"][app_id] = clean
         return data
@@ -290,13 +292,18 @@ class Settings:
             flags.update(self._data["applications"].get(app_id, {}))
             return flags
 
+    def app_flag_explicit(self, app_id: str, flag: str) -> bool | None:
+        """The user's own choice for ``flag``, or None if never set."""
+        with self._lock:
+            return self._data["applications"].get(app_id, {}).get(flag)
+
     def set_app_flag(self, app_id: str, flag: str, value: bool) -> None:
         if flag not in APP_FLAGS or not isinstance(value, bool):
             raise Invalid(f"bad app flag {flag}={value!r}")
         if not is_valid_app_id(app_id):
             raise Invalid(f"invalid app id {app_id!r}")
         with self._lock:
-            entry = self._data["applications"].setdefault(app_id, dict(APP_FLAGS))
+            entry = self._data["applications"].setdefault(app_id, {})
             if entry.get(flag) == value:
                 return
             entry[flag] = value

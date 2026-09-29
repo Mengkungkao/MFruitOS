@@ -253,16 +253,23 @@ class FakeDaemon:
                         self._grant(app_id)
                     except RuntimeError:
                         pass
-                elif behaviour.startswith("handoff:"):
-                    # e.g. ConnectWifi: opens a daemon page, then its process exits
-                    self.running.discard(app_id)
-                    if self.pending == app_id:
-                        self.pending = None
+                elif behaviour.startswith("intruded:"):
+                    # While the app starts, the daemon desktop handles a press and
+                    # opens one of its pages (it owns the button in that window).
+                    # Like whisplay_client, the app keeps retrying app.focus.acquire.
                     self.foreground = behaviour.split(":", 1)[1]
+                    self.pending = None
                 elif behaviour == "crash":
                     self.running.discard(app_id)
                     if self.pending == app_id:
                         self.pending = None  # silent, like the real monitor loop
+            if behaviour.startswith("intruded:"):
+                for _ in range(40):
+                    time.sleep(0.1)
+                    with self.lock:
+                        if self.foreground is None:
+                            self._grant(app_id)
+                            break
             if behaviour == "headless":
                 time.sleep(self.pending_timeout)
                 with self.lock:

@@ -14,9 +14,9 @@ class DaemonUnavailableScreen(MessageScreen):
             Item("Restart daemon", lambda: os.retry_daemon(restart=True), icon="power"),
             Item("Diagnostics", self._diagnostics, kind="nav", icon="diagnostics"),
         ]
-        super().__init__(os, "Whisplay daemon",
-                         f"Daemon unavailable (service {unit_state}). Apps need it to run.",
-                         actions, tone="error", icon="warning")
+        super().__init__(os, "Whisplay daemon unavailable",
+                         f"The service is {unit_state}. Apps need it to run.",
+                         actions, tone="error", icon="warning", page="Daemon")
 
     def handle(self, action: str) -> bool:
         if action in ("back", "home"):

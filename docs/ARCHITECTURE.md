@@ -46,6 +46,25 @@ build on the test Pi):
    daemon to reclaim the screen (`app.exit.request` → forced release after
    1.5 s).
 
+7. **The daemon's desktop is a second launcher.** Whenever no app owns the
+   screen — including while an app MFruit OS launched is still starting — the
+   daemon's desktop handles the button with its *own* selection: a tap moves
+   it, a ≥0.7 s release launches it (even while another launch is pending).
+   MFruit OS therefore completes every gesture before handing the screen over,
+   gates app launches with tickets and closes daemon pages that appear during
+   a launch. See [LAUNCH_LIFECYCLE.md](LAUNCH_LIFECYCLE.md).
+8. **The daemon can turn a hold into a tap.** Its monitor loop may reset the
+   press start just before the release callback runs (more likely while a
+   launch is pending, when it redraws the desktop every 100 ms).
+
+## Application lifecycle (`core/application_manager.py`)
+
+The ApplicationManager is the single launch authority and knows nothing about
+Whisplay: one session at a time (`IDLE → STARTING → RUNNING → STOPPING`),
+refused — never queued — requests while busy, session ids on everything, and
+a structured log (`mfruitos.lifecycle`). The UI only calls
+`request_launch(app, source)`; the Whisplay host below carries it out.
+
 ## Foreground state machine (`launcher/focus.py`)
 
 ```
@@ -105,6 +124,26 @@ the new folder. After activation the launcher restarts; `boot-guard.sh`
 (plain sh, so it works even if the new Python code cannot start) rolls back
 after three failed starts, and the launcher confirms a healthy update after
 15 s.
+
+## Whisplay's user interface in the background
+
+`scripts/whisplay-daemon-mfruit.py` starts the unmodified daemon from the
+Whisplay checkout (systemd drop-in written by `install.sh`) and patches five
+methods of `WhisplayDaemon`, active only while MFruit OS holds
+`state/launcher.lock` (checked by reading `/proc/locks`, never by taking the
+lock) and is not in "Daemon desktop" mode:
+
+| Method | While MFruit OS runs |
+|---|---|
+| `_render_desktop` | draws nothing (the LCD keeps the last frame) |
+| `_on_button_pressed` / `_on_button_released` | ignored when no app owns the screen |
+| `_handle_keyboard_action` | ignored when no app owns the screen |
+| `_release_focus` | first draws the releasing owner's final frame |
+
+So during an app's start-up the LCD shows MFruit OS's "Opening <App>" screen,
+and a press in that window does nothing at all (it used to reach the daemon's
+own launcher). Tested against the real daemon code in
+`tests/test_background_ui.py`, including a negative control without the wrapper.
 
 ## Fallback display
 

@@ -33,17 +33,22 @@ The installer:
    `config/settings.json` (an existing one is kept);
 4. installs the helpers `mfruit-run`, `mfruitctl` and `boot-guard.sh` into
    `~/.whisplay-os/bin` and links `/usr/local/bin/mfruitctl`;
-5. adds `/etc/sudoers.d/whisplay-os`, which allows exactly two commands without
+5. adds a systemd drop-in, `/etc/systemd/system/whisplay-daemon.service.d/mfruit-os.conf`,
+   that starts whisplay-daemon through `~/.whisplay-os/bin/whisplay-daemon-mfruit.py`
+   so the daemon's own user interface stays in the background while MFruit OS
+   runs (the daemon is restarted once, which closes running apps);
+6. adds `/etc/sudoers.d/whisplay-os`, which allows exactly two commands without
    a password: `systemctl restart whisplay-daemon.service` and
    `systemctl restart whisplay-os.service` (used by *Restart daemon* on the
    fallback screen);
-6. creates, enables and starts `whisplay-os.service`.
+7. creates, enables and starts `whisplay-os.service`.
 
-`sudo` is used only for steps 4–6. Options:
+`sudo` is used only for steps 4–7. Options:
 
 | Option | Effect |
 |---|---|
 | `--no-service` | install files only; start manually with `PYTHONPATH=~/.whisplay-os/system/current python3 -m mfruitos` |
+| `--no-background-daemon` | keep whisplay-daemon's own desktop visible between apps |
 | `--dev` | run directly from the checkout (for development) |
 | `--yes` | non-interactive |
 
@@ -96,6 +101,7 @@ own desktop is available again after uninstalling.
 
 | Symptom | What to check |
 |---|---|
+| The daemon's "Opening app…" / desktop still appears | Run `install.sh` again (adds the drop-in); Settings → System → Diagnostics shows *Whisplay UI: background* when active. |
 | Screen shows the Whisplay daemon's desktop, not MFruit OS | `systemctl status whisplay-os`; pick **MFruit OS** on the daemon desktop to bring it back (Developer → *Daemon desktop* switches there on purpose). |
 | "Whisplay daemon — Daemon unavailable" | The daemon service is stopped or failed: `journalctl -u whisplay-daemon -n 50`. *Retry* waits for it, *Restart daemon* restarts it. |
 | An app shows "Application failed to start" | *Logs* on that screen, or `~/.whisplay-os/logs/<app>.log` (MFruit OS apps) / `~/.whisplay-daemon/daemon-app.log` (daemon apps). |

@@ -1,13 +1,13 @@
 """Screen base classes.
 
 Every screen answers the four UI questions from CLAUDE.md §9:
-where am I (header), what is selected (highlight), what happens when I press
-(footer hints) and how do I go back (footer hint + a Back row).
+where am I (page name in the status bar), what is selected (highlight), what
+happens when I press (footer hints) and how do I go back (footer + a Back row).
 """
 
 from __future__ import annotations
 
-from mfruitos.launcher.ui.components import (Item, draw_footer, draw_header, draw_list)
+from mfruitos.launcher.ui.components import Item, draw_footer, draw_list
 from mfruitos.launcher.ui.painter import Painter
 
 
@@ -32,7 +32,7 @@ class Screen:
         return False
 
     def draw(self, p: Painter) -> None:
-        draw_header(p, self.title, self.subtitle)
+        """Draw the content area; the page name is shown in the status bar."""
 
     def footer(self, p: Painter) -> None:
         draw_footer(p, self.os.hints(select=self.select_label, back=not self.modal))
@@ -86,5 +86,4 @@ class ListScreen(Screen):
                 return
 
     def draw(self, p: Painter) -> None:
-        draw_header(p, self.title, self.subtitle)
         draw_list(p, self.current_items(), self.selected)

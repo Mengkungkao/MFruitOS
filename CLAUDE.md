@@ -1,1283 +1,1803 @@
-# MFruit OS — Claude Development Rules
+# MFruit OS — Development, Testing, Debugging & Architecture Rules
 
 ## 1. Project Mission
 
-You are developing **MFruit OS**, a lightweight embedded application operating environment for the **PiSugar Whisplay Display HAT** running primarily on **Raspberry Pi Zero 2W**.
+You are developing **MFruit OS**, a lightweight, modular, hardware-independent application platform designed primarily for small Linux-based devices.
 
-MFruit OS sits **on top of the existing Whisplay Daemon**.
+MFruit OS is an **application operating environment**, not a hardware-specific application.
 
-The architecture must remain:
+Its primary hardware target is currently the **PiSugar Whisplay Display HAT**, but Whisplay is only one supported hardware platform.
+
+The core MFruit OS must not depend on the Whisplay repository, Whisplay daemon, or any other external hardware-specific framework.
+
+The architecture must be:
 
 ```text
-┌──────────────────────────────┐
-│        MFruit OS           │
-│                              │
-│ Launcher                     │
-│ Settings                     │
-│ App Manager                  │
-│ Updater                      │
-│ Diagnostics                  │
-└──────────────┬───────────────┘
-               │
-               │ Daemon API
-               ▼
-┌──────────────────────────────┐
-│      MFruit Daemon         │
-│                              │
-│ LCD / Framebuffer             │
-│ Button                        │
-│ RGB LED                       │
-│ Backlight                     │
-│ Audio / Foreground Apps       │
-└──────────────┬───────────────┘
-               │
-               ▼
-┌──────────────────────────────┐
-│      Whisplay Hardware       │
-└──────────────────────────────┘
+┌──────────────────────────────────────────────┐
+│                 MFruit OS                   │
+│                                              │
+│  Home / Launcher                             │
+│  Settings                                    │
+│  App Manager                                 │
+│  Package Manager                             │
+│  Updater                                     │
+│  Diagnostics                                 │
+│  Notifications                               │
+│  System Information                          │
+│                                              │
+├──────────────────────────────────────────────┤
+│                MFruit CORE                  │
+│                                              │
+│  Navigation State Machine                   │
+│  Input/Event Manager                         │
+│  Application Registry                        │
+│  Application Lifecycle                       │
+│  Process Manager                             │
+│  Package Engine                              │
+│  Update Engine                               │
+│  Configuration                               │
+│  Storage                                     │
+│  Logging                                     │
+│  Event Bus                                   │
+│                                              │
+├──────────────────────────────────────────────┤
+│            HARDWARE ABSTRACTION              │
+│                                              │
+│  Display Adapter                             │
+│  Input Adapter                               │
+│  LED Adapter                                 │
+│  Audio Adapter                               │
+│  Power Adapter                               │
+│                                              │
+├──────────────────────────────────────────────┤
+│              LINUX / OS LAYER                │
+└──────────────────────────────────────────────┘
 ```
 
-**Never bypass the daemon for functionality already provided by it unless there is a documented technical reason and the change is explicitly justified.**
+The core principle is:
+
+```text
+MFruit Core
+    ≠
+Hardware
+    ≠
+Application
+    ≠
+UI
+```
+
+Each layer must have clear ownership.
 
 ---
 
-# 2. Golden Rules
+# 2. Project Identity
 
-## Rule 1 — Inspect Before Changing
+The official project name is:
 
-Before modifying code:
+**MFruit OS**
 
-1. Inspect the existing project structure.
-2. Read the relevant source files.
-3. Understand how the existing Whisplay Daemon works.
-4. Understand how the application currently communicates with the daemon.
-5. Determine whether the requested functionality already exists.
-6. Reuse existing mechanisms whenever possible.
+Do not call the core project:
 
-Do not immediately rewrite working code.
+* Whisplay OS
+* Whisplay Shell
+* Whisplay Platform
+* Whisplay App OS
 
-Do not make assumptions about APIs.
+Whisplay is only a supported hardware adapter.
 
-Do not invent daemon endpoints.
+Examples:
 
-Do not assume an API behaves like a different version of the project.
+```text
+MFruit OS
+MFruit OS Launcher
+MFruit OS Package Manager
+MFruit OS Updater
+MFruit OS App
+MFruit OS Hardware Adapter
+```
+
+Whisplay-specific components may use names such as:
+
+```text
+WhisplayDisplayAdapter
+WhisplayInputAdapter
+WhisplayAudioAdapter
+WhisplayLEDAdapter
+```
+
+These belong under the hardware abstraction layer.
 
 ---
 
-# 3. Protect Existing Functionality
+# 3. Fundamental Architecture
 
-MFruit OS must not unnecessarily break:
+Applications communicate with the MFruit OS platform rather than directly accessing hardware.
 
-* `whisplay-daemon`
-* framebuffer access
-* button handling
-* LED control
-* backlight control
-* audio
-* application registration
-* foreground application management
-* existing Whisplay applications
-
-Before modifying daemon-related code, identify:
+Correct:
 
 ```text
-Who owns the hardware?
-Who owns the framebuffer?
-Who owns the button?
-Who controls foreground applications?
-What process is responsible for each operation?
+Application
+     ↓
+MFruit App API
+     ↓
+MFruit Core
+     ↓
+Hardware Adapter
+     ↓
+Hardware
 ```
 
-The answer should normally remain:
+Incorrect:
 
 ```text
-Whisplay Daemon → hardware ownership
-MFruit OS     → application management and UI
-Applications    → their own functionality
+Application
+     ↓
+GPIO / framebuffer / Whisplay daemon
+     ↓
+Hardware
 ```
+
+Application developers should not need to know whether the device is using:
+
+* Whisplay
+* another LCD
+* terminal mode
+* desktop Linux
+* another embedded display
+* another input device
 
 ---
 
-# 4. Development Workflow
+# 4. Standalone Requirement
 
-Every feature must follow this workflow:
+MFruit OS must be independently buildable and runnable.
+
+The project must not require:
 
 ```text
-Understand
-   ↓
-Inspect
-   ↓
-Plan
-   ↓
-Implement
-   ↓
-Test
-   ↓
-Debug
-   ↓
-Fix
-   ↓
-Regression Test
-   ↓
-Document
+PiSugar/Whisplay GitHub repository
+Whisplay source tree
+Whisplay daemon source code
+Whisplay-specific Python modules
+Whisplay-specific repository layout
 ```
 
-Do not skip testing simply because the code change is small.
+to run the MFruit OS core.
+
+Whisplay integration must exist only as an adapter.
+
+The following should remain possible:
+
+```bash
+mf-os --headless
+```
+
+or equivalent development mode.
+
+The exact command may differ, but the principle is mandatory.
+
+The core must work without physical hardware.
 
 ---
 
-# 5. Before Coding
+# 5. Existing Project Must Be Preserved
 
-Before implementing a feature, identify:
+Do not throw away the current implementation.
 
-### Requirement
+First inspect the existing code and identify:
 
-What exact behaviour is required?
+```text
+working functionality
+reusable modules
+hardware-specific code
+architectural problems
+duplicated responsibilities
+launching bugs
+process lifecycle problems
+navigation bugs
+```
 
-### Existing implementation
+Migrate useful functionality gradually.
 
-Does something similar already exist?
+Do not perform a blind rewrite.
 
-### Dependencies
+Do not delete working functionality simply because it is currently implemented in the wrong place.
 
-What existing modules are affected?
+## Current state of the migration (MFruit OS 1.1.0)
 
-### Hardware impact
+Already hardware-independent and tested without hardware:
 
-Does the change affect:
+```text
+mfruitos/core/application_manager.py   launch authority, sessions, lifecycle log
+mfruitos/apps/                         manifest validation, registry
+mfruitos/updater/                      GitHub, versions, verifier, installer, rollback
+mfruitos/system/settings.py            configuration
+```
 
-* LCD
-* button
-* LED
-* audio
-* network
-* filesystem
-* daemon
-* systemd
+Still Whisplay-bound and to be moved behind adapters (Milestone 2):
 
-### Failure modes
+```text
+mfruitos/launcher/focus.py        screen hand-over through whisplay-daemon (the Whisplay host)
+mfruitos/daemon/                  whisplay-daemon client, events, framebuffer
+mfruitos/launcher/runtime.py      wires the daemon directly
+mfruitos/system/hardware.py       backlight / LED through the daemon
+mfruitos/launcher/direct.py       fallback display via WhisplayBoard
+```
 
-What can go wrong?
-
-### Recovery
-
-How does the application recover?
-
-For complex changes, first write a short implementation plan in the working notes before editing multiple files.
+Move these one at a time, keeping every test green, rather than rewriting.
 
 ---
 
-# 6. Small Changes First
+# 6. Launch Lifecycle Bugs — Root Causes and Guards
 
-Prefer small, isolated changes.
+The 1.0.0 system opened wrong apps, opened several apps, closed daemon pages
+instantly and let old input reach new apps. These were **architecture and
+state-management problems**, found with evidence (device logs and the real
+daemon code) and fixed in 1.1.0. Full record: `docs/LAUNCH_LIFECYCLE.md`.
 
-Bad:
+| # | Root cause | Guard that must stay in place |
+|---|---|---|
+| RC1 | A hold fired while the button was still down; the release reached the next screen owner (the daemon's desktop launched *its* selection, daemon pages took it as "select", apps got a stray release). | A hold arms at the threshold and **fires on release** (§16). |
+| RC2 | While an app starts up, no app owns the screen and whisplay-daemon's own desktop handles the button — a second launcher. | Daemon UI in the background (§23); launch tickets in `mfruit-run`; intruders closed. |
+| RC3 | The daemon has a single pending-launch slot; a second launch blocks the first app. | Single flight in the ApplicationManager; nothing else may launch. |
+| RC4 | No single-flight rule: autostart, control socket and Retry could overlap. | ApplicationManager refuses (never queues) requests while a session exists. |
+| RC5 | A "follow whatever took the screen" patch masked RC1. | A foreign app during a launch is an intruder, never adopted as intended. |
 
-```text
-Rewrite launcher
-Rewrite daemon client
-Rewrite settings
-Rewrite updater
-Rewrite application manager
-```
+Rules learned:
 
-Good:
-
-```text
-Add app registry
-↓
-Test
-↓
-Add launcher integration
-↓
-Test
-↓
-Add settings integration
-↓
-Test
-```
-
-Do not combine unrelated refactoring with feature development.
+* Do not hide such problems with arbitrary sleeps or random delays.
+* Find the actual root cause from evidence before changing code; a plausible
+  explanation that was not verified (the 1.0.0 "hand-off" theory) is not a root cause.
+* A test double that does not model the real component's behaviour hides bugs:
+  lifecycle tests must run against the real whisplay-daemon code (§38).
 
 ---
 
-# 7. Architecture Rules
+# 7. Deterministic Navigation
 
-Keep modules separated by responsibility.
-
-Recommended boundaries:
-
-```text
-launcher/
-    UI and navigation
-
-app_manager/
-    application discovery
-    registration
-    enable/disable
-    lifecycle
-
-updater/
-    GitHub
-    versioning
-    download
-    install
-    rollback
-
-daemon/
-    communication with Whisplay Daemon
-
-system/
-    diagnostics
-    system information
-    configuration
-
-ui/
-    rendering
-    screens
-    components
-```
-
-Avoid giant files.
-
-Avoid placing business logic inside UI rendering code.
-
-Avoid placing GitHub/network logic directly inside button handlers.
-
-Avoid hard-coded application definitions.
-
----
-
-# 8. Raspberry Pi Zero 2 W Constraints
-
-Treat the Raspberry Pi Zero 2 W as a resource-constrained embedded device.
-
-Every implementation should consider:
-
-* CPU usage
-* RAM usage
-* storage writes
-* startup time
-* network usage
-* battery usage
-* display redraw frequency
-* background processes
-
-Avoid unnecessary:
-
-* polling loops
-* high-frequency timers
-* threads
-* subprocesses
-* network requests
-* filesystem writes
-* animations
-* heavy dependencies
-
-Prefer:
-
-```text
-event-driven
-cached
-lazy-loaded
-low-frequency
-asynchronous where useful
-```
-
-Do not introduce a large framework just to solve a small problem.
-
----
-
-# 9. UI Development Rules
-
-The UI must remain:
-
-* minimal
-* readable
-* responsive
-* consistent
-* usable with one physical button
-
-Every new screen must answer:
-
-```text
-Where am I?
-What is selected?
-What happens when I press?
-How do I go back?
-```
-
-Do not create screens that require touchscreen interaction.
-
-Do not depend on tiny text.
-
-Do not add unnecessary animations.
-
-Keep redraws efficient.
-
-Avoid blocking the UI thread.
-
----
-
-# 10. Button Interaction Testing
-
-Every change affecting navigation must test:
-
-```text
-single click
-double click
-long press
-quad click
-```
-
-where supported by the current daemon implementation.
-
-Verify:
-
-* correct selection
-* correct launch behaviour
-* correct back behaviour
-* no accidental double execution
-* no stuck state
-* no event duplication
-
-Never implement a competing button event system without understanding the daemon's existing event handling.
-
----
-
-# 11. Daemon Communication
-
-All daemon communication should go through one controlled client abstraction.
-
-Do not duplicate socket communication code throughout the project.
+The navigation system must be an explicit state machine.
 
 Example:
 
 ```text
-WhisplayDaemonClient
-    ├── register_app()
-    ├── list_apps()
-    ├── launch_app()
-    ├── acquire_focus()
-    ├── release_focus()
-    ├── request_exit()
-    ├── set_backlight()
-    ├── set_led()
-    └── subscribe_events()
+HOME
+  ↓
+SELECTING
+  ↓
+SELECTED
+  ↓
+LAUNCH_REQUESTED
+  ↓
+STARTING_APP
+  ↓
+APP_RUNNING
+  ↓
+STOPPING_APP
+  ↓
+HOME
 ```
 
-Handle:
+A normal navigation event must not directly execute an application.
 
-* connection failure
-* socket unavailable
-* malformed response
-* timeout
-* daemon restart
-* stale connection
-* unexpected event
+Correct:
 
-The OS launcher should not crash because the daemon temporarily disappears.
+```text
+Input
+ ↓
+Navigation Controller
+ ↓
+UI State
+ ↓
+Confirmed Action
+ ↓
+Application Manager
+ ↓
+Process Manager
+```
+
+Incorrect:
+
+```text
+Button Press
+ ↓
+launch_app()
+```
 
 ---
 
-# 12. Error Handling
+# 8. Selection Is Not Launching
 
-Errors must be handled deliberately.
-
-Never use:
-
-```python
-except:
-    pass
-```
-
-unless there is a very specific and documented reason.
-
-Prefer:
-
-```python
-try:
-    ...
-except SpecificError as exc:
-    logger.error("...", exc_info=exc)
-    recover()
-```
-
-Every user-facing failure should provide a useful state.
+The selected application and running application are separate states.
 
 Example:
 
 ```text
+Selected App:
+weather
+
+Running App:
+music
+```
+
+must be valid platform state during navigation.
+
+Moving the selection must never launch the newly selected application.
+
+Only an explicit confirmation action may request a launch.
+
+A UI redraw must never cause a launch.
+
+An app list refresh must never cause a launch.
+
+An app installation event must never cause a launch.
+
+An updater event must never cause a launch.
+
+---
+
+# 9. One Authoritative Application Manager
+
+Only `ApplicationManager` may request application launches.
+
+No other component may directly launch applications.
+
+Use a single authoritative interface such as:
+
+```python
+ApplicationManager.launch(app_id)
+```
+
+The following must never independently launch an app:
+
+```text
+UI Renderer
+Launcher Screen
+Settings
 Updater
-
-Unable to reach GitHub.
-
-Internet connection unavailable.
-
-[ Retry ]
-[ Back ]
+Event Handler
+App Registry
+GitHub Client
+Hardware Adapter
 ```
 
-Do not expose raw Python tracebacks on the normal UI.
-
-Always log the detailed error.
+They may request an action through the proper service.
 
 ---
 
-# 13. Logging Rules
+# 10. Stable Application IDs
 
-Use structured, useful logs.
-
-Recommended levels:
-
-```text
-DEBUG
-INFO
-WARNING
-ERROR
-CRITICAL
-```
+Every application must have an immutable unique ID.
 
 Example:
-
-```text
-INFO     Launcher started
-INFO     Connected to Whisplay daemon
-INFO     Discovered 6 applications
-INFO     Launching bitcoin
-WARNING  GitHub request timed out
-ERROR    Failed to install version 2.1.0
-```
-
-Logs should contain enough information to reproduce failures.
-
-Avoid logging secrets, tokens or passwords.
-
----
-
-# 14. Configuration
-
-Do not hard-code user configuration.
-
-Use a dedicated configuration layer.
-
-Configuration must support:
-
-* enabled applications
-* app order
-* brightness
-* timeout
-* theme
-* button mappings
-* updater settings
-* developer mode
-
-Validate configuration on startup.
-
-If configuration is invalid:
-
-```text
-1. Log the error
-2. Preserve the broken file
-3. Fall back to safe defaults
-4. Continue startup
-```
-
-Never silently destroy user configuration.
-
----
-
-# 15. App Registry Rules
-
-The application registry must be the source of truth for installed applications.
-
-An app should have metadata such as:
 
 ```json
 {
-  "id": "example",
-  "name": "Example",
-  "version": "1.0.0",
-  "enabled": true,
-  "entrypoint": "run.sh",
-  "repository": "https://github.com/example/repository"
+  "id": "bitcoin",
+  "name": "Bitcoin"
 }
 ```
 
-Validate every manifest before loading it.
+Application IDs must not depend on:
 
-Reject:
+```text
+screen position
+list index
+display name
+PID
+filename
+menu position
+```
 
-* missing required fields
-* invalid versions
-* invalid paths
-* duplicate application IDs
-* unsafe installation locations
+An app's name may change.
+
+Its ID must remain stable.
+
+---
+
+# 11. Application Lifecycle
+
+Every application must have explicit lifecycle states:
+
+```text
+INSTALLED
+DISABLED
+READY
+STARTING
+RUNNING
+STOPPING
+STOPPED
+FAILED
+UPDATING
+```
+
+Only valid transitions are allowed.
+
+Example:
+
+```text
+READY
+ ↓
+STARTING
+ ↓
+RUNNING
+ ↓
+STOPPING
+ ↓
+READY
+```
+
+Invalid transitions must be rejected and logged.
+
+Never allow uncontrolled repeated transitions such as:
+
+```text
+STARTING
+STARTING
+STARTING
+STARTING
+```
+
+---
+
+# 12. Single Foreground Application
+
+MFruit OS must maintain one authoritative foreground application.
+
+At any point:
+
+```text
+0 or 1 foreground application
+```
+
+The launcher is foreground when no app is running.
+
+Never allow accidental parallel foreground applications.
+
+If multi-instance applications are added in the future, they must explicitly declare support for multiple instances.
+
+---
+
+# 13. Process Manager
+
+Create a dedicated `ProcessManager`.
+
+Responsibilities:
+
+```text
+start()
+stop()
+terminate()
+restart()
+is_running()
+get_status()
+get_pid()
+```
+
+No application should be launched using unmanaged `subprocess` calls scattered throughout the project.
+
+Every process must belong to a known application and session.
+
+Track:
+
+```text
+app_id
+pid
+session_id
+start_time
+state
+exit_code
+```
+
+## Exit policy
+
+When the user leaves an application it must be **closed completely**:
+
+```text
+app leaves the screen
+      ↓
+exit request (the app should quit by itself)
+      ↓
+grace period (3 s)
+      ↓
+SIGTERM to the app's process group → 2 s → SIGKILL
+```
+
+Only apps marked **Keep running** (per-app setting; a manifest may default it
+with `"background": true`) are left running. Log the result
+(`APP_CLOSED app=… result=exited|terminated|killed`).
+
+On the Whisplay platform the daemon starts the process through the
+`mfruit-run` gate, which records `pid`, `session` and `exit_code` in
+`~/.whisplay-os/state/runs/<id>.json`; only a record with the ending
+session's id may be used.
+
+---
+
+# 14. Application Session IDs
+
+Every launch creates a unique session ID.
+
+Example:
+
+```text
+app_id: bitcoin
+pid: 1842
+session_id: 48c2d0...
+```
+
+A process event must be matched against both:
+
+```text
+app_id
+session_id
+```
+
+Do not rely on PID alone.
+
+This prevents stale process events from affecting a newly launched application.
+
+---
+
+# 15. Input Architecture
+
+There must be one authoritative input pipeline:
+
+```text
+Physical Input
+      ↓
+Input Adapter
+      ↓
+Input Manager
+      ↓
+Normalized Event
+      ↓
+Event Bus
+      ↓
+Navigation Controller
+```
+
+Applications must not independently read the physical button or input hardware unless they are explicitly given permission to do so.
+
+The platform owns global navigation input.
+
+---
+
+# 16. Input Events
+
+Normalize hardware-specific events.
+
+For example:
+
+```json
+{
+  "type": "CLICK",
+  "timestamp": 123456789,
+  "sequence_id": 42
+}
+```
+
+Possible events:
+
+```text
+CLICK
+DOUBLE_CLICK
+LONG_PRESS
+BACK
+SYSTEM
+```
+
+The final event definitions should be based on actual platform requirements.
+
+A long press is **armed** when the threshold is reached (show feedback such as
+"Release to open") and **fires on release**. An input gesture must be fully
+consumed by its current owner before the screen changes owner; otherwise the
+rest of the gesture (the release) is delivered to the next owner.
+
+Every event must have:
+
+```text
+type
+timestamp
+sequence_id
+```
+
+where practical.
+
+---
+
+# 17. Exactly-Once Event Processing
+
+A single physical event must not produce multiple application actions.
+
+Prevent:
+
+```text
+duplicate click processing
+event replay
+stale events
+multiple subscribers launching the same app
+queued actions executing after state changes
+```
+
+Do not solve this only through increasing debounce delays.
+
+Implement event ownership and state validation.
+
+---
+
+# 18. Renderer Must Be Side-Effect Free
+
+UI rendering may:
+
+```text
+read state
+draw state
+refresh display
+```
+
+UI rendering must not:
+
+```text
+launch applications
+stop processes
+modify app registry
+execute shell commands
+install software
+change system configuration
+```
+
+Correct:
+
+```text
+State
+ ↓
+Renderer
+ ↓
+Display
+```
+
+Incorrect:
+
+```text
+Renderer
+ ↓
+launch_app()
+```
+
+---
+
+## Screen layout conventions
+
+```text
+┌────────────────────────────┐
+│ Apps              ᯤ  ▭ 82% │   status bar: page name left, WiFi strength + battery right
+│ ┌────────────────────────┐ │
+│ │ [MS] Messenger          │ │   selected item: card with icon and status line
+│ │      Running            │ │
+│ └────────────────────────┘ │
+│  [WT] WalkieTalkie          │
+│  ─────────────────────────  │
+│  tap next  hold open  2× prev │ footer: gestures for this screen
+└────────────────────────────┘
+```
+
+* The page name lives in the status bar; screens do not draw a second title row.
+* No product name or clock in the status bar.
+* Long titles belong in the content as a heading; the bar gets a short label
+  ("Confirm", "Update").
+* Scroll lists in whole rows; never leave a half-cut row under the status bar.
+* Starting an app shows MFruit OS's own "Opening <App>" screen, drawn before
+  the screen is handed over and kept up until the app draws its first frame.
+
+---
+
+# 19. Application Registry
+
+The application registry belongs to MFruit OS.
+
+Example:
+
+```text
+data/
+├── apps/
+├── registry.json
+├── config/
+├── cache/
+├── updates/
+├── backups/
+├── logs/
+└── temporary/
+```
+
+Every app must have metadata.
+
+Example:
+
+```json
+{
+  "schema_version": 1,
+  "id": "weather",
+  "name": "Weather",
+  "version": "1.2.0",
+  "enabled": true,
+  "entrypoint": "run.sh",
+  "repository": "https://github.com/example/weather",
+  "minimum_platform_version": "1.0.0"
+}
+```
 
 A broken app manifest must not prevent other applications from loading.
 
 ---
 
-# 16. Updater Rules
+# 20. App Enable / Disable
 
-The updater is a critical system component.
+Disabling an application does not uninstall it.
 
-Never perform:
+Example:
 
 ```text
-download → overwrite current installation
+Installed: YES
+Enabled: NO
 ```
 
-without a recovery path.
+Disabled applications:
 
-Preferred sequence:
+* remain installed
+* retain configuration
+* do not appear in the normal launcher
+* cannot be launched
+* can be re-enabled through Settings
+
+---
+
+# 21. Autostart
+
+Applications must never autostart by default.
+
+Default:
+
+```text
+autostart = false
+```
+
+Only explicitly configured applications may autostart.
+
+Autostart must not be triggered accidentally by:
+
+* refresh
+* reboot state
+* app installation
+* app update
+* launcher redraw
+* GitHub check
+* registry reload
+
+---
+
+# 22. Hardware Abstraction
+
+Create generic interfaces:
+
+```python
+class DisplayAdapter:
+    def initialize(self): ...
+    def render(self, frame): ...
+    def clear(self): ...
+
+
+class InputAdapter:
+    def initialize(self): ...
+    def read_events(self): ...
+
+
+class LEDAdapter:
+    def set_state(self, state): ...
+
+
+class AudioAdapter:
+    def play(self, audio): ...
+
+
+class PowerAdapter:
+    def get_status(self): ...
+```
+
+The exact API may evolve, but ownership must remain clear.
+
+---
+
+# 23. Whisplay Adapter
+
+Whisplay is one hardware implementation.
+
+Example:
+
+```text
+hardware/
+├── base/
+├── whisplay/
+├── framebuffer/
+├── terminal/
+└── mock/
+```
+
+The Whisplay adapter may communicate with the existing Whisplay daemon where needed.
+
+However:
+
+```text
+MFruit Core must not depend on Whisplay
+```
+
+Only:
+
+```text
+Whisplay Adapter → Whisplay interface
+```
+
+may know about Whisplay-specific implementation details.
+
+## Whisplay platform as built (1.1.0)
+
+* **whisplay-daemon is a background hardware service.** It owns the LCD,
+  button, LED, backlight and app focus. MFruit OS is the only user interface.
+* **The daemon's own UI runs in the background.** `scripts/whisplay-daemon-mfruit.py`
+  starts the unmodified daemon (systemd drop-in
+  `whisplay-daemon.service.d/mfruit-os.conf`, written by `install.sh`). While
+  MFruit OS runs it stops the daemon drawing its desktop / "Opening app…" modal,
+  ignores the button when no app owns the screen, and shows the last owner's
+  final frame on hand-over. When MFruit OS is not running, or the user picks
+  Developer → "Daemon desktop", the daemon behaves normally. Never edit the
+  Whisplay checkout itself; extend the wrapper instead.
+* **Launch gate.** Every app the daemon can start is registered with
+  `~/.whisplay-os/bin/mfruit-run <id>` (MFruit packages, and daemon apps MFruit
+  OS *adopts*; originals in `~/.whisplay-os/adopted/`, restored by `uninstall.sh`).
+  While MFruit OS holds `state/launcher.lock`, `mfruit-run` starts an app only
+  with the one-shot ticket MFruit OS writes before its own `app.launch`.
+* **Daemon facts the design depends on** (verified in `whisplay_daemon.py`):
+  `app.launch` is refused while another app is foreground; there is one pending
+  launch slot; `desktop_entered` / `screen_locked` go only to global
+  subscribers; daemon pages open synchronously without a launch command; its
+  monitor loop can turn a hold into a tap. See `docs/ARCHITECTURE.md`.
+
+---
+
+# 24. Mock Hardware
+
+Provide mock hardware adapters for development.
+
+Examples:
+
+```text
+MockDisplay
+MockInput
+MockLED
+MockAudio
+MockPower
+```
+
+This allows the entire core to be tested without the Whisplay HAT.
+
+---
+
+# 25. Terminal / Headless Mode
+
+Provide a headless development mode.
+
+Example:
+
+```bash
+mf-os --headless
+```
+
+It should support:
+
+```text
+navigation testing
+application testing
+settings
+app registry
+package installation
+updater
+diagnostics
+process management
+```
+
+This mode is important for CI/CD and debugging.
+
+---
+
+# 26. Package Manager
+
+MFruit OS must have a platform-independent package manager.
+
+Conceptual API:
+
+```text
+install(package)
+uninstall(app_id)
+update(app_id)
+downgrade(app_id, version)
+reinstall(app_id)
+rollback(app_id)
+```
+
+The UI and CLI must use the same package manager.
+
+Do not duplicate package logic in the UI.
+
+---
+
+# 27. App Ecosystem
+
+Apps should behave like applications in a small operating system.
+
+Users should be able to:
+
+```text
+Browse
+Install
+Launch
+Disable
+Enable
+Update
+Downgrade
+Reinstall
+Rollback
+Uninstall
+```
+
+Applications are independent of the core OS.
+
+---
+
+# 28. GitHub Integration
+
+GitHub is the first software distribution mechanism.
+
+Support:
+
+```text
+Repositories
+Releases
+Tags
+Release Assets
+Version metadata
+Checksums
+```
+
+Do not hard-code the updater around one repository.
+
+Use a generic application manifest.
+
+Correct architecture:
+
+```text
+GitHub
+ ↓
+Release Resolver
+ ↓
+Package Validator
+ ↓
+Package Manager
+ ↓
+Application Registry
+```
+
+---
+
+# 29. Updater
+
+The Updater must safely support:
+
+```text
+Update
+Downgrade
+Rollback
+Reinstall
+New app installation
+```
+
+Do not overwrite the currently working application immediately.
+
+Use:
 
 ```text
 Check
  ↓
-Download temporary files
+Download temporary package
  ↓
 Validate
  ↓
-Backup current version
+Verify
  ↓
-Install new version
+Backup
+ ↓
+Install
  ↓
 Validate installation
  ↓
 Activate
 ```
 
-If installation fails:
+If anything fails:
 
 ```text
-Restore previous version
+Rollback
  ↓
-Verify rollback
- ↓
-Report failure
+Verify previous version
 ```
-
-Never delete the previous working version until the new version has been successfully validated.
 
 ---
 
-# 17. GitHub Integration
+# 30. Versioned Application Storage
 
-Treat GitHub as an external dependency.
-
-Always handle:
-
-* no Internet
-* DNS failure
-* GitHub unavailable
-* rate limits
-* HTTP errors
-* invalid repository
-* missing release
-* malformed metadata
-* incomplete download
-* invalid archive
-
-Cache update information where practical.
-
-Do not assume GitHub is always available.
-
-Do not repeatedly query GitHub in a tight loop.
-
-Use timeouts.
-
----
-
-# 18. Version Handling
-
-Use semantic version comparison where applicable.
-
-Never compare versions as plain strings.
-
-Incorrect:
-
-```python
-"10.0.0" < "2.0.0"
-```
-
-Use a dedicated version parser/comparison mechanism.
-
-Support:
+Where practical, maintain versioned application installations:
 
 ```text
-install
-upgrade
-downgrade
-reinstall
-rollback
+apps/
+└── bitcoin/
+    ├── versions/
+    │   ├── 1.0.0/
+    │   ├── 1.1.0/
+    │   └── 1.2.0/
+    └── current
 ```
 
-Keep OS versioning independent from app versioning.
+The current version can point to the active version.
+
+This makes downgrade and rollback safer.
 
 ---
 
-# 19. Security Rules for App Installation
+# 31. Security
 
-Never blindly trust downloaded application content.
+Never blindly execute downloaded applications.
 
-Before installation:
+Validate:
 
-* validate repository information
-* validate manifest
-* validate paths
-* prevent path traversal
-* use HTTPS
-* restrict installation directory
-* validate archive contents
-* preserve backups
-* log installation activity
+* application ID
+* package structure
+* manifest
+* version
+* package path
+* archive contents
+* architecture
+* minimum MFruit OS version
 
-Never allow an application package to write arbitrary files across the system.
+Use HTTPS.
 
-Do not execute installation scripts without verifying they belong to the intended application package.
+Prevent path traversal.
+
+Restrict application installation locations.
+
+Never allow an app package to overwrite arbitrary system files.
 
 ---
 
-# 20. Filesystem Safety
+# 32. Application Permissions
 
-Be extremely careful with:
+Design the platform so applications can eventually declare permissions.
+
+Example:
+
+```json
+{
+  "permissions": [
+    "display",
+    "network",
+    "audio"
+  ]
+}
+```
+
+Potential permissions:
 
 ```text
-rm
-shutil.rmtree
-os.remove
-subprocess
-systemctl
-sudo
+display
+input
+audio
+network
+camera
+filesystem
+system_info
+notifications
+hardware
 ```
 
-Before deleting or replacing anything:
-
-1. Resolve the absolute path.
-2. Confirm it belongs to the intended application directory.
-3. Ensure it does not point to `/`, `/home`, `/etc`, or another unrelated location.
-4. Log the operation.
-
-Never use dangerous recursive deletion with an unchecked path.
+Full enforcement can be introduced incrementally.
 
 ---
 
-# 21. Systemd Rules
+# 33. Application Data Separation
 
-The launcher should run as a managed service.
+Separate:
 
-Test:
+```text
+Application binary
+Application configuration
+Application user data
+Cache
+Logs
+Temporary update files
+```
+
+Uninstalling an app should not automatically destroy user data unless explicitly requested.
+
+---
+
+# 34. Safe Mode
+
+Provide:
 
 ```bash
-systemctl status whisplay-os
-journalctl -u whisplay-os
+mf-os --safe-mode
 ```
 
-When modifying the service:
+Safe mode should:
 
-```text
-validate service file
-↓
-reload systemd
-↓
-restart service
-↓
-check status
-↓
-check logs
-```
+* disable third-party applications
+* disable autostart
+* start core launcher
+* allow application disabling
+* allow rollback
+* provide diagnostics
 
-Do not assume a successful `systemctl restart` means the application is actually functioning.
-
-Check the process and logs afterward.
+A broken third-party application must never be able to permanently prevent MFruit OS from starting.
 
 ---
 
-# 22. Testing Strategy
+# 35. Diagnostics
 
-Use multiple testing layers.
+Provide:
+
+```bash
+mf-os doctor
+```
+
+Check:
+
+```text
+Core configuration
+App registry
+Manifest validity
+Running processes
+Filesystem
+Storage
+Display adapter
+Input adapter
+Network
+GitHub connectivity
+```
+
+Also provide:
+
+```bash
+mf-os status
+mf-os apps
+mf-os logs
+```
+
+---
+
+# 36. Runtime Status
+
+`mf-os status` should expose enough information to diagnose application launch issues.
+
+Example:
+
+```text
+MFruit OS       1.0.0
+
+Mode:
+Whisplay
+
+Screen:
+HOME
+
+Selected App:
+bitcoin
+
+Foreground App:
+bitcoin
+
+App State:
+RUNNING
+
+PID:
+1842
+
+Session:
+48c2d0...
+
+Pending Action:
+NONE
+```
+
+---
+
+# 37. Debug Logging
+
+In developer/debug mode, log:
+
+```text
+timestamp
+event
+current screen
+selected app
+requested app
+foreground app
+session ID
+PID
+state transition
+```
+
+Example:
+
+```text
+18:41:10 EVENT CLICK
+18:41:10 SELECTED weather
+
+18:41:12 EVENT LONG_PRESS
+18:41:12 LAUNCH_REQUEST weather
+
+18:41:12 STATE weather READY -> STARTING
+18:41:12 PROCESS_STARTED pid=1421 session=abc123
+18:41:13 STATE weather STARTING -> RUNNING
+```
+
+Invalid events should explain why they were ignored.
+
+Example:
+
+```text
+18:41:15 LAUNCH_REQUEST weather
+18:41:15 IGNORE: application already RUNNING
+```
+
+---
+
+# 38. Testing
+
+Testing must cover:
 
 ## Unit Tests
 
-Test isolated functions:
-
 ```text
+navigation
+event handling
 version comparison
 manifest validation
 configuration
-app discovery
-GitHub parsing
+registry
 path validation
+state transitions
 ```
 
 ## Integration Tests
 
-Test:
-
 ```text
-OS → daemon
-OS → app registry
-OS → updater
-OS → GitHub
+launcher ↔ core
+package manager ↔ registry
+updater ↔ package manager
+process manager ↔ application manager
+hardware adapter ↔ core
 ```
+
+## Real-daemon tests
+
+Anything that depends on whisplay-daemon behaviour is tested against the
+**real daemon code** (`tests/real_daemon/`: the daemon from a Whisplay checkout,
+a simulated board with injectable button presses, fake apps with realistic
+start-up times). Rules:
+
+* Prove each fix with a **negative control**: the test must fail without the
+  fix (e.g. `test_background_ui.py` fails against the unmodified daemon).
+* Repeat timing-sensitive suites several times before calling them stable.
+* Never run two real-daemon test runs at the same time (they share fake-app
+  cleanup).
 
 ## Hardware Tests
 
-Test on the real Whisplay HAT:
+When applicable:
 
 ```text
-LCD
+display
 button
 LED
-backlight
 audio
+power
 ```
 
-## Failure Tests
+Physical-button checks are listed in `docs/HARDWARE_TESTS.md`; report each
+step as verified or *not verified* per board.
 
-Intentionally test:
+---
+
+# 39. Mandatory Regression Tests
+
+These exist and must keep passing (`tests/test_launch_lifecycle.py`,
+`tests/test_background_ui.py`, `tests/test_application_manager.py`,
+`tests/test_gestures.py`). Add to them; do not weaken them.
+
+### Wrong Application
 
 ```text
-daemon unavailable
-Internet unavailable
-GitHub unavailable
-bad app manifest
-bad package
-failed installation
-failed application startup
-corrupted configuration
-full disk
-missing executable
+Select A
+Move to B
+Confirm
+```
+
+Expected:
+
+```text
+Only B launches
+```
+
+### Duplicate Launch
+
+```text
+Confirm A multiple times rapidly
+```
+
+Expected:
+
+```text
+One A process
+```
+
+### Selection Without Launch
+
+```text
+Move through menu
+```
+
+Expected:
+
+```text
+No application starts
+```
+
+### Stale Event
+
+```text
+Run A
+Exit A
+Select B
+```
+
+Expected:
+
+```text
+A's previous events cannot start A
+```
+
+### Process Crash
+
+```text
+Start A
+Force crash
+```
+
+Expected:
+
+```text
+Launcher survives
+A becomes FAILED
+User can retry
+```
+
+### Rapid Input
+
+Send many events rapidly.
+
+Expected:
+
+```text
+No application storm
+No invalid state
+No duplicate process
+```
+
+### Press During App Start-up
+
+```text
+Open A (slow start)
+Hold the button while A starts
+```
+
+Expected:
+
+```text
+Nothing else starts, no daemon UI appears, A opens
+```
+
+### App Closed After Exit
+
+```text
+Open A
+Leave A (A releases the screen but keeps running)
+```
+
+Expected:
+
+```text
+A's process is stopped, unless A is marked Keep running
 ```
 
 ---
 
-# 23. Test Before and After Fixes
+# 40. Stress Testing
 
-When debugging a bug:
-
-```text
-1. Reproduce the bug
-2. Capture logs
-3. Identify the smallest failing component
-4. Create or update a regression test
-5. Implement the fix
-6. Run the regression test
-7. Run the related test suite
-8. Run broader tests
-```
-
-A bug is not considered fixed until the original failure can no longer be reproduced.
-
----
-
-# 24. Debugging Method
-
-When a problem occurs, do not randomly modify code.
-
-Use:
+Test:
 
 ```text
-Symptom
-  ↓
-Evidence
-  ↓
-Reproduction
-  ↓
-Isolation
-  ↓
-Root cause
-  ↓
-Minimal fix
-  ↓
-Regression test
+100 navigation events
+100 confirmation events
+50 application launches
+20 application crashes
+10 daemon reconnects
+10 failed installations
+10 failed updates
 ```
 
-Always distinguish:
+After each test verify:
 
 ```text
-Symptom
-Cause
-Fix
-```
-
-Do not assume the first error message is the root cause.
-
-Check logs, process state, daemon state, file permissions, environment variables and configuration.
-
----
-
-# 25. Debugging Commands
-
-Use appropriate commands such as:
-
-```bash
-systemctl status whisplay-daemon
-systemctl status whisplay-os
-
-journalctl -u whisplay-daemon
-journalctl -u whisplay-os
-
-ps aux
-free -h
-df -h
-uptime
-vcgencmd measure_temp
-
-ls -la
-find
-grep
-ss
-curl
-python3
-```
-
-For Python issues:
-
-```bash
-python3 -m py_compile <file>
-python3 -m pytest
-python3 -m unittest
-```
-
-Use the project's actual test framework if one already exists.
-
----
-
-# 26. Never Hide Errors During Development
-
-During development, prefer detailed diagnostics.
-
-Do not change code simply to suppress:
-
-```text
-warnings
-exceptions
-tracebacks
-connection failures
-```
-
-First understand the cause.
-
-Only suppress an error when:
-
-1. It is expected.
-2. It is harmless.
-3. It is documented.
-4. The recovery behaviour is correct.
-
----
-
-# 27. Regression Protection
-
-Every fixed bug should produce one of:
-
-```text
-unit test
-integration test
-hardware test procedure
-regression script
-```
-
-Maintain a regression suite for previously fixed issues.
-
-Examples:
-
-```text
-test_daemon_disconnect
-test_invalid_manifest
-test_duplicate_app_id
-test_failed_update_rollback
-test_disabled_app_not_visible
-test_version_downgrade
-test_github_timeout
+registry valid
+configuration valid
+launcher alive
+no orphan processes
+no duplicate active app
+valid lifecycle state
 ```
 
 ---
 
-# 28. Dependency Rules
+# 41. Debugging Method
 
-Before adding a dependency:
-
-Ask:
+When a bug occurs:
 
 ```text
-Do we actually need it?
-Is there already a standard-library solution?
-Does it work on Raspberry Pi Zero 2 W?
-Does it significantly increase startup time or RAM?
-Is it actively maintained?
+Reproduce
+ ↓
+Capture evidence
+ ↓
+Inspect event sequence
+ ↓
+Inspect state
+ ↓
+Inspect process state
+ ↓
+Identify root cause
+ ↓
+Implement smallest correct fix
+ ↓
+Add regression test
+ ↓
+Run relevant tests
+ ↓
+Run broader tests
 ```
 
-Prefer lightweight dependencies.
+Never randomly modify code.
 
-Do not add dependencies simply for convenience.
+Do not patch a race condition with arbitrary sleeps unless the actual design explicitly requires timing control.
 
 ---
 
-# 29. Code Quality
+# 42. Error Handling
 
-Write simple code.
-
-Prefer:
+Never use broad silent exception handling such as:
 
 ```python
-clear_function()
+except:
+    pass
 ```
 
-over:
+unless it is explicitly justified and documented.
 
-```python
-one_huge_function()
-```
-
-Use:
-
-* meaningful names
-* type hints where helpful
-* docstrings for public interfaces
-* small functions
-* clear error messages
-* constants instead of magic numbers
-
-Avoid clever abstractions that make embedded debugging harder.
-
----
-
-# 30. Backward Compatibility
-
-Assume that existing Whisplay applications may depend on the current daemon behaviour.
-
-Do not change public interfaces unnecessarily.
-
-If an API change is required:
+Errors must:
 
 ```text
-1. Document it
-2. Maintain compatibility where possible
-3. Update affected applications
-4. Add regression tests
+be logged
+be classified
+have recovery where possible
+not crash unrelated components
 ```
 
----
-
-# 31. No Destructive Refactoring Without Evidence
-
-Do not rewrite an existing subsystem simply because another implementation looks cleaner.
-
-Before a large refactor:
-
-* identify the actual problem
-* measure current behaviour
-* document expected behaviour
-* create regression tests
-* refactor incrementally
-
-Preserve working functionality.
+The core launcher must survive application failures.
 
 ---
 
-# 32. Performance Testing
+# 43. Concurrency
 
-For important changes, check:
+Minimize concurrency.
+
+Background workers may be used for:
 
 ```text
-CPU usage
-RAM usage
-startup time
-idle behaviour
-screen responsiveness
-network usage
+network
+GitHub
+downloads
+package installation
+system monitoring
 ```
 
-Watch for:
+Only one system component should own application lifecycle mutations.
+
+Avoid multiple threads modifying:
 
 ```text
-CPU constantly > expected idle level
-memory growth over time
-rapid filesystem writes
-repeated GitHub requests
-display flickering
-button lag
+app state
+foreground app
+registry
+package state
 ```
 
-For long-running services, periodically test whether memory usage remains stable.
+at the same time without a controlled mechanism.
 
 ---
 
-# 33. Hardware-First Validation
+# 44. Configuration
 
-When functionality involves physical hardware, software-only testing is not sufficient.
+Keep configuration separate from application binaries.
+
+Validate configuration at startup.
+
+If invalid:
+
+```text
+preserve original file
+log error
+load safe defaults
+continue operation
+```
+
+Never silently overwrite user configuration.
+
+---
+
+# 45. Performance
+
+MFruit OS should run well on:
+
+* Raspberry Pi Zero 2 W
+* Raspberry Pi 4
+* Raspberry Pi 5
+* similar Linux SBCs
+
+Avoid unnecessary:
+
+* polling
+* filesystem writes
+* heavy dependencies
+* large frameworks
+* browser engines
+* excessive animations
+* constant screen redraws
+
+The system should remain responsive and lightweight.
+
+---
+
+# 46. Dependency Rules
+
+Before adding a dependency, determine:
+
+```text
+Is it necessary?
+Can the standard library solve it?
+Does it support target hardware?
+What is the RAM cost?
+What is the startup cost?
+Is it maintained?
+```
+
+Do not introduce large frameworks to solve small problems.
+
+---
+
+# 47. CLI and GUI Must Share the Same Core
+
+The GUI must not implement its own business logic.
+
+Correct:
+
+```text
+GUI
+ ↓
+MFruit Services
+ ↓
+Core
+```
+
+and:
+
+```text
+CLI
+ ↓
+MFruit Services
+ ↓
+Core
+```
 
 For example:
 
 ```text
-Button code
-→ test simulated events
-→ test daemon events
-→ test physical button
-
-Display code
-→ test renderer
-→ test daemon framebuffer
-→ test actual LCD
-
-LED code
-→ test command generation
-→ test daemon interface
-→ test physical LED
+GUI Update
+CLI Update
 ```
 
-Do not claim hardware functionality is working until it has been tested on the target hardware or clearly marked as unverified.
+must both call the same update engine.
 
 ---
 
-# 34. Offline Testing
+# 48. Documentation
 
-The core OS must remain usable without Internet access.
+Update documentation whenever architecture or behaviour changes.
 
-Always test:
-
-```text
-boot without Internet
-launch apps without Internet
-open settings without Internet
-disable apps without Internet
-view installed versions without Internet
-```
-
-Only updater/GitHub functionality should depend on Internet connectivity.
-
----
-
-# 35. Recovery Mode
-
-Design the system so a broken application cannot permanently brick the launcher.
-
-The launcher should still start when:
-
-* an app fails
-* an app manifest is invalid
-* GitHub is unavailable
-* an update fails
-* one configuration entry is corrupt
-
-A broken component should degrade independently.
-
----
-
-# 36. Git Workflow
-
-Keep commits focused.
-
-Good:
-
-```text
-feat: add app registry
-fix: handle daemon disconnect
-feat: add GitHub release checker
-fix: rollback failed installation
-test: add manifest validation tests
-```
-
-Avoid:
-
-```text
-update everything
-```
-
-Do not mix:
-
-```text
-feature
-refactor
-formatting
-dependency changes
-```
-
-into one unrelated commit.
-
----
-
-# 37. Documentation Rule
-
-Whenever behaviour changes, update the relevant documentation.
-
-Important documents:
+Maintain:
 
 ```text
 README.md
 INSTALL.md
 APP_DEVELOPMENT.md
 CHANGELOG.md
+ARCHITECTURE.md
 ```
 
 Document:
 
 * installation
-* configuration
-* app format
-* update behaviour
-* rollback behaviour
+* architecture
+* application format
+* package system
+* updater
+* rollback
+* hardware adapters
+* development mode
+* debugging
 * troubleshooting
-* developer API
 
 ---
 
-# 38. Definition of Done
+# 49. Git Workflow
 
-A feature is **not done** simply because the code compiles.
+Use focused commits.
 
-A feature is done when:
+Examples:
+
+```text
+feat: add MFruit app registry
+fix: prevent duplicate application launch
+feat: add hardware abstraction
+feat: add GitHub package resolver
+fix: restore previous app after crash
+test: add navigation regression tests
+```
+
+Do not mix unrelated features and refactoring into one commit.
+
+---
+
+# 50. Refactoring Priority
+
+Prioritise stability in this order:
+
+```text
+1. Application lifecycle
+2. Navigation state machine
+3. Input/event system
+4. Process manager
+5. Application registry
+6. Hardware abstraction
+7. Package manager
+8. Updater
+9. UI refinement
+10. Additional features
+```
+
+Do not add major ecosystem features while application launching remains unstable.
+
+---
+
+# 51. Definition of Done
+
+A feature is complete only when:
 
 ```text
 ✓ Implemented
-✓ Tested
-✓ Error-handled
-✓ Regression-tested
-✓ Documented
-✓ Verified on target hardware when required
+✓ Unit tested
+✓ Integration tested where relevant
+✓ Regression tested
+✓ Error handled
+✓ Logged appropriately
+✓ Works in headless/mock mode
+✓ Works without Whisplay
+✓ Works with Whisplay adapter when applicable
+✓ Documentation updated
 ```
 
-For hardware-dependent functionality:
-
-```text
-Software test
-+
-Real hardware test
-```
-
-are both required.
+Never claim hardware verification unless hardware was actually tested.
 
 ---
 
-# 39. Final Verification Before Declaring Success
+# 52. Final Architectural Principle
 
-Before telling the user that a change is complete, verify:
-
-### Code
+MFruit OS must always follow:
 
 ```text
-No syntax errors
-No obvious dead code
-No accidental debug code
+                    MFruit OS
+                        │
+             ┌──────────┼──────────┐
+             ▼          ▼          ▼
+            UI       Services     Apps
+             │          │          │
+             └──────────┼──────────┘
+                        ▼
+                    MFruit Core
+                        │
+               Hardware Abstraction
+                        │
+          ┌─────────────┼─────────────┐
+          ▼             ▼             ▼
+      Whisplay      Terminal       Other HW
 ```
 
-### Tests
+The core platform must not know or care which hardware adapter is being used.
 
-```text
-Relevant tests pass
-Regression tests pass
-```
+Applications must not know or care which hardware adapter is being used.
 
-### Runtime
+The UI must display state, not secretly control state.
 
-```text
-Daemon connects
-Launcher starts
-Apps appear
-Navigation works
-```
+The process manager owns processes.
 
-### Hardware
+The application manager owns application lifecycle.
 
-```text
-LCD works
-Button works
-LED works
-Backlight works
-```
+The package manager owns application installation.
 
-when applicable.
+The updater owns software updates.
 
-### Updater
+The hardware adapter owns hardware.
 
-```text
-Update check works
-Installation works
-Rollback works
-Offline mode works
-```
-
-when applicable.
-
-### Service
-
-```text
-systemd service starts
-systemd service restarts
-logs are useful
-```
+No component should silently perform another component's responsibilities.
 
 ---
 
-# 40. Communication Style During Development
+# 53. Final Development Rule
 
-When reporting progress, be precise.
+Before making a change, ask:
 
-Use:
+> Can this be implemented entirely inside MFruit Core?
 
-```text
-Implemented:
-App registry discovery
+If yes, keep it hardware-independent.
 
-Tested:
-6 application manifests
+If hardware access is required, ask:
 
-Result:
-6/6 passed
+> Can this functionality be exposed through a generic adapter interface?
 
-Issue found:
-One manifest accepted an unsafe relative path
+If yes, add it to the hardware abstraction layer.
 
-Fix:
-Added path validation
+If not, document why.
 
-Regression:
-test_manifest_path_security passed
-```
+The goal is to make MFruit OS a **real standalone application platform**, with Whisplay being simply one supported device.
 
-Do not say:
+The final architecture should allow:
 
 ```text
-Everything should work now.
+MFruit OS
+   +
+Whisplay Adapter
 ```
 
-unless it has actually been tested.
-
-Distinguish clearly between:
+today, while also allowing:
 
 ```text
-Implemented
-Tested
-Verified on hardware
-Not yet tested
-Known limitation
+MFruit OS
+   +
+Future Hardware Adapter
 ```
 
----
-
-# 41. Most Important Rule
-
-**Do not guess. Inspect, reproduce, test, fix, and verify.**
-
-When something fails:
-
-```text
-DO NOT:
-randomly rewrite code
-
-DO:
-collect evidence
-→ reproduce
-→ isolate
-→ identify root cause
-→ make the smallest safe change
-→ test
-→ regression test
-```
-
-The primary goal is not to produce the most code.
-
-The primary goal is to produce a **stable, maintainable, lightweight MFruit OS that remains reliable on Raspberry Pi Zero 2W, other Pi, Orange Pi and remains compatible with the Whisplay Daemon.**
+without rewriting the operating system.

@@ -2,7 +2,7 @@
   "id": "mfruit-os",
   "type": "system",
   "name": "MFruit OS",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "App launcher and manager for the PiSugar Whisplay HAT",
   "entrypoint": "mfruitos/__main__.py",
   "repository": "https://github.com/Mengkungkao/MFruitOS"

@@ -24,6 +24,13 @@ if systemctl list-unit-files "$SERVICE" >/dev/null 2>&1; then
   sudo systemctl daemon-reload
 fi
 sudo rm -f /etc/sudoers.d/whisplay-os /usr/local/bin/mfruitctl
+if [ -f /etc/systemd/system/whisplay-daemon.service.d/mfruit-os.conf ]; then
+  say "Giving whisplay-daemon its own user interface back"
+  sudo rm -f /etc/systemd/system/whisplay-daemon.service.d/mfruit-os.conf
+  sudo rmdir /etc/systemd/system/whisplay-daemon.service.d 2>/dev/null || true
+  sudo systemctl daemon-reload
+  RESTART_DAEMON=1
+fi
 
 say "Removing MFruit OS from the daemon desktop"
 PYTHONPATH="$OS_HOME/system/current" python3 - "$PURGE" "$OS_HOME" <<'PY' || true
@@ -34,6 +41,14 @@ try:
 except ImportError:
     sys.exit(0)
 client = WhisplayDaemonClient()
+# Give adopted daemon apps their original launch commands back.
+try:
+    from mfruitos.launcher.app_manager.lifecycle import AppLifecycle
+    from mfruitos.paths import resolve_paths
+    restored = AppLifecycle(client, resolve_paths(os_home)).restore_adopted()
+    print(f"    restored {restored} app registration(s) to their original launch commands")
+except (ImportError, OSError) as exc:
+    print(f"    could not restore adopted apps: {exc}")
 ids = ["mfruit-os"]
 if purge:
     apps_dir = os.path.join(os_home, "apps")
@@ -57,5 +72,8 @@ if [ "$PURGE" = 1 ]; then
 else
   rm -rf -- "$OS_HOME/system" "$OS_HOME/bin"
   say "Kept apps, settings and logs in $OS_HOME (use --purge to delete them)"
+fi
+if [ "${RESTART_DAEMON:-0}" = 1 ]; then
+  sudo systemctl restart whisplay-daemon.service
 fi
 say "MFruit OS removed. whisplay-daemon's own desktop is available again."

@@ -5,6 +5,8 @@
 #   bash scripts/install.sh --no-service install files only (no systemd changes)
 #   bash scripts/install.sh --dev        run straight from this checkout (development)
 #   bash scripts/install.sh --yes        do not ask questions
+#   bash scripts/install.sh --no-background-daemon
+#                                        keep whisplay-daemon's own user interface
 #
 # Run as your normal user (the one whisplay-daemon runs as). sudo is only
 # used for the systemd unit, an optional narrow sudoers rule and the
@@ -22,14 +24,16 @@ DAEMON_SERVICE=whisplay-daemon.service
 SOCKET=/tmp/whisplay-daemon.sock
 
 INSTALL_SERVICE=1
+BACKGROUND_DAEMON=1
 DEV=0
 ASSUME_YES=0
 for arg in "$@"; do
   case "$arg" in
     --no-service) INSTALL_SERVICE=0 ;;
+    --no-background-daemon) BACKGROUND_DAEMON=0 ;;
     --dev) DEV=1 ;;
     --yes|-y) ASSUME_YES=1 ;;
-    -h|--help) sed -n '2,12p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
     *) echo "Unknown option: $arg" >&2; exit 2 ;;
   esac
 done
@@ -116,9 +120,10 @@ else
   ok "existing configuration kept"
 fi
 
-for script in mfruit-run boot-guard.sh; do
-  as_user install -m 0755 "$SRC/scripts/$script" "$OS_HOME/bin/$script"
-done
+as_user install -m 0755 "$SRC/scripts/boot-guard.sh" "$OS_HOME/bin/boot-guard.sh"
+as_user install -m 0755 "$SRC/scripts/whisplay-daemon-mfruit.py" "$OS_HOME/bin/whisplay-daemon-mfruit.py"
+sed "s|@MFRUIT_HOME@|$OS_HOME|" "$SRC/scripts/mfruit-run" | as_user tee "$OS_HOME/bin/mfruit-run" >/dev/null
+as_user chmod 0755 "$OS_HOME/bin/mfruit-run"
 sed "s|@MFRUIT_ROOT@|$OS_HOME/system/current|" "$SRC/scripts/mfruitctl" | as_user tee "$OS_HOME/bin/mfruitctl" >/dev/null
 as_user chmod 0755 "$OS_HOME/bin/mfruitctl"
 ok "helpers in $OS_HOME/bin"
@@ -199,7 +204,37 @@ TimeoutStopSec=10
 WantedBy=multi-user.target
 EOF
 sudo systemd-analyze verify /etc/systemd/system/$SERVICE 2>&1 | grep -v "^$" | sed 's/^/    /' || true
+
+DROPIN_DIR="/etc/systemd/system/$DAEMON_SERVICE.d"
+if [ "$BACKGROUND_DAEMON" = 1 ] && [ -f "$WHISPLAY_ROOT/daemon/whisplay_daemon.py" ]; then
+  say "Running whisplay-daemon's user interface in the background"
+  sudo mkdir -p "$DROPIN_DIR"
+  DROPIN_TMP="$(mktemp)"
+  cat > "$DROPIN_TMP" <<DROPIN
+# Installed by MFruit OS. While MFruit OS runs, whisplay-daemon does not draw
+# its own desktop and ignores the button when no app owns the screen; the
+# hardware, apps and daemon pages are unchanged. Delete this file and run
+# "systemctl daemon-reload && systemctl restart whisplay-daemon" to undo.
+[Service]
+ExecStart=
+ExecStart=$PYTHON $OS_HOME/bin/whisplay-daemon-mfruit.py --whisplay $WHISPLAY_ROOT --lock $OS_HOME/state/launcher.lock
+DROPIN
+  if ! sudo cmp -s "$DROPIN_TMP" "$DROPIN_DIR/mfruit-os.conf"; then
+    sudo install -m 0644 "$DROPIN_TMP" "$DROPIN_DIR/mfruit-os.conf"
+    RESTART_DAEMON=1
+  fi
+  rm -f "$DROPIN_TMP"
+  ok "$DROPIN_DIR/mfruit-os.conf"
+elif [ -f "$DROPIN_DIR/mfruit-os.conf" ]; then
+  sudo rm -f "$DROPIN_DIR/mfruit-os.conf"
+  ok "whisplay-daemon user interface left in the foreground"
+  RESTART_DAEMON=1
+fi
 sudo systemctl daemon-reload
+if [ "${RESTART_DAEMON:-0}" = 1 ]; then
+  warn "restarting whisplay-daemon (running apps are closed)"
+  sudo systemctl restart "$DAEMON_SERVICE"
+fi
 sudo systemctl enable "$SERVICE" >/dev/null 2>&1
 sudo systemctl restart "$SERVICE"
 sleep 4

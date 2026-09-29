@@ -62,6 +62,7 @@ my-app/
 | `test` | no | script run after installation, before activation; non-zero = rollback |
 | `persist` | no | paths copied from the previous version into the new one on update (the user's copy replaces the packaged file) — for a venv or user-edited config |
 | `disable_esc_exit_key` | no | `true` to stop an external keyboard's Esc key from closing the app |
+| `background` | no | `true` if the app must keep running after the user leaves it (e.g. it receives messages). Default `false`: leaving an app closes it completely. Users can change it per app (*Keep running*). |
 
 A manifest that fails validation is rejected as a whole; nothing is installed.
 
@@ -90,12 +91,22 @@ Your app must follow the Whisplay daemon integration contract
 5. on `app_focus_revoked`: stop drawing; the buffer is gone.
 
 Do **not** call `app.register` with a `launch_command` yourself — that would
-replace the MFruit OS wrapper. Registering without one is harmless.
+replace the MFruit OS wrapper (MFruit OS re-adopts the app on its next scan).
+Registering without one is harmless.
+
+Apps must not start other apps through the daemon (`app.launch`): while MFruit
+OS runs, every app start needs a one-shot ticket that only MFruit OS issues,
+so such a start is denied and logged in `~/.whisplay-os/logs/launch-gate.log`.
 `templates/whisplay-app-template/app/whisplay_app.py` is a small
 dependency-free client that does all of this; copy it.
 
 When the user leaves your app (four quick clicks by default), MFruit OS takes
-the screen back automatically. Apps that set `exit_gesture: "none"` must
+the screen back automatically, and — unless your app is marked `background` —
+makes sure it has exited: after 3 seconds its process group receives SIGTERM,
+then SIGKILL. Exit promptly on `app_exit_requested`.
+
+Draw your first frame as soon as you can: until then the user sees MFruit OS's
+"Opening <your app>" screen. Apps that set `exit_gesture: "none"` must
 release focus themselves when the user asks to leave.
 
 ## Lifecycle scripts

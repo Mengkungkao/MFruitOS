@@ -45,6 +45,8 @@ class ScreenServices:
         self.push(MessageScreen(self, title, message, tone=tone, icon=icon))
 
     def hints(self, select: str = "select", back: bool = True) -> list[tuple[str, str]]:
+        if getattr(self, "hold_armed", False) and self.settings.get("button.long_press") == "select":
+            return [("release", f"to {select}")]
         mapping = {k: self.settings.get(f"button.{k}") for k in GESTURE_KEYS}
 
         def gesture_for(action: str) -> str | None:
@@ -101,34 +103,50 @@ class ScreenServices:
         return screen
 
     # ------------------------------------------------------------ launching
-    def launch_app(self, app_id: str) -> None:
+    def launch_app(self, app_id: str, source: str = "home") -> bool:
+        """Ask the ApplicationManager to launch ``app_id``. The UI never starts
+        processes or talks to the daemon itself."""
         entry = self.registry.get(app_id)
         if entry is None:
             self.toast("App not found", "error")
-            return
+            return False
         if not entry.enabled:
             self.toast("App is disabled")
-            return
+            return False
         if entry.broken:
             self.show_app_problem(entry, entry.broken)
-            return
+            return False
         if not self.focus.connected:
             self.toast("Daemon unavailable", "error")
-            return
+            return False
+        if self.apps.busy:
+            self.apps.request_launch(app_id, "app", source)  # refused and logged
+            return False
         self.flush_settings()
         self.lifecycle.prepare_launch(entry)
         self.backlight.wake()
         self.led.show("running")
         self.last_launched = app_id
-        self.focus.launch(app_id)
+        # Draw "Opening <app>" now, before the screen is handed over: with the
+        # daemon's UI in the background it stays up until the app draws.
+        from mfruitos.launcher.ui.screens.dialogs import LoadingScreen
+        loading = LoadingScreen(self, entry.id, entry.name, entry.icon_text, entry.icon_path)
+        self.router.push(loading)
+        self._render_now()
+        ok, _ = self.apps.request_launch(app_id, "app", source)
+        if not ok and self.router.top is loading:
+            self.router.pop()
+        return ok
 
-    def open_system_page(self, page_id: str) -> None:
+    def open_system_page(self, page_id: str, source: str = "settings") -> bool:
         if not self.focus.connected:
             self.toast("Daemon unavailable", "error")
-            return
-        self.flush_settings()
-        self.backlight.wake()
-        self.focus.launch(page_id, system_page=True)
+            return False
+        if not self.apps.busy:
+            self.flush_settings()
+            self.backlight.wake()
+        ok, _ = self.apps.request_launch(page_id, "page", source)
+        return ok
 
     def system_page_available(self, page_id: str) -> bool:
         return any(p.id == page_id for p in self.registry.system_pages())
@@ -141,9 +159,9 @@ class ScreenServices:
         elif entry.key == "os.updater":
             self.push(UpdaterScreen(self))
         elif entry.kind == "system":
-            self.open_system_page(entry.key)
+            self.open_system_page(entry.key, source="home")
         else:
-            self.launch_app(entry.key)
+            self.launch_app(entry.key, source="home")
 
     def show_app_problem(self, entry: AppEntry, reason: str, exit_info: dict | None = None,
                          title_text: str = "Application failed to start.") -> None:
@@ -152,7 +170,8 @@ class ScreenServices:
         if exit_info and exit_info.get("exit_code") is not None:
             detail = f"Error: exit code {exit_info['exit_code']}"
         message = f"{title_text}\n{detail}"
-        actions = [Item("Retry", lambda: (self.pop(), self.launch_app(entry.id)), icon="refresh",
+        actions = [Item("Retry", lambda: (self.pop(), self.launch_app(entry.id, source="retry")),
+                        icon="refresh",
                         enabled=entry.launchable),
                    Item("Logs", lambda: self.push(LogScreen(self, f"{entry.name} log",
                                                             self.lifecycle.log_path(entry))),

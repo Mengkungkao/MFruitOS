@@ -51,6 +51,7 @@ class Manifest:
     test: str = ""
     type: str = "app"
     disable_esc_exit_key: bool = False
+    background: bool = False
     raw: dict = field(default_factory=dict)
 
     @property
@@ -187,6 +188,9 @@ def validate_manifest(data: object, package_dir: str | None = None,
     esc = data.get("disable_esc_exit_key", False)
     if not isinstance(esc, bool):
         raise ManifestError("disable_esc_exit_key must be true or false")
+    background = data.get("background", False)
+    if not isinstance(background, bool):
+        raise ManifestError("background must be true or false")
 
     manifest = Manifest(
         id=app_id, name=name, version=version, entrypoint=entrypoint,
@@ -194,7 +198,7 @@ def validate_manifest(data: object, package_dir: str | None = None,
         min_os_version=min_os, repository=repository,
         branch=_optional_str(data, "branch", 100), exit_gesture=exit_gesture,
         priority=priority, env={str(k): v for k, v in env.items()}, test=test,
-        type=kind, disable_esc_exit_key=esc, raw=dict(data),
+        type=kind, disable_esc_exit_key=esc, background=background, raw=dict(data),
     )
     if package_dir is not None:
         _check_package_files(manifest, package_dir)

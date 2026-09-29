@@ -77,12 +77,14 @@ class RuntimeEndToEndTests(TempHomeTestCase):
         time.sleep(0.05)
         self.click()  # double click -> previous
         self.wait(lambda: self.rt.home_screen.selected == start, "previous item")
-        # long press opens the selected entry
+        # a hold arms at 0.7 s and opens the selected entry on release (RC1)
         self.rt.loop.post(self.rt.home_screen.focus_key, "os.settings")
         time.sleep(0.1)
         self.daemon.press()
-        self.wait(lambda: self.status().get("screens", [])[-1:] == ["SettingsScreen"], "settings")
+        time.sleep(1.0)
+        self.assertEqual(self.status().get("screens"), ["HomeScreen"], "nothing opens while held")
         self.daemon.release()
+        self.wait(lambda: self.status().get("screens", [])[-1:] == ["SettingsScreen"], "settings")
         for _ in range(4):
             self.click()
             time.sleep(0.03)

@@ -13,6 +13,7 @@ import time
 from mfruitos import OS_APP_ID, __version__
 from mfruitos.apps.manifest import Manifest
 from mfruitos.apps.registry import AppEntry, AppRegistry
+from mfruitos.core.application_manager import FAILED, HEADLESS, ApplicationManager
 from mfruitos.daemon.client import DaemonError, WhisplayDaemonClient
 from mfruitos.daemon.events import EventStream
 from mfruitos.launcher import sdnotify
@@ -29,7 +30,8 @@ from mfruitos.launcher.ui.components import StatusInfo, draw_status_bar, draw_to
 from mfruitos.launcher.ui.fonts import Fonts
 from mfruitos.launcher.ui.painter import Painter
 from mfruitos.launcher.ui.rgb565 import to_rgb565
-from mfruitos.launcher.ui.screens.boot import DONE, FAILED, RUNNING, BootScreen
+from mfruitos.launcher.ui.screens.boot import DONE, RUNNING, BootScreen
+from mfruitos.launcher.ui.screens.boot import FAILED as STEP_FAILED
 from mfruitos.launcher.ui.screens.dialogs import MessageScreen
 from mfruitos.launcher.ui.screens.home import HomeScreen
 from mfruitos.launcher.ui.theme import get_theme
@@ -42,6 +44,7 @@ from mfruitos.updater.installer import Installer
 from mfruitos.updater.service import UpdateService
 
 log = logging.getLogger("mfruitos.runtime")
+lifecycle_log = logging.getLogger("mfruitos.lifecycle")
 
 MIN_FRAME_INTERVAL = 0.06
 STATUS_REFRESH_SEC = 30.0
@@ -51,7 +54,7 @@ FALLBACK_AFTER_SEC = 10.0
 FALLBACK_POLL_SEC = 5.0
 AUTOSTART_DELAY_SEC = 1.0
 UPDATE_TICK_SEC = 600
-SCRIPTS = ("mfruit-run", "mfruitctl", "boot-guard.sh")
+SCRIPTS = ("mfruit-run", "mfruitctl", "boot-guard.sh", "whisplay-daemon-mfruit.py")
 
 
 class Runtime(ScreenServices):
@@ -70,12 +73,21 @@ class Runtime(ScreenServices):
         self.installer = Installer(paths, __version__, self.settings, self.github,
                                    register=self._register_manifest)
         self.updater = UpdateService(paths, self.settings, self.github, self.installer, __version__)
-        self.focus = ForegroundManager(self.client, self.loop, OS_APP_ID, self)
+        # The single launch authority (core) and its Whisplay host.
+        self.apps = ApplicationManager()
+        self.apps.listener = self
+        self.apps.context = self._lifecycle_context
+        self.focus = ForegroundManager(self.client, self.loop, OS_APP_ID, self, manager=self.apps,
+                                       prepare_launch=self.lifecycle.issue_ticket,
+                                       run_state=self.lifecycle.run_state,
+                                       is_page=self._is_page)
         self.backlight = hardware.BacklightController(self.client, self.settings)
         self.led = hardware.LedController(self.client, self.settings)
         self.tasks = TaskRunner(self.loop.post)
         self.router = Router(on_change=self._on_route_change)
-        self.gestures = GestureRecognizer(self._on_gesture, self.loop.call_later)
+        self.hold_armed = False
+        self.gestures = GestureRecognizer(self._on_gesture, self.loop.call_later,
+                                          on_armed=self._on_hold_armed)
         self._configure_gestures()
         self.fonts = Fonts(os.path.join(package_dir, "assets", "fonts"))
         self.status = StatusInfo()
@@ -108,6 +120,11 @@ class Runtime(ScreenServices):
         log.info("MFruit OS %s starting (package %s)", __version__, self.package_dir)
         set_debug(self.settings.get("developer.debug_logging"))
         self.install_bin_scripts()
+        if not self.lifecycle.acquire_instance_lock():
+            raise SystemExit("another MFruit OS instance is already running")
+        # Launch gate: only tickets written by this process may start apps.
+        self.lifecycle.revoke_all_tickets()
+        self.lifecycle.set_gate("gate")
         self.router.set_root(self.boot_screen)
         self.boot_screen.set_step(0, DONE)
         self.boot_screen.set_step(1, RUNNING)
@@ -143,7 +160,8 @@ class Runtime(ScreenServices):
             target = os.path.join(self.paths.bin_dir, name)
             try:
                 with open(source, "r", encoding="utf-8") as fp:
-                    content = fp.read().replace("@MFRUIT_ROOT@", root)
+                    content = (fp.read().replace("@MFRUIT_ROOT@", root)
+                               .replace("@MFRUIT_HOME@", self.paths.home))
                 try:
                     with open(target, "r", encoding="utf-8") as fp:
                         if fp.read() == content:
@@ -162,11 +180,12 @@ class Runtime(ScreenServices):
         """Runs once the daemon granted the screen."""
         boot = self.boot_screen
         boot.set_step(1, DONE)
-        boot.set_step(2, DONE if not self.settings.load_errors else FAILED)
+        boot.set_step(2, DONE if not self.settings.load_errors else STEP_FAILED)
         boot.set_step(3, RUNNING)
         self.refresh_registry(query_daemon=True)
         synced = self.lifecycle.sync_registrations(self.registry.managed())
-        if synced:
+        adopted = self.lifecycle.adopt_all(self.registry.daemon_registrations())
+        if synced or adopted:
             self.refresh_registry(query_daemon=True)
         boot.set_step(3, DONE)
         boot.ready = True
@@ -223,7 +242,7 @@ class Runtime(ScreenServices):
         for entry in self.registry.apps():
             if entry.autostart and entry.launchable:
                 log.info("Autostarting %s", entry.id)
-                self.loop.call_later(AUTOSTART_DELAY_SEC, self.launch_app, entry.id)
+                self.loop.call_later(AUTOSTART_DELAY_SEC, self.launch_app, entry.id, "autostart")
                 return
 
     # ============================================================ daemon events
@@ -278,42 +297,61 @@ class Runtime(ScreenServices):
         if top is not None and not top.modal:
             self.router.home()
 
-    def on_app_foreground(self, app_id: str) -> None:
-        entry = self.registry.get(app_id)
+    # ApplicationManager listener ---------------------------------------------
+    def on_session_running(self, session) -> None:
+        self.lifecycle.revoke_ticket(session.app_id)
+        entry = self.registry.get(session.app_id)
         if entry is not None:
-            entry.running = True
-            entry.foreground = True
+            entry.running = entry.foreground = True
 
-    def on_app_returned(self, app_id: str, kind: str) -> None:
+    def on_session_ended(self, session) -> None:
+        self.lifecycle.revoke_ticket(session.app_id)
+        from mfruitos.launcher.ui.screens.dialogs import LoadingScreen
+        while isinstance(self.router.top, LoadingScreen):
+            self.router.pop()
+        self._close_app_after_session(session)
         self.refresh_registry(query_daemon=True)
         if self.router.top is self.home_screen:
-            self.home_screen.focus_key(app_id)
-        entry = self.registry.get(app_id)
-        if entry is None or entry.kind != "os":
+            self.home_screen.focus_key(session.app_id)
+        entry = self.registry.get(session.app_id)
+        # Only this session's own run record may explain how it ended.
+        exit_info = self.lifecycle.session_exit(session.app_id, session.id)
+        if exit_info and exit_info.get("pid"):
+            session.pid = session.pid or exit_info["pid"]
+        if session.outcome == FAILED:
+            if entry is None:
+                self.toast(session.detail[:40] or "Launch failed", "error")
+            elif exit_info and exit_info.get("exit_code") == 0:
+                self.toast(f"{entry.name} finished", "success")  # a task without a screen
+            else:
+                self.show_app_problem(entry, session.detail, exit_info)
             return
-        info = self.lifecycle.last_exit(entry)
-        if not info or not info.get("exit_code"):
+        if session.outcome == HEADLESS:
+            self._show_headless(session.app_id)
             return
-        runtime = (info.get("ended_at") or 0) - (info.get("started_at") or 0)
-        if runtime < 10:
-            self.show_app_problem(entry, "", info, "Application stopped unexpectedly.")
-        else:
-            self.toast(f"{entry.name} exited (code {info['exit_code']})", "error")
+        self.led.show("idle")
+        if entry is not None and exit_info and exit_info.get("exit_code"):
+            runtime = (exit_info.get("ended_at") or 0) - (exit_info.get("started_at") or 0)
+            if runtime < 10:
+                self.show_app_problem(entry, "", exit_info, "Application stopped unexpectedly.")
+            else:
+                self.toast(f"{entry.name} exited (code {exit_info['exit_code']})", "error")
 
-    def on_launch_failed(self, app_id: str, reason: str) -> None:
-        self.refresh_registry(query_daemon=True)
-        entry = self.registry.get(app_id)
-        if entry is None:
-            self.toast(reason[:40], "error")
+    def _close_app_after_session(self, session) -> None:
+        """Leaving an app closes it completely unless it may keep running."""
+        entry = self.registry.get(session.app_id)
+        if session.kind != "app" or entry is None or entry.background:
             return
-        exit_info = self.lifecycle.last_exit(entry)
-        if exit_info and exit_info.get("exit_code") == 0:
-            # A short task that finished successfully (no screen needed).
-            self.toast(f"{entry.name} finished", "success")
-            return
-        self.show_app_problem(entry, reason, exit_info)
+        app_id, session_id = session.app_id, session.id
 
-    def on_app_headless(self, app_id: str) -> None:
+        def done(result):
+            lifecycle_log.info("APP_CLOSED app=%s session=%s result=%s", app_id, session_id, result)
+            if result in ("terminated", "killed"):
+                self.refresh_registry(query_daemon=True)
+        self.run_task(f"close-{app_id}", lambda: self.lifecycle.ensure_stopped(app_id, session_id),
+                      done, lane="cleanup")
+
+    def _show_headless(self, app_id: str) -> None:
         entry = self.registry.get(app_id)
         name = entry.name if entry else app_id
         from mfruitos.launcher.ui.components import Item, back_item
@@ -325,8 +363,24 @@ class Runtime(ScreenServices):
                                             "be a background service or still starting.", actions,
                                 tone="warning", icon="info"))
 
+    def _is_page(self, app_id: str) -> bool:
+        return any(page.id == app_id for page in self.registry.system_pages())
+
+    def _lifecycle_context(self) -> dict:
+        top = self.router.top
+        context = {"screen": type(top).__name__.replace("Screen", "") if top else "-",
+                   "foreground": self.focus.target or ("mfruit-os" if self.focus.has_focus else "-")}
+        if top is self.home_screen:
+            entries = self.home_screen.entries()
+            if entries:
+                context["selected"] = entries[min(self.home_screen.selected, len(entries) - 1)].key
+        return context
+
     # =============================================================== input
     def _on_raw_button(self, pressed: bool) -> None:
+        lifecycle_log.info("EVENT %s%s app_state=%s", "PRESS" if pressed else "RELEASE",
+                           "".join(f" {k}={v}" for k, v in self._lifecycle_context().items()),
+                           self.apps.state)
         top = self.router.top
         hook = getattr(top, "on_raw_button", None)
         if pressed:
@@ -349,12 +403,18 @@ class Runtime(ScreenServices):
             self.gestures.release()
         self._arm_idle_timers()
 
+    def _on_hold_armed(self, armed: bool) -> None:
+        """Visual feedback only: the action itself fires when the button is released."""
+        self.hold_armed = armed
+        self.request_render()
+
     def _configure_gestures(self) -> None:
         mapping = {k: self.settings.get(f"button.{k}") for k in GESTURE_KEYS}
         self.gestures.configure(mapping, self.settings.get("button.click_gap_ms"),
                                 self.settings.get("button.long_press_ms"))
 
     def _on_gesture(self, gesture: str) -> None:
+        lifecycle_log.info("GESTURE %s -> %s", gesture, self.settings.get(f"button.{gesture}"))
         top = self.router.top
         hook = getattr(top, "on_gesture", None)
         if hook is not None and hook(gesture):
@@ -401,7 +461,7 @@ class Runtime(ScreenServices):
         if top is not None:
             top.draw(painter)
             if top.show_status:
-                draw_status_bar(painter, self.status)
+                draw_status_bar(painter, self.status, getattr(top, "title", ""))
             top.footer(painter)
         if self._toast:
             draw_toast(painter, *self._toast)
@@ -534,6 +594,11 @@ class Runtime(ScreenServices):
             except DaemonError as exc:
                 log.warning("app.list failed: %s", exc)
         self.registry.refresh(self._daemon_apps if self.focus.connected else None)
+        if query_daemon and self.focus.connected and not self._booting and not self.apps.busy:
+            # An app's own installer may have re-registered it with its own
+            # launch command since the last scan: route it through the gate again.
+            if self.lifecycle.adopt_all(self.registry.daemon_registrations()):
+                self.registry.refresh(self._daemon_apps)
         self.registry.set_latest_versions(self.updater.latest_map())
         self.request_render()
 
@@ -600,6 +665,7 @@ class Runtime(ScreenServices):
     # ============================================================== lifecycle
     def yield_to_desktop(self) -> None:
         self.router.home()
+        self.lifecycle.set_gate("open")  # the user drives the daemon desktop directly
         self.focus.yield_to_desktop()
 
     def restart_launcher(self) -> None:
@@ -621,6 +687,8 @@ class Runtime(ScreenServices):
         self.control.stop()
         self.stream.stop()
         self.tasks.stop()
+        self.lifecycle.revoke_all_tickets()
+        self.lifecycle.release_instance_lock()
         sdnotify.notify("STOPPING=1")
         self.loop.stop()
 

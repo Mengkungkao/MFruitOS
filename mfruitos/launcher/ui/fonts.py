@@ -5,8 +5,9 @@ from __future__ import annotations
 
 import logging
 import os
+from collections import OrderedDict
 
-from PIL import ImageFont
+from PIL import Image, ImageDraw, ImageFont
 
 log = logging.getLogger("mfruitos.fonts")
 
@@ -32,6 +33,7 @@ class Fonts:
         self._cache: dict[tuple[str, int], ImageFont.ImageFont] = {}
         self._paths: dict[str, str | None] = {}
         self._layout = _basic_layout()
+        self.text = TextCache(self)
 
     def _path(self, weight: str) -> str | None:
         if weight not in self._paths:
@@ -56,3 +58,76 @@ class Fonts:
                 font = ImageFont.load_default()
             self._cache[key] = font
         return font
+
+
+class TextCache:
+    """Rasterised text, cached.
+
+    FreeType rasterisation was ~85 % of a frame on a Pi Zero 2 W (~3 ms per
+    string); the same strings (app names, hints, status text) are drawn on
+    every frame. A string is rasterised once into an 8-bit alpha mask and then
+    pasted in any colour, which gives the same pixels as ``ImageDraw.text``.
+    """
+
+    MAX_ENTRIES = 1200
+
+    def __init__(self, fonts: Fonts):
+        self.fonts = fonts
+        self._masks: OrderedDict = OrderedDict()
+        self._lengths: dict = {}
+        self._fits: dict = {}
+
+    def _remember(self, store, key, value):
+        store[key] = value
+        if isinstance(store, OrderedDict):
+            store.move_to_end(key)
+            if len(store) > self.MAX_ENTRIES:
+                store.popitem(last=False)
+        elif len(store) > self.MAX_ENTRIES * 4:
+            store.clear()
+        return value
+
+    def length(self, text: str, size: int, weight: str) -> int:
+        key = (text, size, weight)
+        value = self._lengths.get(key)
+        if value is None:
+            value = self._remember(self._lengths, key,
+                                   int(self.fonts.get(size, weight).getlength(text)))
+        return value
+
+    def fit(self, text: str, size: int, weight: str, max_width: int) -> str:
+        """``text`` shortened with an ellipsis to fit ``max_width`` pixels."""
+        key = (text, size, weight, max_width)
+        value = self._fits.get(key)
+        if value is not None:
+            return value
+        if self.length(text, size, weight) <= max_width:
+            return self._remember(self._fits, key, text)
+        low, high = 0, len(text)
+        while low < high:
+            mid = (low + high + 1) // 2
+            if self.length(text[:mid].rstrip() + "…", size, weight) <= max_width:
+                low = mid
+            else:
+                high = mid - 1
+        return self._remember(self._fits, key, text[:low].rstrip() + "…")
+
+    def mask(self, text: str, size: int, weight: str, anchor: str):
+        """(alpha mask, dx, dy) to paste at the anchor point."""
+        key = (text, size, weight, anchor)
+        value = self._masks.get(key)
+        if value is not None:
+            self._masks.move_to_end(key)
+            return value
+        font = self.fonts.get(size, weight)
+        try:
+            x0, y0, x1, y1 = font.getbbox(text, anchor=anchor)
+        except (TypeError, ValueError):  # bitmap fallback fonts do not take anchors
+            x0, y0, x1, y1 = font.getbbox(text)
+        mask = Image.new("L", (max(1, x1 - x0), max(1, y1 - y0)), 0)
+        draw = ImageDraw.Draw(mask)
+        try:
+            draw.text((-x0, -y0), text, font=font, fill=255, anchor=anchor)
+        except (TypeError, ValueError):
+            draw.text((-x0, -y0), text, font=font, fill=255)
+        return self._remember(self._masks, key, (mask, x0, y0))

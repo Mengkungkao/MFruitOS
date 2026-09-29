@@ -23,7 +23,7 @@ class TaskRunner:
         self._threads: list[threading.Thread] = []
         self.active: dict[str, str] = {}
 
-    def start(self, lanes=("quick", "jobs")) -> None:
+    def start(self, lanes=("quick", "jobs", "cleanup")) -> None:
         for lane in lanes:
             q: queue.Queue = queue.Queue()
             self._queues[lane] = q

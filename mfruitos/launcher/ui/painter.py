@@ -59,33 +59,21 @@ class Painter:
         return self.fonts.get(size, weight)
 
     def text_width(self, text: str, size: int, weight: str = "regular") -> int:
-        return int(self.font(size, weight).getlength(text))
+        return self.fonts.text.length(text, size, weight)
 
     def fit(self, text: str, size: int, weight: str, max_width: int) -> str:
         """Ellipsize ``text`` to ``max_width`` pixels."""
-        font = self.font(size, weight)
-        if font.getlength(text) <= max_width:
-            return text
-        ellipsis = "…"
-        low, high = 0, len(text)
-        while low < high:
-            mid = (low + high + 1) // 2
-            if font.getlength(text[:mid].rstrip() + ellipsis) <= max_width:
-                low = mid
-            else:
-                high = mid - 1
-        return text[:low].rstrip() + ellipsis
+        return self.fonts.text.fit(text, size, weight, max_width)
 
     def wrap(self, text: str, size: int, weight: str, max_width: int,
              max_lines: int = 99) -> list[str]:
-        font = self.font(size, weight)
         lines: list[str] = []
         for paragraph in str(text).split("\n"):
             words = paragraph.split(" ")
             line = ""
             for word in words:
                 candidate = f"{line} {word}".strip()
-                if font.getlength(candidate) <= max_width or not line:
+                if self.text_width(candidate, size, weight) <= max_width or not line:
                     line = candidate
                 else:
                     lines.append(line)
@@ -100,9 +88,11 @@ class Painter:
              color: Color | None = None, anchor: str = "la", max_width: int | None = None) -> int:
         if max_width is not None:
             text = self.fit(text, size, weight, max_width)
-        font = self.font(size, weight)
-        self.draw.text((x, y), text, font=font, fill=color or self.theme.text, anchor=anchor)
-        return int(font.getlength(text))
+        if not text:
+            return 0
+        mask, dx, dy = self.fonts.text.mask(text, size, weight, anchor)
+        self.image.paste(color or self.theme.text, (int(round(x)) + dx, int(round(y)) + dy), mask)
+        return self.text_width(text, size, weight)
 
     # ------------------------------------------------------------- shapes
     def rect(self, box, fill: Color):

@@ -40,10 +40,11 @@ framebuffer. Every existing Whisplay app keeps working unchanged.
   daemon registry (nothing hard-coded); status badges for running, update
   available and broken apps.
 - **One-button navigation** — tap = next, double-click = previous,
-  hold = open/select, four clicks = back. Configurable; the OS refuses
+  hold and release = open/select, four clicks = back. Configurable; the OS refuses
   mappings that would lock you out.
 - **App management** — enable, disable, hide, reorder, default app,
-  autostart, stop, force stop, logs, uninstall.
+  autostart, stop, force stop, logs, uninstall. Leaving an app closes it
+  completely unless it is set to *Keep running*.
 - **Updater** — GitHub Releases as the app store: update, downgrade,
   reinstall, rollback, install new apps, discover apps by GitHub topic.
   Installs go through *check → download → verify → backup → install → test →
@@ -53,6 +54,13 @@ framebuffer. Every existing Whisplay app keeps working unchanged.
 - **System** — system info, diagnostics with hardware tests (display, button,
   LED, speaker), display/LED/button/audio settings, daemon WiFi / Bluetooth /
   Volume / Power pages.
+- **One user interface** — whisplay-daemon keeps running the hardware in the
+  background; MFruit OS is all you see, including its own "Opening <App>"
+  screen while an app starts.
+- **Deterministic launches** — exactly the selected app opens, once: one
+  launch session at a time, and a launch gate stops whisplay-daemon's own
+  desktop from starting other apps while one is starting up
+  ([docs/LAUNCH_LIFECYCLE.md](docs/LAUNCH_LIFECYCLE.md)).
 - **Robust** — a crashing app never takes the launcher down; the launcher
   re-takes the screen after apps exit, survives daemon restarts, has a
   systemd watchdog, and a failed OS update is rolled back at the next boot.
@@ -81,7 +89,7 @@ See [INSTALL.md](INSTALL.md) for details, updating and uninstalling.
 |---|---|
 | tap | next item |
 | double-click | previous item |
-| hold (0.7 s) | open / select |
+| hold 0.7 s, then release | open / select (the screen shows "Release to open" once armed) |
 | four quick clicks | back (inside apps: the daemon's exit gesture) |
 
 Every screen shows its gestures in the footer and ends with a **Back** row.

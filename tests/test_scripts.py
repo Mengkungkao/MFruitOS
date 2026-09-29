@@ -98,5 +98,86 @@ class BootGuardTests(TempHomeTestCase):
         self.assertEqual(self.current(), "versions/1.1.0-b")
 
 
+
+class LaunchGateTests(TempHomeTestCase):
+    """mfruit-run as the launch gate (root cause RC2)."""
+
+    def setUp(self):
+        super().setUp()
+        WrapperTests.make_app(self, "demo", "#!/bin/sh\necho ran >> \"$WHISPLAY_OS_APP_DATA/ran\"\nexit 0\n")
+        self.lock = None
+
+    def tearDown(self):
+        if self.lock:
+            self.lock.close()
+        super().tearDown()
+
+    def hold_launcher_lock(self):
+        import fcntl
+        self.lock = open(os.path.join(self.paths.state_dir, "launcher.lock"), "a+")
+        fcntl.flock(self.lock.fileno(), fcntl.LOCK_EX)
+
+    def ticket(self, session="s1", ttl=20):
+        import time
+        os.makedirs(os.path.join(self.paths.state_dir, "tickets"), exist_ok=True)
+        with open(os.path.join(self.paths.state_dir, "tickets", "demo"), "w") as fp:
+            fp.write(f"{session} {int(time.time()) + ttl}\n")
+
+    def run_gate(self):
+        return WrapperTests.run_wrapper(self, "demo")
+
+    def ran(self):
+        path = os.path.join(self.paths.app_root("demo"), "data", "ran")
+        return open(path).read().count("ran") if os.path.exists(path) else 0
+
+    def gate_log(self):
+        path = os.path.join(self.paths.logs_dir, "launch-gate.log")
+        return open(path).read() if os.path.exists(path) else ""
+
+    def test_denied_without_ticket_while_launcher_runs(self):
+        self.hold_launcher_lock()
+        self.assertEqual(self.run_gate().returncode, 0)
+        self.assertEqual(self.ran(), 0)
+        self.assertIn("DENIED demo", self.gate_log())
+
+    def test_ticket_allows_exactly_one_start(self):
+        self.hold_launcher_lock()
+        self.ticket("sess42")
+        self.run_gate()
+        self.assertEqual(self.ran(), 1)
+        self.assertEqual(WrapperTests.state(self, "demo")["session"], "sess42")
+        self.run_gate()                            # the ticket was consumed
+        self.assertEqual(self.ran(), 1)
+        self.assertIn("DENIED demo", self.gate_log())
+
+    def test_expired_ticket_denied(self):
+        self.hold_launcher_lock()
+        self.ticket(ttl=-5)
+        self.run_gate()
+        self.assertEqual(self.ran(), 0)
+        self.assertIn("expired", self.gate_log())
+
+    def test_open_policy_and_no_launcher_allow(self):
+        self.run_gate()                            # no MFruit OS running: legacy behaviour
+        self.hold_launcher_lock()
+        with open(os.path.join(self.paths.state_dir, "launch-policy"), "w") as fp:
+            fp.write("open\n")                     # daemon-desktop mode
+        self.run_gate()
+        self.assertEqual(self.ran(), 2)
+
+    def test_adopted_app_runs_its_original_command(self):
+        adopted = os.path.join(self.paths.home, "adopted", "legacy")
+        os.makedirs(adopted)
+        workdir = os.path.join(self.tmp, "legacy-app")
+        os.makedirs(workdir)
+        with open(os.path.join(adopted, "command"), "w") as fp:
+            fp.write("echo from-legacy > here.txt\n")
+        with open(os.path.join(adopted, "cwd"), "w") as fp:
+            fp.write(workdir + "\n")
+        self.assertEqual(WrapperTests.run_wrapper(self, "legacy").returncode, 0)
+        with open(os.path.join(workdir, "here.txt")) as fp:
+            self.assertEqual(fp.read().strip(), "from-legacy")
+
+
 if __name__ == "__main__":
     unittest.main()
