@@ -1,0 +1,15 @@
+{
+  "id": "hello-whisplay",
+  "name": "Hello Whisplay",
+  "version": "1.0.0",
+  "description": "Template app: a button counter",
+  "entrypoint": "run.sh",
+  "icon": "assets/icon.png",
+  "min_os_version": "1.0.0",
+  "repository": "https://github.com/your-name/whisplay-app-template",
+  "exit_gesture": "quad_click",
+  "priority": 10,
+  "test": "test.sh",
+  "persist": [],
+  "env": {}
+}

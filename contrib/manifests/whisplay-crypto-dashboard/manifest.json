@@ -1,0 +1,11 @@
+{
+  "id": "whisplay-crypto-dashboard",
+  "name": "BTC Dashboard",
+  "version": "1.0.0",
+  "description": "Bitcoin market information",
+  "entrypoint": "run.sh",
+  "repository": "https://github.com/Mengkungkao/whisplay-crypto-dashboard",
+  "exit_gesture": "none",
+  "priority": 40,
+  "persist": [".venv", "config.yaml", ".env"]
+}

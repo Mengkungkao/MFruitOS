@@ -1,0 +1,11 @@
+{
+  "id": "whisplay-lora-walkie",
+  "name": "WalkieTalkie",
+  "version": "1.0.0",
+  "description": "Push-to-talk voice over LoRa",
+  "entrypoint": "run.sh",
+  "repository": "https://github.com/Mengkungkao/WalkieTalkie",
+  "exit_gesture": "none",
+  "priority": 45,
+  "persist": [".venv", "config.yaml"]
+}

@@ -1,0 +1,647 @@
+"""MFruit OS runtime: wires the daemon, UI, input, timers and services together.
+
+Threads: the event loop (UI thread) owns all state. The daemon event stream,
+task workers and control socket only ever ``post`` work to it.
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+import time
+
+from mfruitos import OS_APP_ID, __version__
+from mfruitos.apps.manifest import Manifest
+from mfruitos.apps.registry import AppEntry, AppRegistry
+from mfruitos.daemon.client import DaemonError, WhisplayDaemonClient
+from mfruitos.daemon.events import EventStream
+from mfruitos.launcher import sdnotify
+from mfruitos.launcher.app_manager.lifecycle import AppLifecycle
+from mfruitos.launcher.control import ControlServer
+from mfruitos.launcher.direct import DirectDisplay, daemon_unit_state, find_whisplay_root, SAFE_STATES
+from mfruitos.launcher.focus import HOME, ForegroundManager
+from mfruitos.launcher.loop import EventLoop
+from mfruitos.launcher.navigation.gestures import GestureRecognizer
+from mfruitos.launcher.navigation.router import Router
+from mfruitos.launcher.services import ScreenServices
+from mfruitos.launcher.tasks import TaskRunner
+from mfruitos.launcher.ui.components import StatusInfo, draw_status_bar, draw_toast
+from mfruitos.launcher.ui.fonts import Fonts
+from mfruitos.launcher.ui.painter import Painter
+from mfruitos.launcher.ui.rgb565 import to_rgb565
+from mfruitos.launcher.ui.screens.boot import DONE, FAILED, RUNNING, BootScreen
+from mfruitos.launcher.ui.screens.dialogs import MessageScreen
+from mfruitos.launcher.ui.screens.home import HomeScreen
+from mfruitos.launcher.ui.theme import get_theme
+from mfruitos.logs import set_debug
+from mfruitos.paths import Paths
+from mfruitos.system import hardware, system_info
+from mfruitos.system.settings import GESTURE_KEYS, Settings
+from mfruitos.updater.github import GitHubClient
+from mfruitos.updater.installer import Installer
+from mfruitos.updater.service import UpdateService
+
+log = logging.getLogger("mfruitos.runtime")
+
+MIN_FRAME_INTERVAL = 0.06
+STATUS_REFRESH_SEC = 30.0
+TOAST_SEC = 2.2
+SAVE_DELAY_SEC = 1.5
+FALLBACK_AFTER_SEC = 10.0
+FALLBACK_POLL_SEC = 5.0
+AUTOSTART_DELAY_SEC = 1.0
+UPDATE_TICK_SEC = 600
+SCRIPTS = ("mfruit-run", "mfruitctl", "boot-guard.sh")
+
+
+class Runtime(ScreenServices):
+    def __init__(self, paths: Paths, package_dir: str, socket_path: str | None = None):
+        self.paths = paths
+        paths.ensure()
+        self.package_dir = package_dir
+        self.loop = EventLoop()
+        self.settings = Settings(paths.settings_file, autosave=self._schedule_save)
+        self.settings.load()
+        self.settings.add_listener(self._on_setting_changed)
+        self.client = WhisplayDaemonClient(socket_path or self.settings.get("daemon.socket_path"))
+        self.registry = AppRegistry(paths, self.settings, __version__)
+        self.lifecycle = AppLifecycle(self.client, paths)
+        self.github = GitHubClient(paths.cache_dir, token=self.settings.get("updater.github_token"))
+        self.installer = Installer(paths, __version__, self.settings, self.github,
+                                   register=self._register_manifest)
+        self.updater = UpdateService(paths, self.settings, self.github, self.installer, __version__)
+        self.focus = ForegroundManager(self.client, self.loop, OS_APP_ID, self)
+        self.backlight = hardware.BacklightController(self.client, self.settings)
+        self.led = hardware.LedController(self.client, self.settings)
+        self.tasks = TaskRunner(self.loop.post)
+        self.router = Router(on_change=self._on_route_change)
+        self.gestures = GestureRecognizer(self._on_gesture, self.loop.call_later)
+        self._configure_gestures()
+        self.fonts = Fonts(os.path.join(package_dir, "assets", "fonts"))
+        self.status = StatusInfo()
+        self.stream = EventStream(self.client.socket_path,
+                                  lambda name, payload: self.loop.post(self._on_daemon_event, name, payload))
+        self.control = ControlServer(paths.control_socket, self.loop.post, self.handle_control)
+        self.home_screen = HomeScreen(self)
+        self.boot_screen = BootScreen(self, __version__)
+        self.direct: DirectDisplay | None = None
+        self.last_image = None
+        self.last_launched = ""
+        self.exit_code = 0
+        self._booting = True
+        self._last_frame: bytes | None = None
+        self._last_render = 0.0
+        self._render_timer = None
+        self._save_timer = None
+        self._toast: tuple[str, str] | None = None
+        self._toast_timer = None
+        self._dim_timer = None
+        self._off_timer = None
+        self._swallow_release = False
+        self._daemon_apps: list[dict] | None = None
+        self._fallback_timer = None
+        self._started_at = time.monotonic()
+        self.stats = {"frames": 0, "frames_written": 0, "events": 0}
+
+    # =============================================================== startup
+    def start(self) -> None:
+        log.info("MFruit OS %s starting (package %s)", __version__, self.package_dir)
+        set_debug(self.settings.get("developer.debug_logging"))
+        self.install_bin_scripts()
+        self.router.set_root(self.boot_screen)
+        self.boot_screen.set_step(0, DONE)
+        self.boot_screen.set_step(1, RUNNING)
+        self.registry.refresh(None)  # offline view first: apps from files
+        self.registry.set_latest_versions(self.updater.latest_map())
+        self.tasks.start()
+        self.control.start()
+        self.stream.start()
+        self._tick_clock()
+        self._refresh_status()
+        self._fallback_timer = self.loop.call_later(FALLBACK_AFTER_SEC, self._check_fallback)
+        sdnotify.notify("READY=1")
+        interval = sdnotify.watchdog_interval()
+        if interval:
+            self._watchdog(interval)
+
+    def run(self) -> int:
+        self.start()
+        self.loop.run()
+        return self.exit_code
+
+    def _watchdog(self, interval: float) -> None:
+        sdnotify.notify("WATCHDOG=1")
+        self.loop.call_later(interval, self._watchdog, interval)
+
+    def install_bin_scripts(self) -> None:
+        """Keep ~/.whisplay-os/bin in sync with the running version (no root needed)."""
+        system_current = os.path.join(self.paths.system_dir, "current")
+        root = system_current if os.path.realpath(self.package_dir).startswith(
+            os.path.realpath(os.path.join(self.paths.system_dir, "versions"))) else self.package_dir
+        for name in SCRIPTS:
+            source = os.path.join(self.package_dir, "scripts", name)
+            target = os.path.join(self.paths.bin_dir, name)
+            try:
+                with open(source, "r", encoding="utf-8") as fp:
+                    content = fp.read().replace("@MFRUIT_ROOT@", root)
+                try:
+                    with open(target, "r", encoding="utf-8") as fp:
+                        if fp.read() == content:
+                            continue
+                except FileNotFoundError:
+                    pass
+                with open(target + ".tmp", "w", encoding="utf-8") as fp:
+                    fp.write(content)
+                os.chmod(target + ".tmp", 0o755)
+                os.replace(target + ".tmp", target)
+                log.info("Installed helper %s", target)
+            except OSError as exc:
+                log.error("Cannot install helper %s: %s", name, exc)
+
+    def _continue_boot(self) -> None:
+        """Runs once the daemon granted the screen."""
+        boot = self.boot_screen
+        boot.set_step(1, DONE)
+        boot.set_step(2, DONE if not self.settings.load_errors else FAILED)
+        boot.set_step(3, RUNNING)
+        self.refresh_registry(query_daemon=True)
+        synced = self.lifecycle.sync_registrations(self.registry.managed())
+        if synced:
+            self.refresh_registry(query_daemon=True)
+        boot.set_step(3, DONE)
+        boot.ready = True
+        self.request_render()
+        self.loop.call_later(0.35, self._finish_boot)
+
+    def _finish_boot(self) -> None:
+        self._booting = False
+        self.router.set_root(self.home_screen)
+        if self.settings.load_errors:
+            self.toast("Settings had errors; defaults used", "error")
+        self._check_system_update_state()
+        self._maybe_autostart()
+        if self.settings.get("updater.auto_check") and self.updater.check_due():
+            self.loop.call_later(20.0, lambda: self.check_updates(quiet=True))
+        self._schedule_update_checks()
+
+    def _schedule_update_checks(self) -> None:
+        # A cheap timestamp comparison; the actual interval lives in check_due().
+        def tick():
+            if self.settings.get("updater.auto_check") and self.updater.check_due():
+                self.check_updates(quiet=True)
+            self.loop.call_later(UPDATE_TICK_SEC, tick)
+        self.loop.call_later(UPDATE_TICK_SEC, tick)
+
+    def _check_system_update_state(self) -> None:
+        state = self.paths.state_dir
+        rollback_note = os.path.join(state, "system_rollback.env")
+        if os.path.exists(rollback_note):
+            self.push(MessageScreen(self, "Update rolled back",
+                                    "The new MFruit OS version failed to start, so the previous "
+                                    "version was restored automatically.", tone="warning",
+                                    icon="warning"))
+            _remove(rollback_note)
+        pending = os.path.join(state, "pending_system_update.json")
+        if os.path.exists(pending):
+            def confirm_success():
+                _remove(pending)
+                _remove(os.path.join(state, "pending_system_update.env"))
+                log.info("System update to %s confirmed healthy", __version__)
+                self.toast(f"Updated to {__version__}", "success")
+            self.loop.call_later(15.0, confirm_success)
+
+    def _maybe_autostart(self) -> None:
+        marker = os.path.join(self.paths.state_dir, "autostart_boot_id")
+        boot_id = _read(("/proc/sys/kernel/random/boot_id")).strip() or "unknown"
+        if _read(marker).strip() == boot_id:
+            return  # already done for this boot (e.g. the launcher restarted)
+        try:
+            with open(marker, "w", encoding="utf-8") as fp:
+                fp.write(boot_id)
+        except OSError as exc:
+            log.warning("Cannot write autostart marker: %s", exc)
+        for entry in self.registry.apps():
+            if entry.autostart and entry.launchable:
+                log.info("Autostarting %s", entry.id)
+                self.loop.call_later(AUTOSTART_DELAY_SEC, self.launch_app, entry.id)
+                return
+
+    # ============================================================ daemon events
+    def _on_daemon_event(self, name: str, payload: dict) -> None:
+        self.stats["events"] += 1
+        log.debug("event %s %s", name, payload)
+        self.focus.on_event(name, payload)
+
+    def _register_manifest(self, manifest: Manifest) -> None:
+        """Installer callback (worker thread): register an OS-managed app."""
+        entry = AppEntry(id=manifest.id, name=manifest.name, kind="os", env=dict(manifest.env),
+                         exit_gesture=manifest.exit_gesture, priority=manifest.priority,
+                         disable_esc_exit_key=manifest.disable_esc_exit_key,
+                         icon_text="".join(w[0] for w in manifest.name.split()[:2]).upper())
+        self.lifecycle.register(entry)
+
+    # FocusListener -------------------------------------------------------------
+    def on_daemon_state(self, connected: bool) -> None:
+        self.status.daemon_ok = connected
+        if connected:
+            self._leave_fallback()
+            self.lifecycle.register_os(self.package_dir)
+        else:
+            self._daemon_apps = None
+            if self._fallback_timer is None:
+                self._fallback_timer = self.loop.call_later(FALLBACK_AFTER_SEC, self._check_fallback)
+        self.request_render()
+
+    def on_focus_gained(self) -> None:
+        self._last_frame = None
+        self.backlight.forget()
+        self.backlight.wake()
+        self.led.forget()
+        self.led.show(self.led.state if self.led.state in ("update", "error") else "idle", force=True)
+        self.gestures.reset()
+        self._swallow_release = False
+        self._arm_idle_timers()
+        if self._booting:
+            self._continue_boot()
+        self._refresh_status()
+        self._render_now()
+
+    def on_focus_lost(self) -> None:
+        self._cancel_idle_timers()
+        self.gestures.reset()
+
+    def on_button(self, pressed: bool) -> None:
+        self._on_raw_button(pressed)
+
+    def on_exit_requested(self) -> None:
+        top = self.router.top
+        if top is not None and not top.modal:
+            self.router.home()
+
+    def on_app_foreground(self, app_id: str) -> None:
+        entry = self.registry.get(app_id)
+        if entry is not None:
+            entry.running = True
+            entry.foreground = True
+
+    def on_app_returned(self, app_id: str, kind: str) -> None:
+        self.refresh_registry(query_daemon=True)
+        if self.router.top is self.home_screen:
+            self.home_screen.focus_key(app_id)
+        entry = self.registry.get(app_id)
+        if entry is None or entry.kind != "os":
+            return
+        info = self.lifecycle.last_exit(entry)
+        if not info or not info.get("exit_code"):
+            return
+        runtime = (info.get("ended_at") or 0) - (info.get("started_at") or 0)
+        if runtime < 10:
+            self.show_app_problem(entry, "", info, "Application stopped unexpectedly.")
+        else:
+            self.toast(f"{entry.name} exited (code {info['exit_code']})", "error")
+
+    def on_launch_failed(self, app_id: str, reason: str) -> None:
+        self.refresh_registry(query_daemon=True)
+        entry = self.registry.get(app_id)
+        if entry is None:
+            self.toast(reason[:40], "error")
+            return
+        exit_info = self.lifecycle.last_exit(entry)
+        if exit_info and exit_info.get("exit_code") == 0:
+            # A short task that finished successfully (no screen needed).
+            self.toast(f"{entry.name} finished", "success")
+            return
+        self.show_app_problem(entry, reason, exit_info)
+
+    def on_app_headless(self, app_id: str) -> None:
+        entry = self.registry.get(app_id)
+        name = entry.name if entry else app_id
+        from mfruitos.launcher.ui.components import Item, back_item
+        actions = [back_item("OK")]
+        if entry is not None:
+            actions.insert(0, Item("Stop app", lambda: (self.lifecycle.request_stop(entry),
+                                                        self.pop()), icon="stop"))
+        self.push(MessageScreen(self, name, f"{name} is running but did not open a screen. It may "
+                                            "be a background service or still starting.", actions,
+                                tone="warning", icon="info"))
+
+    # =============================================================== input
+    def _on_raw_button(self, pressed: bool) -> None:
+        top = self.router.top
+        hook = getattr(top, "on_raw_button", None)
+        if pressed:
+            if self.backlight.state != "on" and self.direct is None:
+                self.backlight.wake()
+                self._swallow_release = True
+                self._arm_idle_timers()
+                self._render_now()
+                return
+            self._swallow_release = False
+            if hook:
+                hook(True)
+            self.gestures.press()
+        else:
+            if self._swallow_release:
+                self._swallow_release = False
+                return
+            if hook:
+                hook(False)
+            self.gestures.release()
+        self._arm_idle_timers()
+
+    def _configure_gestures(self) -> None:
+        mapping = {k: self.settings.get(f"button.{k}") for k in GESTURE_KEYS}
+        self.gestures.configure(mapping, self.settings.get("button.click_gap_ms"),
+                                self.settings.get("button.long_press_ms"))
+
+    def _on_gesture(self, gesture: str) -> None:
+        top = self.router.top
+        hook = getattr(top, "on_gesture", None)
+        if hook is not None and hook(gesture):
+            return
+        self.dispatch(self.settings.get(f"button.{gesture}"))
+
+    def dispatch(self, action: str) -> None:
+        top = self.router.top
+        if top is None or action == "none":
+            return
+        log.debug("action %s on %s", action, type(top).__name__)
+        if top.handle(action):
+            return
+        if action == "back":
+            if top.modal:
+                self.toast("Please wait…")
+            elif not self.router.pop():
+                pass
+        elif action == "home" and not top.modal:
+            self.router.home()
+
+    # ============================================================== rendering
+    def _on_route_change(self) -> None:
+        self._arm_idle_timers()
+        self.request_render()
+
+    def request_render(self) -> None:
+        if self._render_timer is not None:
+            return
+        wait = max(0.0, MIN_FRAME_INTERVAL - (time.monotonic() - self._last_render))
+        self._render_timer = self.loop.call_later(wait, self._render_now)
+
+    def _output(self):
+        if self.direct is not None and self.direct.attached:
+            return self.direct
+        if self.focus.has_focus:
+            return self.focus.framebuffer
+        return None
+
+    def compose(self):
+        theme = get_theme(self.settings.get("display.theme"))
+        painter = Painter(theme, self.fonts)
+        top = self.router.top
+        if top is not None:
+            top.draw(painter)
+            if top.show_status:
+                draw_status_bar(painter, self.status)
+            top.footer(painter)
+        if self._toast:
+            draw_toast(painter, *self._toast)
+        return painter.image
+
+    def _render_now(self) -> None:
+        if self._render_timer is not None:
+            self._render_timer.cancel()
+            self._render_timer = None
+        output = self._output()
+        if output is None or (self.backlight.state == "off" and self.direct is None):
+            return
+        self._last_render = time.monotonic()
+        self.stats["frames"] += 1
+        image = self.compose()
+        self.last_image = image
+        frame = to_rgb565(image)
+        if frame == self._last_frame:
+            return
+        if output.write(frame):
+            self._last_frame = frame
+            self.stats["frames_written"] += 1
+
+    def toast(self, text: str, tone: str = "") -> None:
+        self._toast = (text, tone)
+        if self._toast_timer is not None:
+            self._toast_timer.cancel()
+        self._toast_timer = self.loop.call_later(TOAST_SEC, self._clear_toast)
+        self.request_render()
+
+    def _clear_toast(self) -> None:
+        self._toast = None
+        self._toast_timer = None
+        self.request_render()
+
+    # ============================================================== timers
+    def _tick_clock(self) -> None:
+        text = time.strftime("%H:%M" if self.settings.get("display.clock_24h") else "%I:%M %p")
+        if text.startswith("0") and not self.settings.get("display.clock_24h"):
+            text = text[1:]
+        if text != self.status.time_text:
+            self.status.time_text = text
+            self.request_render()
+        now = time.time()
+        self.loop.call_later(60.2 - (now % 60), self._tick_clock)
+
+    def _refresh_status(self) -> None:
+        if getattr(self, "_status_timer", None) is not None:
+            self._status_timer.cancel()
+        self._status_timer = self.loop.call_later(STATUS_REFRESH_SEC, self._refresh_status)
+        if self._output() is None or self.backlight.state == "off":
+            return  # nobody is looking; skip the reads
+        wifi = system_info.wifi_level()
+        if wifi is not None and wifi > 0 and not system_info.has_default_route():
+            wifi = 0
+        battery, charging = hardware.read_battery()
+        changed = (wifi, battery, charging) != (self.status.wifi_level, self.status.battery,
+                                                self.status.charging)
+        self.status.wifi_level, self.status.battery, self.status.charging = wifi, battery, charging
+        busy = self.updater.busy
+        if changed or busy != self.status.busy:
+            self.status.busy = busy
+            self.request_render()
+
+    def _cancel_idle_timers(self) -> None:
+        for name in ("_dim_timer", "_off_timer"):
+            timer = getattr(self, name)
+            if timer is not None:
+                timer.cancel()
+                setattr(self, name, None)
+
+    def _arm_idle_timers(self) -> None:
+        self._cancel_idle_timers()
+        if not self.focus.has_focus or self.focus.mode != HOME:
+            return
+        timeout = self.settings.get("display.screen_timeout_sec")
+        dim_after = self.settings.get("display.dim_after_sec")
+        if self.settings.get("display.auto_dim") and (timeout == 0 or dim_after < timeout):
+            self._dim_timer = self.loop.call_later(dim_after, self._dim)
+        if timeout > 0:
+            self._off_timer = self.loop.call_later(timeout, self._screen_off)
+
+    def _dim(self) -> None:
+        self._dim_timer = None
+        if self.focus.has_focus and self.backlight.state == "on":
+            self.backlight.dim()
+
+    def _screen_off(self) -> None:
+        self._off_timer = None
+        top = self.router.top
+        if getattr(top, "running", False) and getattr(top, "modal", False):
+            self._off_timer = self.loop.call_later(30.0, self._screen_off)
+            return  # keep the screen on during an update
+        if self.focus.has_focus:
+            self.backlight.off()
+
+    def _schedule_save(self) -> None:
+        if self._save_timer is not None:
+            self._save_timer.cancel()
+        # Settings may change from a worker thread (rare); saving is thread-safe.
+        if self.loop.in_loop_thread() or self.loop._thread_id is None:
+            self._save_timer = self.loop.call_later(SAVE_DELAY_SEC, self._save_settings)
+        else:
+            self.loop.post(self._schedule_save)
+
+    def _save_settings(self) -> None:
+        self._save_timer = None
+        self.settings.save()
+
+    def _on_setting_changed(self, key: str) -> None:
+        if key.startswith("button."):
+            self._configure_gestures()
+        elif key.startswith("led."):
+            self.led.show(self.led.state, force=True)
+        elif key == "developer.debug_logging":
+            set_debug(self.settings.get(key))
+        elif key == "updater.github_token":
+            self.github.token = self.settings.get(key)
+        elif key.startswith("display.") and key not in ("display.brightness",):
+            self._arm_idle_timers()
+        elif key.startswith("applications.") or key.startswith("apps."):
+            self.registry.refresh(self._daemon_apps)
+        self.request_render()
+
+    # ============================================================== registry
+    def refresh_registry(self, query_daemon: bool = True) -> None:
+        if query_daemon and self.focus.connected:
+            try:
+                self._daemon_apps = self.client.list_apps()
+            except DaemonError as exc:
+                log.warning("app.list failed: %s", exc)
+        self.registry.refresh(self._daemon_apps if self.focus.connected else None)
+        self.registry.set_latest_versions(self.updater.latest_map())
+        self.request_render()
+
+    # ============================================================== fallback
+    def _check_fallback(self) -> None:
+        self._fallback_timer = None
+        if self.focus.connected or self.direct is not None:
+            return
+        if not self.settings.get("daemon.fallback_direct_display"):
+            return
+        state = daemon_unit_state()
+        if state not in SAFE_STATES:
+            log.info("Daemon unreachable (unit %s); waiting", state)
+            self._fallback_timer = self.loop.call_later(FALLBACK_POLL_SEC, self._check_fallback)
+            return
+        root = find_whisplay_root(self.settings.get("daemon.whisplay_root"))
+        if root is None:
+            log.error("Daemon is %s and the Whisplay runtime was not found; no display", state)
+            return
+        display = DirectDisplay(root, lambda pressed: self.loop.post(self._on_raw_button, pressed))
+        if not display.open():
+            return
+        self.direct = display
+        from mfruitos.launcher.ui.screens.fallback import DaemonUnavailableScreen
+        self.router.set_root(DaemonUnavailableScreen(self, state))
+        self._last_frame = None
+        self._render_now()
+        self.loop.call_later(FALLBACK_POLL_SEC, self._watch_daemon_unit)
+
+    def _watch_daemon_unit(self) -> None:
+        if self.direct is None:
+            return
+        state = daemon_unit_state()
+        if state not in SAFE_STATES:
+            log.info("Daemon unit is %s; releasing hardware", state)
+            self._leave_fallback()
+            return
+        self.loop.call_later(FALLBACK_POLL_SEC, self._watch_daemon_unit)
+
+    def _leave_fallback(self) -> None:
+        if self._fallback_timer is not None:
+            self._fallback_timer.cancel()
+            self._fallback_timer = None
+        if self.direct is None:
+            return
+        self.direct.close()
+        self.direct = None
+        self._booting = True
+        self.boot_screen = BootScreen(self, __version__)
+        self.router.set_root(self.boot_screen)
+        self.boot_screen.set_step(0, DONE)
+        self.boot_screen.set_step(1, RUNNING)
+
+    def retry_daemon(self, restart: bool) -> None:
+        """From the fallback screen: hand hardware back and try the daemon again."""
+        from mfruitos.launcher.direct import restart_daemon
+        self._leave_fallback()
+        self.toast("Retrying…")
+        if restart:
+            self.run_task("restart-daemon", restart_daemon,
+                          lambda ok: None if ok else log.warning("daemon restart not permitted"))
+        self._fallback_timer = self.loop.call_later(FALLBACK_AFTER_SEC, self._check_fallback)
+
+    # ============================================================== lifecycle
+    def yield_to_desktop(self) -> None:
+        self.router.home()
+        self.focus.yield_to_desktop()
+
+    def restart_launcher(self) -> None:
+        log.info("Restart requested")
+        self.shutdown(exit_code=0)
+
+    def shutdown(self, exit_code: int = 0) -> None:
+        self.exit_code = exit_code
+        self.flush_settings()
+        if self.focus.token is not None and self.focus.has_focus:
+            try:
+                self.client.release_focus(OS_APP_ID, self.focus.token)
+            except DaemonError as exc:
+                log.warning("Release on shutdown failed: %s", exc)
+        self.focus.framebuffer.detach()
+        if self.direct is not None:
+            self.direct.close()
+            self.direct = None
+        self.control.stop()
+        self.stream.stop()
+        self.tasks.stop()
+        sdnotify.notify("STOPPING=1")
+        self.loop.stop()
+
+    # ============================================================== control
+    def handle_control(self, cmd: str, args: dict) -> dict:
+        from mfruitos.launcher.ctl_handlers import handle
+        return handle(self, cmd, args)
+
+
+def _read(path: str) -> str:
+    try:
+        with open(path, "r", encoding="utf-8") as fp:
+            return fp.read()
+    except OSError:
+        return ""
+
+
+def _remove(path: str) -> None:
+    try:
+        os.remove(path)
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        log.warning("Cannot remove %s: %s", path, exc)

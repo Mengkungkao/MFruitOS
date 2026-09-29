@@ -1,0 +1,6 @@
+#!/bin/sh
+# mfruitctl — control MFruit OS from a shell. Run "mfruitctl help".
+# @MFRUIT_ROOT@ is replaced with the installed code location.
+ROOT="@MFRUIT_ROOT@"
+export PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}"
+exec python3 -m mfruitos.ctl "$@"

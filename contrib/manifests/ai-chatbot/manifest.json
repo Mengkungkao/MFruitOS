@@ -1,0 +1,11 @@
+{
+  "id": "whisplay-ai-chatbot",
+  "name": "AI Chatbot",
+  "version": "1.0.0",
+  "description": "Voice assistant",
+  "entrypoint": "whisplay-ai-chatbot/run_chatbot.sh",
+  "repository": "https://github.com/Mengkungkao/ai-chatbot",
+  "exit_gesture": "quad_click",
+  "priority": 0,
+  "persist": ["whisplay-ai-chatbot/.env", "whisplay-ai-chatbot/node_modules"]
+}

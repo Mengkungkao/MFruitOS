@@ -1,0 +1,63 @@
+{
+  "applications": {},
+  "apps": {
+    "default_app": "",
+    "order": []
+  },
+  "audio": {
+    "device": ""
+  },
+  "button": {
+    "click_gap_ms": 300,
+    "double_click": "previous",
+    "long_press": "select",
+    "long_press_ms": 700,
+    "quad_click": "back",
+    "single_click": "next",
+    "triple_click": "none"
+  },
+  "daemon": {
+    "fallback_direct_display": true,
+    "socket_path": "/tmp/whisplay-daemon.sock",
+    "whisplay_root": ""
+  },
+  "developer": {
+    "debug_logging": false,
+    "enabled": false
+  },
+  "display": {
+    "animation": "minimal",
+    "auto_dim": true,
+    "brightness": 80,
+    "clock_24h": true,
+    "dim_after_sec": 30,
+    "dim_level": 15,
+    "screen_timeout_sec": 120,
+    "theme": "dark"
+  },
+  "led": {
+    "brightness": 30,
+    "enabled": true,
+    "error_color": "red",
+    "idle_color": "blue",
+    "running_color": "green",
+    "update_color": "orange"
+  },
+  "schema": 1,
+  "system": {
+    "home_title": "MFruit OS",
+    "repository": "https://github.com/Mengkungkao/MFruitOS",
+    "show_system_pages_on_home": false
+  },
+  "updater": {
+    "auto_check": true,
+    "check_interval_hours": 12,
+    "discovery_topic": "whisplay-app",
+    "github_token": "",
+    "include_prereleases": false,
+    "keep_versions": 2,
+    "max_download_mb": 100,
+    "require_checksum": false,
+    "sources": []
+  }
+}

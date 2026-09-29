@@ -1,0 +1,77 @@
+#!/bin/sh
+# mfruit-run <app_id> — launch an MFruit OS managed app.
+#
+# This is the launch_command MFruit OS registers with whisplay-daemon for
+# apps it installed. It runs the entrypoint from
+# ~/.whisplay-os/apps/<id>/current, appends output to
+# ~/.whisplay-os/logs/<id>.log and records pid / exit code in
+# ~/.whisplay-os/state/runs/<id>.json (the daemon does not report exit codes).
+set -u
+
+APP_ID="${1:-}"
+case "$APP_ID" in
+  ""|*[!a-z0-9_-]*) echo "mfruit-run: invalid app id '$APP_ID'" >&2; exit 64 ;;
+esac
+
+OS_HOME="${WHISPLAY_OS_HOME:-$HOME/.whisplay-os}"
+APP_ROOT="$OS_HOME/apps/$APP_ID"
+APP_DIR="$APP_ROOT/current"
+LOG="$OS_HOME/logs/$APP_ID.log"
+STATE_DIR="$OS_HOME/state/runs"
+STATE="$STATE_DIR/$APP_ID.json"
+mkdir -p "$OS_HOME/logs" "$STATE_DIR" "$APP_ROOT/data" 2>/dev/null
+
+write_state() {
+  printf '%s\n' "$1" > "$STATE.tmp.$$" && mv "$STATE.tmp.$$" "$STATE"
+}
+
+STARTED=$(date +%s)
+if [ ! -d "$APP_DIR" ]; then
+  echo "mfruit-run: $APP_ID is not installed ($APP_DIR missing)" >&2
+  write_state "{\"app_id\":\"$APP_ID\",\"state\":\"exited\",\"exit_code\":127,\"started_at\":$STARTED,\"ended_at\":$STARTED}"
+  exit 127
+fi
+
+ENTRY=$(head -n 1 "$APP_DIR/.mfruit-entrypoint" 2>/dev/null)
+case "$ENTRY" in
+  ""|/*|*..*|*[!A-Za-z0-9._/-]*)
+    echo "mfruit-run: invalid entrypoint '$ENTRY' for $APP_ID" >&2
+    write_state "{\"app_id\":\"$APP_ID\",\"state\":\"exited\",\"exit_code\":65,\"started_at\":$STARTED,\"ended_at\":$STARTED}"
+    exit 65 ;;
+esac
+TARGET="$APP_DIR/$ENTRY"
+
+if [ -x "$TARGET" ]; then
+  set -- "$TARGET"
+else
+  case "$TARGET" in
+    *.py) set -- python3 "$TARGET" ;;
+    *.sh) set -- /bin/bash "$TARGET" ;;
+    *) set -- "$TARGET" ;;
+  esac
+fi
+
+write_state "{\"app_id\":\"$APP_ID\",\"state\":\"running\",\"pid\":$$,\"started_at\":$STARTED}"
+printf '=== %s start %s ===\n' "$(date '+%F %T')" "$APP_ID" >> "$LOG"
+
+export WHISPLAY_APP_ID="$APP_ID"
+export WHISPLAY_OS_APP_DIR="$APP_DIR"
+export WHISPLAY_OS_APP_DATA="$APP_ROOT/data"
+export PYTHONUNBUFFERED=1
+cd "$APP_DIR" || exit 66
+
+"$@" >> "$LOG" 2>&1 &
+CHILD=$!
+trap 'kill -TERM "$CHILD" 2>/dev/null' TERM INT HUP
+wait "$CHILD"
+RC=$?
+# A trapped signal interrupts wait; keep waiting for the app's real exit status.
+while kill -0 "$CHILD" 2>/dev/null; do
+  wait "$CHILD"
+  RC=$?
+done
+
+ENDED=$(date +%s)
+write_state "{\"app_id\":\"$APP_ID\",\"state\":\"exited\",\"pid\":$$,\"started_at\":$STARTED,\"ended_at\":$ENDED,\"exit_code\":$RC}"
+printf '=== %s exit %s code=%s ===\n' "$(date '+%F %T')" "$APP_ID" "$RC" >> "$LOG"
+exit "$RC"
