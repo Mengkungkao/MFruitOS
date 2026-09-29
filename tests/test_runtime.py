@@ -11,6 +11,7 @@ from helpers import ROOT, TempHomeTestCase
 from fake_daemon import FakeDaemon
 from mfruitos.launcher.control import send
 from mfruitos.launcher.runtime import Runtime
+from mfruitos.sdk.keys import DOWN, REPEAT, UP, KeyEvent
 
 logging.getLogger("mfruitos").setLevel(logging.CRITICAL)
 
@@ -89,6 +90,43 @@ class RuntimeEndToEndTests(TempHomeTestCase):
             self.click()
             time.sleep(0.03)
         self.wait(lambda: self.status().get("screens") == ["HomeScreen"], "quad click back")
+
+    def key(self, name, action=DOWN):
+        codes = {"down": 108, "up": 103, "enter": 28, "escape": 1, "tab": 15}
+        self.rt.loop.post(self.rt._on_key, KeyEvent("key", name, action, codes[name]))
+
+    def test_keyboard_navigation(self):
+        self.assertTrue(self.daemon.apps["mfruit-os"]["disable_esc_exit_key"],
+                        "Esc must be MFruit OS's back key, not the daemon's close key")
+        start = self.rt.home_screen.selected
+        self.key("down")
+        self.wait(lambda: self.rt.home_screen.selected == start + 1, "next item")
+        self.key("up")
+        self.wait(lambda: self.rt.home_screen.selected == start, "previous item")
+        self.rt.loop.post(self.rt.home_screen.focus_key, "os.settings")
+        self.key("enter")
+        self.wait(lambda: self.status().get("screens", [])[-1:] == ["SettingsScreen"], "settings")
+        self.key("escape")
+        self.wait(lambda: self.status().get("screens") == ["HomeScreen"], "back home")
+
+    def test_keys_that_went_down_elsewhere_do_nothing(self):
+        self.rt.loop.post(self.rt.home_screen.focus_key, "os.settings")
+        # e.g. the Enter that opened an app, released after MFruit OS is back
+        self.key("enter", REPEAT)
+        self.key("enter", UP)
+        time.sleep(0.3)
+        self.assertEqual(self.status().get("screens"), ["HomeScreen"])
+        self.assertTrue(send(self.paths.control_socket, "launch", {"app_id": "demo"})["ok"])
+        self.wait(lambda: self.daemon.foreground == "demo", "demo foreground")
+        self.key("down")                 # typed into the app, not into MFruit OS
+        self.key("enter")
+        self.daemon.app_exits("demo")
+        self.wait(lambda: self.daemon.foreground == "mfruit-os"
+                  and self.status()["focus"]["has_focus"], "back home")
+        self.key("enter", REPEAT)
+        time.sleep(0.3)
+        self.assertEqual(self.status().get("screens"), ["HomeScreen"])
+        self.assertEqual(self.daemon.foreground, "mfruit-os")
 
     def test_launch_and_return(self):
         self.assertTrue(send(self.paths.control_socket, "launch", {"app_id": "demo"})["ok"])

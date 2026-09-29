@@ -106,6 +106,8 @@ else
 fi
 
 # -------------------------------------------------------------------- run
+# Tells the app (and its MFruit App SDK) where MFruit OS lives: fonts, look.
+export MFRUIT_HOME="$OS_HOME" MFRUIT_SESSION="$SESSION"
 write_state "{\"app_id\":\"$APP_ID\",\"session\":\"$SESSION\",\"state\":\"running\",\"pid\":$$,\"started_at\":$STARTED}"
 if [ -n "$LOG" ]; then
   printf '=== %s start %s session=%s ===\n' "$(date '+%F %T')" "$APP_ID" "$SESSION" >> "$LOG"

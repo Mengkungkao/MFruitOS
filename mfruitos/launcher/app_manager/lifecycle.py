@@ -115,7 +115,8 @@ class AppLifecycle:
                 OS_APP_ID, OS_NAME, icon="OS",
                 launch_command=f"{shlex.quote(ctl)} summon",
                 cwd=package_dir, exit_gesture="none", priority=OS_PRIORITY,
-                use_daemon_default_log=True, persist=True, disable_esc_exit_key=False)
+                # Esc is "back" inside MFruit OS, not "close MFruit OS".
+                use_daemon_default_log=True, persist=True, disable_esc_exit_key=True)
         except DaemonError as exc:
             log.warning("Could not register %s: %s", OS_APP_ID, exc)
             return False

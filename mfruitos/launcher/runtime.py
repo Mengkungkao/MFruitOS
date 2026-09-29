@@ -37,6 +37,10 @@ from mfruitos.launcher.ui.screens.home import HomeScreen
 from mfruitos.launcher.ui.theme import get_theme
 from mfruitos.logs import set_debug
 from mfruitos.paths import Paths
+from mfruitos.sdk.keys import DOWN as KEY_DOWN
+from mfruitos.sdk.keys import REPEAT as KEY_REPEAT
+from mfruitos.sdk.keys import UP as KEY_UP
+from mfruitos.sdk.keys import KeyEvent, KeyReader
 from mfruitos.system import hardware, system_info
 from mfruitos.system.settings import GESTURE_KEYS, Settings
 from mfruitos.updater.github import GitHubClient
@@ -55,6 +59,10 @@ FALLBACK_POLL_SEC = 5.0
 AUTOSTART_DELAY_SEC = 1.0
 UPDATE_TICK_SEC = 600
 SCRIPTS = ("mfruit-run", "mfruitctl", "boot-guard.sh", "whisplay-daemon-mfruit.py")
+# Keyboard keys -> launcher actions, the same map every MFruit app uses
+# (mfruitos/sdk/input.py).
+KEY_ACTIONS = {"down": "next", "right": "next", "tab": "next", "up": "previous",
+               "left": "previous", "enter": "select", "escape": "back", "home": "home"}
 
 
 class Runtime(ScreenServices):
@@ -89,6 +97,10 @@ class Runtime(ScreenServices):
         self.gestures = GestureRecognizer(self._on_gesture, self.loop.call_later,
                                           on_armed=self._on_hold_armed)
         self._configure_gestures()
+        # USB / Bluetooth keyboards: every process reads them (nobody grabs
+        # the device), so keys only count while MFruit OS owns the screen.
+        self.keyboard = KeyReader(lambda event: self.loop.post(self._on_key, event))
+        self._keys_owned: set[int] = set()
         self.fonts = Fonts(os.path.join(package_dir, "assets", "fonts"))
         self.status = StatusInfo()
         self.stream = EventStream(self.client.socket_path,
@@ -133,6 +145,7 @@ class Runtime(ScreenServices):
         self.tasks.start()
         self.control.start()
         self.stream.start()
+        self.keyboard.start()
         self._tick_clock()
         self._refresh_status()
         self._fallback_timer = self.loop.call_later(FALLBACK_AFTER_SEC, self._check_fallback)
@@ -278,6 +291,7 @@ class Runtime(ScreenServices):
         self.led.forget()
         self.led.show(self.led.state if self.led.state in ("update", "error") else "idle", force=True)
         self.gestures.reset()
+        self._keys_owned.clear()
         self._swallow_release = False
         self._arm_idle_timers()
         if self._booting:
@@ -288,6 +302,7 @@ class Runtime(ScreenServices):
     def on_focus_lost(self) -> None:
         self._cancel_idle_timers()
         self.gestures.reset()
+        self._keys_owned.clear()
 
     def on_button(self, pressed: bool) -> None:
         self._on_raw_button(pressed)
@@ -402,6 +417,35 @@ class Runtime(ScreenServices):
                 hook(False)
             self.gestures.release()
         self._arm_idle_timers()
+
+    def _on_key(self, event: KeyEvent) -> None:
+        """A keyboard key: Up/Down/Tab move, Enter opens, Esc goes back.
+
+        Only keys that went down while MFruit OS owned the screen count: the
+        key-up of the Esc that closed an app, or the auto-repeat of the Enter
+        that opened one, must not act here (the keyboard is shared).
+        """
+        if self._output() is None:
+            self._keys_owned.clear()
+            return
+        if event.action == KEY_DOWN:
+            self._keys_owned.add(event.code)
+        elif event.code not in self._keys_owned:
+            return
+        elif event.action == KEY_UP:
+            self._keys_owned.discard(event.code)
+            return
+        action = KEY_ACTIONS.get(event.value) if event.kind == "key" else None
+        if action is None or (event.action == KEY_REPEAT and action not in ("next", "previous")):
+            return
+        lifecycle_log.info("EVENT KEY %s -> %s%s", event.value, action,
+                           "".join(f" {k}={v}" for k, v in self._lifecycle_context().items()))
+        self._arm_idle_timers()
+        if self.backlight.state != "on" and self.direct is None:
+            self.backlight.wake()
+            self._render_now()
+            return
+        self.dispatch(action)
 
     def _on_hold_armed(self, armed: bool) -> None:
         """Visual feedback only: the action itself fires when the button is released."""
@@ -686,6 +730,7 @@ class Runtime(ScreenServices):
             self.direct = None
         self.control.stop()
         self.stream.stop()
+        self.keyboard.stop()
         self.tasks.stop()
         self.lifecycle.revoke_all_tickets()
         self.lifecycle.release_instance_lock()
