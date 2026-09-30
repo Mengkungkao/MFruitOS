@@ -1,4 +1,8 @@
-# CONTINUE — where the work stands (2026-09-30, paused by the user)
+# CONTINUE — next-session handoff (updated 2026-09-30)
+
+## Quick summary
+
+This session paused with the keyboard-leak crash fix already implemented and validated. The remaining work is the Settings redesign, moving Connect WiFi into Settings, adding the Bluetooth screens, removing the noisy boot screen, cleanup of old app entries, and final deployment verification on the Orange Pi.
 
 ## The request
 
@@ -20,6 +24,12 @@ messages". Messages were given for part 1 (MFruitOS, ConnectWifi and the four
 apps) and for this file; `git log` in each repo shows what the user committed.
 The unfinished list, Settings and Bluetooth files were held back. Nothing is
 deployed.
+
+## Current checkpoint
+
+- Verified: the updater crash was caused by keyboard leakage to tty1; the fix is in code and the full suite passes.
+- Remaining: the Settings rework, Connect WiFi migration, Bluetooth UI, logo-only boot screen, app cleanup, and final deploy + hardware verification.
+- Priority order for next session: Settings → Connect WiFi → Bluetooth → boot screen → remove apps → deploy.
 
 | Part | Status |
 |---|---|
