@@ -1,6 +1,33 @@
 # CONTINUE — MFruit OS installer validation, 2026-10-01
 
-## Latest checkpoint — Raspberry Pi validation, 2026-10-01
+## Latest checkpoint — Raspberry Pi installed, 2026-10-01
+
+**Installation completed:** After `git pull`, the user ran
+`bash scripts/install.sh` on the Raspberry Pi and supplied its successful log.
+A read-only SSH check independently confirmed:
+
+- `~/MFruitOS` is clean at commit `cfe8ac2` (installer/provisioning fixes,
+  regression tests and validation documentation).
+- Active build:
+  `/home/jarvis/.whisplay-os/system/versions/1.4.0-local20260930185444`.
+- Both `whisplay-os` and `whisplay-daemon` are active/running with
+  `NRestarts=0`; launcher PID 6939, daemon PID 873.
+- `mfruitctl status` responds successfully: version 1.4.0, Home/IDLE, connected
+  with screen focus, nine apps and keyboard devices event0/event4.
+
+The supplied installer log reports a passed self-test rendering 39 screens,
+existing configuration kept, offline ConnectWifi provisioning completed with
+existing apps/preferences preserved, service integration installed and the
+launcher running. Its service start timestamp is `2026-09-30 18:55:23 BST`;
+the session date above uses the user's Australia/Sydney timezone.
+
+Installation is complete; do not rerun it merely because the earlier notes
+say deployment is pending. The remaining launch-timing investigation and a
+complete passing test-suite rerun are still pending. Successful installation
+and the rendering self-test do not resolve that outstanding regression test.
+
+Commit message for this handoff-only update:
+`docs: record completed Raspberry Pi installation`.
 
 The user supplied a working SSH target:
 
@@ -8,14 +35,16 @@ The user supplied a working SSH target:
 ssh -i "$HOME\.ssh\id_ed25519_github" jarvis@192.168.0.33
 ```
 
-This is `raspberrypi`, Linux aarch64, Python 3.13.5 / Pillow 11.1.0, with a
-clean `~/MFruitOS` checkout at `2cc3ef5`. Its existing active build is
+At validation time, `raspberrypi` ran Linux aarch64, Python 3.13.5 / Pillow 11.1.0,
+with a clean `~/MFruitOS` checkout at `2cc3ef5` before the user's later pull.
+Before this installation, the verified active build was
 `/home/jarvis/.whisplay-os/system/versions/1.4.0-local20260930171222`.
 Both services were active with zero restarts (launcher PID 884, daemon 873),
 Home/IDLE and eight registered apps. This target is separate from the older
 Orange Pi checkpoint below.
 
-Current changes were tested in an isolated copy, **not deployed**:
+Before the user's installation, changes were tested in an isolated copy without
+deploying them:
 `/home/jarvis/.mfruit-validation/installer-20261001T031928/source`.
 All 205 initially transferred source files matched the recorded SHA-256
 manifest. Two test files were subsequently refreshed for the follow-up below.
@@ -45,9 +74,10 @@ Do not claim a full-suite pass yet. Only one real-daemon suite may run at a time
 Local evidence: `C:\Users\mengs\AppData\Local\Temp\mfruit-pi-validation-20261001T031928`.
 Full/follow-up logs, the daemon trace and preview log were copied there.
 The Pi rendered all 39 preview screens; both contact sheets were visually
-inspected. At handoff both live services still have their original PIDs and
-zero restarts. No live services were restarted; no test process was found
-running at the final check. Preserve the Pi's active installation and app data.
+inspected. At the end of that validation stage both live services retained their
+original PIDs and zero restarts; no live services had been restarted and no test
+process was found running. The user's subsequent installation and current
+service state are recorded above. Preserve the Pi's installation and app data.
 
 Live downloads of all three catalogue archives passed SHA-256 and entry-target
 checks: BTC Dashboard 88,515 bytes; WalkieTalkie 269,487 bytes; Messenger 151,550
@@ -57,6 +87,11 @@ WalkieTalkie still needs system Codec2/ALSA; Messenger voice features need their
 optional ASR/model or speech tools. Verified source pins do not certify hardware.
 
 ### Next actions
+
+The pulled checkout and active build have now been checked as recorded above.
+Before further changes, compare their source with the isolated validation copy
+so tests target the intended revision. A complete runtime checksum comparison
+has not been performed after this installation.
 
 1. Reproduce and resolve the remaining daemon-page test using observed daemon
    state to synchronize the handoff. Preserve its assertion that an intruding
@@ -68,7 +103,7 @@ optional ASR/model or speech tools. Verified source pins do not certify hardware
    `python3 ../catalogue-install-smoke.py ..` creates package-local environments
    under `../catalogue-home`, installs Python dependencies, and runs generated
    package self-tests without launching apps or registering with the live daemon.
-4. Before any deployment, inspect/back up the Pi's current build, registrations,
+4. Before any further deployment, inspect/back up the Pi's current build, registrations,
    settings and app data; compare runtime files and preserve local edits. The
    older Orange Pi deployment instructions are historical, not Pi backup paths.
 
@@ -80,10 +115,12 @@ PYTHONDONTWRITEBYTECODE=1 WHISPLAY_SRC=/home/jarvis/Whisplay python3 -m unittest
 PYTHONDONTWRITEBYTECODE=1 python3 -m mfruitos --preview ../preview-final
 ```
 
-### Commit messages for the current working tree
+### Earlier commit messages for the validation changes
 
-No commits, pushes or deployments were performed. Keep the user's untracked
-`MFruitOS.code-workspace` separate. For one combined commit:
+No commits, pushes or deployments were performed by the assistant. The user
+subsequently pulled and installed commit `cfe8ac2`, which includes these changes.
+The suggestions below are retained as history; inspect Git before reusing them.
+Keep the user's `MFruitOS.code-workspace` separate. Combined message:
 
 ```text
 fix: preserve app setup state and harden installer validation
