@@ -14,9 +14,9 @@ log = logging.getLogger("mfruitos.main")
 
 
 def parse_args(argv=None):
-    parser = argparse.ArgumentParser(prog="mfruitos", description="MFruit OS for Whisplay")
+    parser = argparse.ArgumentParser(prog="mfruitos", description="MFruit OS application platform")
     parser.add_argument("--home", help="data directory (default ~/.whisplay-os)")
-    parser.add_argument("--socket", help="whisplay-daemon socket path")
+    parser.add_argument("--socket", help="hardware service socket path")
     parser.add_argument("--debug", action="store_true", help="debug logging")
     parser.add_argument("--self-test", action="store_true",
                         help="import every module and render every screen offscreen, then exit")

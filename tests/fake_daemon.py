@@ -98,8 +98,8 @@ class FakeDaemon:
     def _client(self, conn):
         keep = False
         try:
-            reader = conn.makefile("r")
-            line = reader.readline()
+            with conn.makefile("r") as reader:
+                line = reader.readline()
             if not line:
                 return
             request = json.loads(line)

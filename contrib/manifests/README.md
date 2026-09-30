@@ -1,7 +1,7 @@
-# Draft manifests for existing Whisplay apps
+# Manifests for existing MFruit OS apps
 
-These `manifest.json` files turn existing apps into MFruit OS packages. Nothing
-has been committed to the app repositories; copy a file into the root of its
+These `manifest.json` files turn existing apps into MFruit OS packages. The
+Messenger manifest is also included in its app checkout. Copy a file into the root of its
 repository (or the path noted below) when you want the app to be installable
 and updatable through the MFruit OS Updater.
 

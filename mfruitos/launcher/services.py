@@ -127,14 +127,17 @@ class ScreenServices:
         self.backlight.wake()
         self.led.show("running")
         self.last_launched = app_id
-        # Draw "Opening <app>" now, before the screen is handed over: with the
-        # daemon's UI in the background it stays up until the app draws.
-        from mfruitos.launcher.ui.screens.dialogs import LoadingScreen
-        loading = LoadingScreen(self, entry.id, entry.name, entry.icon_text, entry.icon_path)
-        self.router.push(loading)
+        # Wi-Fi is part of Settings: retain that page until its first frame.
+        # Other apps keep the "Opening <app>" handoff screen. The daemon retains
+        # whichever frame we draw here while the app starts.
+        loading = None
+        if app_id != "connectwifi":
+            from mfruitos.launcher.ui.screens.dialogs import LoadingScreen
+            loading = LoadingScreen(self, entry.id, entry.name, entry.icon_text, entry.icon_path)
+            self.router.push(loading)
         self._render_now()
         ok, _ = self.apps.request_launch(app_id, "app", source)
-        if not ok and self.router.top is loading:
+        if not ok and loading is not None and self.router.top is loading:
             self.router.pop()
         return ok
 

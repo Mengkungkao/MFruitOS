@@ -1,0 +1,5 @@
+* text=auto
+*.py text eol=lf
+*.sh text eol=lf
+scripts/mfruit-run text eol=lf
+scripts/mfruitctl text eol=lf

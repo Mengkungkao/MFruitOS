@@ -163,6 +163,19 @@ class BackgroundUiTests(unittest.TestCase):
         self.assertNotEqual(state["selected"], selected)
         self.assertGreater(state["desktop_renders"], self.base["desktop_renders"])
 
+    def test_grabbed_keyboard_can_leave_a_daemon_page(self):
+        from mfruitos.sdk.keys import DOWN, UP, KeyEvent
+        from mfruitos.daemon.client import DaemonRequestError
+        self.rt.loop.post(self.rt.open_system_page, "whisplay-volume")
+        self.wait(lambda: self.rt.focus.mode == "system", "Volume page")
+        # The wrapper rejects keys addressed to a different page.
+        with self.assertRaises(DaemonRequestError):
+            self.rt.client.request("mfruit.page.key", {"app_id": "whisplay-system",
+                                                       "kind": "key", "value": "escape"})
+        self.rt.loop.post(self.rt._on_hardware_key, KeyEvent("key", "escape", DOWN, 1))
+        self.rt.loop.post(self.rt._on_hardware_key, KeyEvent("key", "escape", UP, 1))
+        self.wait(lambda: self.rt.focus.has_focus, "keyboard returns from Volume")
+
 
 if __name__ == "__main__":
     unittest.main()

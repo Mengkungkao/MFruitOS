@@ -49,6 +49,14 @@ class RegistryTests(TempHomeTestCase):
         self.assertEqual([e.id for e in self.registry.all()], ["legacy"])
         self.assertFalse(self.registry.daemon_online)
 
+    def test_wifi_setup_stays_installed_but_leaves_home(self):
+        self.daemon_app("connectwifi")
+        self.daemon_app("other")
+        self.registry.refresh(None)
+        self.assertEqual([e.id for e in self.registry.launcher_entries()], ["other"])
+        self.assertTrue(self.registry.get("connectwifi").launchable)
+        self.assertIn("connectwifi", [e.id for e in self.registry.apps()])
+
     def test_disabled_and_hidden_not_in_launcher(self):
         self.daemon_app("a")
         self.daemon_app("b")

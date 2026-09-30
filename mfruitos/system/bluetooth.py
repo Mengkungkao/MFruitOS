@@ -3,7 +3,7 @@
 BlueZ is driven over D-Bus (``python3-dbus`` and ``python3-gi``, which
 whisplay-daemon already needs). Pairing a keyboard needs an *agent* that
 shows the passkey to type, so ``Bluetooth`` registers one (capability
-``KeyboardDisplay``) on its own GLib thread and reports what BlueZ asks for
+``DisplayYesNo``) on its own GLib thread and reports what BlueZ asks for
 through ``on_prompt``. Where the D-Bus bindings are missing, ``bluetoothctl``
 does the same jobs, without passkey display.
 
@@ -65,7 +65,8 @@ def named(device: BtDevice) -> bool:
 
 
 def sort_key(device: BtDevice):
-    return (not device.connected, not device.paired, -(device.rssi or -200), device.name.lower())
+    return (not device.connected, not device.paired,
+            -(device.rssi if device.rssi is not None else -200), device.name.lower())
 
 
 class Bluetooth:
@@ -76,8 +77,17 @@ class Bluetooth:
         self._dbus = _load_dbus()
         self._agent = None
         self._agent_lock = threading.Lock()
-        self._decision = threading.Event()
-        self._accepted = False
+        self._agent_thread = None
+        self._agent_ready = threading.Event()
+        self._query_bus = None
+        self._agent_bus = None
+        self._glib = self._mainloop = None
+        self._confirmation = None
+        self._confirmation_timer = None
+        self._pairing_address = ""
+        self._pairing_path = None
+        self._pairing_completed = None
+        self._closed = False
 
     # ------------------------------------------------------------ queries
     @property
@@ -125,49 +135,94 @@ class Bluetooth:
         if self._dbus is not None:
             self._set_adapter("Powered", self._dbus.Boolean(on))
         else:
-            self._ctl("power", "on" if on else "off")
+            output = self._ctl("power", "on" if on else "off")
+            if "succeeded" not in output.lower():
+                raise RuntimeError(_reason(output) or "Could not change Bluetooth power")
 
     def search(self, seconds: float = 8.0) -> None:
         """Listen for devices for ``seconds`` (they then appear in ``devices``)."""
         if self._dbus is not None:
             import time
             adapter = self._interface(self._adapter_path(), "org.bluez.Adapter1")
+            started = False
             try:
                 adapter.StartDiscovery()
+                started = True
             except self._dbus.exceptions.DBusException as exc:
                 if "InProgress" not in str(exc):
                     raise
             try:
                 time.sleep(seconds)
             finally:
-                try:
-                    adapter.StopDiscovery()
-                except self._dbus.exceptions.DBusException:
-                    pass
+                if started:
+                    try:
+                        adapter.StopDiscovery()
+                    except self._dbus.exceptions.DBusException as exc:
+                        log.info("Stop discovery: %s", exc)
             return
-        self._ctl("--timeout", str(int(seconds)), "scan", "on", timeout=seconds + 5)
+        output = self._ctl("--timeout", str(max(1, int(seconds))), "scan", "on", timeout=seconds + 5)
+        reason = _reason(output)
+        if reason or not output.strip():
+            raise RuntimeError(reason or "Bluetooth search did not respond")
 
     def pair(self, address: str) -> tuple[bool, str]:
         """Pair, trust (so it reconnects by itself) and connect. (ok, message)."""
         if self._dbus is None:
             output = self._ctl("pair", address, timeout=PAIR_TIMEOUT_SEC)
-            if "successful" not in output.lower() and "already" not in output.lower():
+            if "Pairing successful" not in output and "AlreadyExists" not in output:
                 return False, _reason(output) or "Pairing failed"
-            self._ctl("trust", address)
-            self._ctl("connect", address, timeout=30)
-            return True, "Paired"
-        self.start_agent()
-        device = self._device(address)
+            trust = self._ctl("trust", address)
+            if "succeeded" not in trust.lower():
+                return False, "Paired, but could not trust device"
+            ok, message = self.connect(address)
+            return True, "Connected" if ok else "Paired; " + message
+        if not self.start_agent():
+            return False, "Pairing agent unavailable"
+        path = self._device_path(address)
+        if path is None:
+            return False, "Device not found; search again"
+        completed = threading.Event()
+        errors = []
+        self._pairing_address = address
+        self._pairing_path = path
+        self._pairing_completed = completed
+
+        def failed(exc):
+            errors.append(exc)
+            completed.set()
+
+        def begin():
+            if self._closed:
+                completed.set()
+                return False
+            try:
+                device = self._dbus.Interface(self._agent_bus.get_object("org.bluez", path),
+                                              "org.bluez.Device1")
+                # Pair on the agent's connection: BlueZ then chooses our agent
+                # without replacing whisplay-daemon's global default agent.
+                device.Pair(reply_handler=completed.set, error_handler=failed,
+                            timeout=PAIR_TIMEOUT_SEC)
+            except Exception as exc:
+                failed(exc)
+            return False
         try:
-            device.Pair(timeout=PAIR_TIMEOUT_SEC)
-        except self._dbus.exceptions.DBusException as exc:
-            if "AlreadyExists" not in str(exc):
-                return False, _dbus_reason(exc)
+            self._glib.idle_add(begin)
+            if not completed.wait(PAIR_TIMEOUT_SEC + 2):
+                self.cancel_pairing()
+                return False, "Pairing timed out"
+            if self._closed:
+                return False, "Pairing was cancelled"
+            if errors and "AlreadyExists" not in str(errors[0]):
+                return False, _dbus_reason(errors[0])
         finally:
+            self._pairing_address = ""
+            self._pairing_path = None
+            self._pairing_completed = None
+            self.answer(False)
             self.on_prompt(Prompt("done", device=address))
         self._set_device(address, "Trusted", self._dbus.Boolean(True))
         ok, message = self.connect(address)
-        return True, "Connected" if ok else "Paired"
+        return True, "Connected" if ok else "Paired; " + message
 
     def connect(self, address: str) -> tuple[bool, str]:
         if self._dbus is None:
@@ -209,22 +264,74 @@ class Bluetooth:
     # ------------------------------------------------------ pairing agent
     def answer(self, accept: bool) -> None:
         """The user's answer to a "confirm" prompt."""
-        self._accepted = accept
-        self._decision.set()
+        if self._glib is not None:
+            self._glib.idle_add(self._resolve_confirmation, accept)
+
+    def _resolve_confirmation(self, accept: bool) -> bool:
+        callbacks, self._confirmation = self._confirmation, None
+        if self._confirmation_timer is not None:
+            self._glib.source_remove(self._confirmation_timer)
+            self._confirmation_timer = None
+        if callbacks:
+            reply, error = callbacks
+            if accept:
+                reply()
+            else:
+                error(self._dbus.exceptions.DBusException(
+                    "Pairing rejected", name="org.bluez.Error.Rejected"))
+        return False
+
+    def cancel_pairing(self) -> None:
+        self.answer(False)
+        # Capture the active agent connection and path before shutdown closes
+        # the query bus or the pairing worker clears its state.
+        path, bus = self._pairing_path, self._agent_bus
+        if path and bus is not None and self._glib is not None:
+            def cancel():
+                try:
+                    device = self._dbus.Interface(bus.get_object("org.bluez", path),
+                                                  "org.bluez.Device1")
+                    device.CancelPairing(reply_handler=lambda: None,
+                                         error_handler=lambda exc: log.info("Cancel pairing: %s", exc))
+                except Exception as exc:
+                    log.info("Cancel pairing: %s", exc)
+                return False
+            self._glib.idle_add(cancel)
+
+    def close(self) -> None:
+        """Release the bounded query connection and pairing agent on shutdown."""
+        self._closed = True
+        self.cancel_pairing()
+        # The mainloop will no longer deliver Pair's reply after quitting.
+        # Wake its worker now instead of keeping it blocked for sixty seconds.
+        completed = self._pairing_completed
+        if completed is not None:
+            completed.set()
+        if self._mainloop is not None:
+            self._glib.idle_add(self._mainloop.quit)
+        if self._query_bus is not None:
+            self._query_bus.close()
+            self._query_bus = None
 
     def start_agent(self) -> bool:
-        """Register the pairing agent (once), and make it BlueZ's default."""
+        """Register our connection's agent without taking over the global agent."""
         if self._dbus is None:
             return False
         with self._agent_lock:
-            if self._agent is not None:
+            if self._closed:
+                return False
+            if self._agent is not None and self._agent_ready.is_set():
                 return True
-            ready = threading.Event()
-            thread = threading.Thread(target=self._agent_loop, args=(ready,),
-                                      name="bt-agent", daemon=True)
-            thread.start()
-            ready.wait(5.0)
-            return self._agent is not None
+            # A slow system bus may outlive the caller's wait. Reuse that
+            # startup attempt instead of leaking another connection and agent.
+            if self._agent_thread is None or not self._agent_thread.is_alive():
+                self._agent_ready.clear()
+                self._agent_thread = threading.Thread(target=self._agent_loop,
+                                                      args=(self._agent_ready,),
+                                                      name="bt-agent", daemon=True)
+                self._agent_thread.start()
+        self._agent_ready.wait(5.0)
+        return not self._closed and self._agent is not None
 
     def _agent_loop(self, ready: threading.Event) -> None:
         try:
@@ -237,45 +344,55 @@ class Bluetooth:
             ready.set()
             return
         outer = self
-        DBusGMainLoop(set_as_default=True)
-        bus = dbus.SystemBus()
+        try:
+            bus = dbus.SystemBus(private=True, mainloop=DBusGMainLoop())
+        except Exception as exc:
+            log.warning("Cannot open the pairing agent's bus: %s", exc)
+            ready.set()
+            return
+        self._glib = GLib
+        self._agent_bus = bus
 
         class Agent(dbus.service.Object):
             @dbus.service.method("org.bluez.Agent1", in_signature="", out_signature="")
             def Release(self):
-                pass
+                outer._agent = None
+                outer._resolve_confirmation(False)
+                if outer._mainloop is not None:
+                    outer._mainloop.quit()
 
             @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="s")
             def RequestPinCode(self, device):
-                raise dbus.exceptions.DBusException("org.bluez.Error.Rejected",
-                                                    "PIN entry is not supported")
+                raise dbus.exceptions.DBusException("PIN entry is not supported",
+                                                    name="org.bluez.Error.Rejected")
 
-            @dbus.service.method("org.bluez.Agent1", in_signature="ou", out_signature="")
+            @dbus.service.method("org.bluez.Agent1", in_signature="os", out_signature="")
             def DisplayPinCode(self, device, pincode):
                 outer.on_prompt(Prompt("pin", str(pincode), _address_of(device)))
 
             @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="u")
             def RequestPasskey(self, device):
-                raise dbus.exceptions.DBusException("org.bluez.Error.Rejected",
-                                                    "Passkey entry is not supported")
+                raise dbus.exceptions.DBusException("Passkey entry is not supported",
+                                                    name="org.bluez.Error.Rejected")
 
             @dbus.service.method("org.bluez.Agent1", in_signature="ouq", out_signature="")
             def DisplayPasskey(self, device, passkey, entered):
                 outer.on_prompt(Prompt("passkey", f"{int(passkey):06d}", _address_of(device)))
 
-            @dbus.service.method("org.bluez.Agent1", in_signature="ou", out_signature="")
-            def RequestConfirmation(self, device, passkey):
-                outer._decision.clear()
-                outer._accepted = False
+            @dbus.service.method("org.bluez.Agent1", in_signature="ou", out_signature="",
+                                 async_callbacks=("reply", "error"))
+            def RequestConfirmation(self, device, passkey, reply, error):
+                outer._resolve_confirmation(False)
+                outer._confirmation = (reply, error)
+                outer._confirmation_timer = GLib.timeout_add_seconds(
+                    CONFIRM_TIMEOUT_SEC, outer._resolve_confirmation, False)
                 outer.on_prompt(Prompt("confirm", f"{int(passkey):06d}", _address_of(device)))
-                outer._decision.wait(CONFIRM_TIMEOUT_SEC)
-                if not outer._accepted:
-                    raise dbus.exceptions.DBusException("org.bluez.Error.Rejected",
-                                                        "Pairing rejected")
 
             @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="")
             def RequestAuthorization(self, device):
-                pass
+                if _address_of(device) != outer._pairing_address:
+                    raise dbus.exceptions.DBusException("No pairing requested",
+                                                        name="org.bluez.Error.Rejected")
 
             @dbus.service.method("org.bluez.Agent1", in_signature="os", out_signature="")
             def AuthorizeService(self, device, uuid):
@@ -283,35 +400,48 @@ class Bluetooth:
 
             @dbus.service.method("org.bluez.Agent1", in_signature="", out_signature="")
             def Cancel(self):
+                outer._resolve_confirmation(False)
                 outer.on_prompt(Prompt("done"))
 
         try:
             agent = Agent(bus, AGENT_PATH)
             manager = dbus.Interface(bus.get_object("org.bluez", "/org/bluez"),
                                      "org.bluez.AgentManager1")
-            manager.RegisterAgent(AGENT_PATH, "KeyboardDisplay")
-            manager.RequestDefaultAgent(AGENT_PATH)
+            manager.RegisterAgent(AGENT_PATH, "DisplayYesNo")
             self._agent = agent
             log.info("Bluetooth pairing agent registered")
         except Exception as exc:
             log.warning("Cannot register the pairing agent: %s", exc)
+            bus.close()
+            self._agent_bus = None
+            self._glib = None
             ready.set()
             return
+        self._mainloop = GLib.MainLoop()
         ready.set()
-        GLib.MainLoop().run()
+        try:
+            if not self._closed:
+                self._mainloop.run()
+        finally:
+            self._resolve_confirmation(False)
+            self._agent = None
+            bus.close()  # BlueZ unregisters this connection's agent.
+            self._agent_bus = None
+            self._mainloop = self._glib = None
 
     # ------------------------------------------------------ D-Bus helpers
     def _bus(self):
-        return self._dbus.SystemBus(private=True)
+        if self._closed:
+            raise RuntimeError("Bluetooth service is closed")
+        if self._query_bus is None:
+            self._query_bus = self._dbus.SystemBus(private=True)
+        return self._query_bus
 
     def _objects(self) -> dict:
         bus = self._bus()
-        try:
-            manager = self._dbus.Interface(bus.get_object("org.bluez", "/"),
-                                           "org.freedesktop.DBus.ObjectManager")
-            return manager.GetManagedObjects()
-        finally:
-            bus.close()
+        manager = self._dbus.Interface(bus.get_object("org.bluez", "/"),
+                                       "org.freedesktop.DBus.ObjectManager")
+        return manager.GetManagedObjects()
 
     def _adapter_path(self) -> Optional[str]:
         for path, interfaces in self._objects().items():
@@ -333,13 +463,15 @@ class Bluetooth:
         return None
 
     def _interface(self, path: str, name: str):
+        if path is None:
+            raise RuntimeError("Bluetooth controller unavailable")
         return self._dbus.Interface(self._bus().get_object("org.bluez", path), name)
 
     def _device(self, address: str):
         path = self._device_path(address)
         if path is None:
-            raise self._dbus.exceptions.DBusException("org.bluez.Error.DoesNotExist",
-                                                      "Device not found")
+            raise self._dbus.exceptions.DBusException("Device not found",
+                                                      name="org.bluez.Error.DoesNotExist")
         return self._interface(path, "org.bluez.Device1")
 
     def _set_adapter(self, name: str, value) -> None:

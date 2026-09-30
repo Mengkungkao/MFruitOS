@@ -1,350 +1,195 @@
-# CONTINUE — where the work stands (2026-09-30, paused by the user)
+# CONTINUE — MFruit OS validation and app integration, 2026-09-30
 
-## The request
+## Current checkpoint
 
-From the user, 2026-09-30:
+User request: continue this handoff, validate everything, and test on
+`orangepi@192.168.1.122`. The user chose automated checks now and will do
+physical hardware checks afterward.
 
-> now let move connect wifi to setting, reaagrange setting to became like a
-> iphone setting. update bluetooth connect setting UI and make it ease to use.
-> when I try to use updater to update any app the app is crash. remove the
-> startup/booting MFruitOS and infos. Leave only a logo with dark background.
+Latest validated build: `/home/orangepi/.whisplay-os/system/versions/1.4.0-local20260930101701`.
+Backup: `/home/orangepi/.mfruit-deploy-backups/cleanup-20260930101701/` (MFruit source, 29 companion files,
+previous version and deployment metadata). Previous build:
+`/home/orangepi/.whisplay-os/system/versions/1.4.0-local20260930093556`. No commits or pushes were made.
 
-Follow-ups the same day:
-- "move it from app to setting": Connect WiFi leaves the Home app list and
-  opens from Settings.
-- "and remove the run test app too" (`whisplay-run-test`).
-- "remove Hello Whisplay too" (`hello-whisplay`).
+Follow-up user requests: validate and remove unnecessary files; align software
+and UI with MFruit OS; create app creation/development/production rules; supply
+a manual install, test and debug workflow for other devices.
 
-Then: "now update continue.md and pause working now", and "write me commit
-messages". Messages were given for part 1 (MFruitOS, ConnectWifi and the four
-apps) and for this file; `git log` in each repo shows what the user committed.
-The unfinished list, Settings and Bluetooth files were held back. Nothing is
-deployed.
+- Read [docs/DEVICE_SETUP.md](docs/DEVICE_SETUP.md) for manual setup. Run
+  `bash scripts/setup-device.sh --check` first, then `--install` explicitly.
+  Whisplay drivers and its daemon must already work on the target board.
+- [docs/APP_RULES.md](docs/APP_RULES.md) is the canonical app rule list, synced
+  to the template and all five companion projects. Native package preflight:
+  `python3 scripts/check-app.py <clean-package-directory>`.
+- Latest automated results: **1,304 Python tests passed locally and on the
+  Orange Pi**: MFruit OS 284, ConnectWifi 137, WalkieTalkie 637, Messenger 147,
+  dashboard 86, chatbot 13. Chatbot Node build/interrupted-reply regression
+  also passes; disabling its generation guard makes the check fail with exit 1.
+- Cleanup removed 59 remaining cache directories (350 files, 4,990,269 bytes),
+  including the removal of all 95 tracked bytecode files; SDK refresh had
+  already removed two additional cache directories. New chatbot ignore rules
+  prevent recurrence. Configuration, models, dependencies and user data kept.
+- ConnectWifi now uses the shared InputController: tap next, double previous,
+  700 ms hold/release selects, four clicks/Esc back; explicit Back rows remain.
+  Removed both the old evdev reader and its redundant SDK key adapter.
+- Managed launches preserve mfruit-run registration in ConnectWifi and the
+  radio/dashboard apps. Dark radio-screen holds wake without recording.
+  Messenger accepts `/` without killing terminal input. Chatbot starts from
+  any working directory; npm test now compiles and returns failures correctly.
+- Removed unused imports/assignments, dashboard's unused NumPy installation
+  and redundant npm crypto dependency; standardized ordinary UI wording.
+- MFruit test fixtures now close files, pipes and framebuffers explicitly.
+- A Logi K250 keyboard is now attached as event3. Launcher input ownership and
+  an EBUSY result for a second EVIOCGRAB were confirmed over SSH. Physical
+  typing, hotplug, pairing, button, LED, audio and RF checks remain manual.
+- Existing companions run as adopted apps. Native production package gaps
+  are documented in APP_DEVELOPMENT.md; do not claim all release packages
+  are production-certified. Chatbot retains its documented daemon-owned 4× exit.
 
-| Part | Status |
-|---|---|
-| 1. "Updater crash" | Root cause found. The fix is in code with tests. Docs and deploy remain. |
-| 2. iPhone-style Settings | The list supports groups and icon tiles. The screens are not started. |
-| 3. Connect WiFi into Settings | Not started |
-| 4. Bluetooth UI | Back end drafted, not reviewed or tested. Screens not started. |
-| 5. Logo-only boot screen | Not started |
-| 6. Remove Run Test and Hello Whisplay | Method known. Not started. |
-| 7. Deploy and verify on the Orange Pi | Waits for 1–6 |
+Post-deployment live checks passed: Wi-Fi launch/scan/return/repeated keys,
+Bluetooth discovery and agent shutdown, all three adopted app launch/exits,
+and updater check plus 100 navigation keys. Home/IDLE afterward; both services
+active, launcher PID 24012, NRestarts 0. All four companion registrations retain
+mfruit-run. Installed device and template preflights passed; no new launcher
+journal warnings. Live evidence: `~/.mfruit-validation/live-cleanup-check.log`.
 
-The previous task (the apps converted to the MFruit App SDK; SDK 1.1.0;
-MFruit OS 1.3.0) is committed. Details are in CHANGELOG 1.3.0 and in git.
+See [the validation record](docs/VALIDATION_2026-09-30.md) for the latest live
+checks, deployment details and evidence. The historical recovery below explains
+why this working tree contains substantial changes relative to its Git base.
 
----
+The local checkout was behind the board: local MFruit OS was 1.3.0 at
+`a874398`, while the board already had 1.4.0 and later Wi-Fi, navigation and
+branding changes. Recovered and reviewed the board source instead of deploying
+the stale local checkout. No staging, commits, pushes or tags were performed.
 
-## 1. The "updater crash": root cause and fix (done in code, not deployed)
+Original board source: `/tmp/mfruit-board-snapshot`. Companion snapshots:
+`/tmp/mfruit-app-validation/`; recovered-file inventory:
+`/tmp/mfruit-companion-recovered.json`. Device configuration, secrets, models,
+user data and radio addresses were preserved.
 
-**It was not the updater.** Evidence from the Orange Pi's journal:
+## Recovered implementation
 
-```
-sudo[2758]: orangepi : TTY=tty1 ; PWD=/home/orangepi ; USER=root ; COMMAND=/usr/bin/systemctl restart whisplay-os.service
-```
+- MFruit OS 1.4.0: grouped Settings, native Bluetooth discovery/device/pairing
+  screens, General settings, logo-only dark boot and MFruit branding.
+- Settings → Wi-Fi opens ConnectWifi directly without a loading screen and
+  returns to Settings. ConnectWifi stays out of Home but remains manageable
+  under Settings → Apps. Run Test and Hello Whisplay are already removed.
+- SDK 1.2.0: exclusive keyboard capture and foreground key hub, including
+  forwarding to internal daemon pages. SDK and app rules are synchronized
+  across ConnectWifi, WalkieTalkie, Messenger, chatbot and dashboard.
+- ConnectWifi 1.1.0: MFruit styling, status/IP, network/password/hidden-network
+  flows, explicit Back selection, faster first frame and useful LED feedback.
+- WalkieTalkie: explicit Status menu and Back choices; partial four-click exit
+  no longer opens Status, held Back does not record, leaving Pair ends pairing.
+- Messenger: manifest and README description **Radio Message**.
+- Chatbot: deferred optional OpenCV import and startup regression coverage.
 
-The keyboard also drives tty1, where getty's autologin bash runs, so every key
-pressed in MFruit OS reached that shell too:
-1. ↑ recalled the history line `sudo -n systemctl restart whisplay-os.service`.
-2. Enter ran it; sudoers allows it without a password.
-3. MFruit OS restarted, and the app with it, which looked like the app
-   crashing during an update.
+## Fixes made during validation
 
-**The fix:** while MFruit OS runs, it holds every keyboard exclusively
-(`EVIOCGRAB`). It hands each key to whoever owns the screen, through a
-*key hub*. Nothing else gets keys: not the console, not whisplay-daemon, not
-stray readers.
+1. Recovered shell helpers contained CRLF endings: nine launch-gate tests failed
+   on both Linux hosts. Normalize source to LF, preserve executable bits and
+   add `.gitattributes` to keep scripts runnable across Windows checkouts.
+2. Bluetooth shutdown closed its query bus before cancellation and could leave
+   pairing waiting 62 seconds. Cancellation now uses the captured agent
+   connection/path, wakes the worker immediately and prevents queued Pair calls
+   after shutdown. Two regression tests were demonstrated failing before the fix.
+3. Refresh boot and Settings documentation screenshots.
 
-**MFruit OS side:**
-- `mfruitos/launcher/keyhub.py` (new):
-  - `KeyHub` listens on `~/.whisplay-os/state/keys.sock` (mode 0600,
-    `paths.keys_socket`).
-  - One JSON line per message. App → hub: `{"app_id": …}`. Hub → app:
-    `{"type":"keyboards","devices":[…]}` and
-    `{"type":"key","kind","value","action","code"}`.
-- `runtime.py`:
-  - The keyboard reader is `KeyReader(grab=True, on_devices=keyhub.set_devices)`.
-  - `_on_hardware_key` sends each key-down to the screen owner (MFruit OS,
-    or `focus.target` in APP mode). That key's repeats and release go to
-    the same owner.
-  - Developer → Daemon desktop (`yield_to_desktop`) releases the grab, and
-    `on_focus_gained` takes it again.
-- `ctl_handlers.py`: `mfruitctl key …` goes through `_on_hardware_key` (down,
-  then up), so it tests the same routing.
+## Original validation checkpoint (superseded by results above)
 
-**SDK side:**
-- `keys.py`: `KeyReader(grab=, app_id=, hub=, on_devices=)`.
-  - With an app id and a reachable hub, it reads keys from the hub.
-    Otherwise it reads `/dev/input` itself, and switches to the hub as soon
-    as the hub appears.
-  - `hub_socket_path()` tries `MFRUIT_KEYS_SOCKET`, then
-    `$MFRUIT_HOME` / `$WHISPLAY_OS_HOME` / `~/.whisplay-os`, then
-    `/home/*/.whisplay-os`.
-- `input.py`: `InputController(app_id=)` falls back to `WHISPLAY_APP_ID`.
-- `scripts/mfruit-run` exports `WHISPLAY_APP_ID`, `MFRUIT_HOME` and
-  `MFRUIT_SESSION` to every app.
+See [the full validation record](docs/VALIDATION_2026-09-30.md) for results,
+deployment/backup paths and limitations.
 
-**Apps:**
-- Each app passes its id:
-  - dashboard: `app.board.APP_ID`;
-  - WalkieTalkie and Messenger: `board_module.APP_ID`;
-  - chatbot: `whisplay_client.DEFAULT_APP_ID`;
-  - template: `self.app.app_id`.
-- The SDK copies are re-synced in all of them.
-- `~/ConnectWifi`:
-  - It has a vendored `mfruit_sdk/` (new, untracked).
-  - `connectwifi/keyboard.py` has `SdkKeyboardReader` (app id `connectwifi`),
-    used by `app.py`'s `main()`.
-  - Its tests: 129 passed, 1 skipped.
+- MFruit OS final suite: **266 passed locally and on Orange Pi**, including
+  the real daemon.
+- Companion checks: **1,004 passed** — ConnectWifi 137, WalkieTalkie 632,
+  Messenger 141, dashboard 82, chatbot 12. The initially skipped ShellCheck
+  check was rerun successfully using a binary under `/tmp`.
+- Chatbot TypeScript `tsc --noEmit` passed on the Orange Pi.
+- 37 screens rendered on both hosts. Preview and live framebuffers inspected.
+- Runtime pyflakes, Python 3.9 compatibility, shell syntax, SDK equality and
+  Git whitespace checks passed. Fixture ResourceWarnings were addressed in the follow-up.
+- Isolated Orange Pi installer/update/rollback tests passed.
+- Live checks: Wi-Fi launch/scan/return and repeated keys; Bluetooth discovery
+  and agent registration/shutdown; Messenger, WalkieTalkie and chatbot
+  launch/exit; daemon Volume keyboard return; updater check with 100 keys.
+  The launcher stayed alive without an unexpected service restart.
+- Existing production apps were not updated from upstream. Unreleased changes
+  on the board are preserved.
 
-**Tests:**
-- `tests/test_sdk.py`: `KeyHubTests`, `GrabTests`.
-- `tests/test_runtime.py`: `test_keys_go_to_whoever_owns_the_screen`,
-  `test_the_keyboards_are_held_exclusively`.
-- **The full suite passes: 230 tests, 2026-09-30.**
+Evidence: local `/tmp/mfruit-validation-final.log`,
+`/tmp/mfruit-validation-preview/`, `/tmp/mfruit-live-captures/`;
+board `~/.mfruit-validation/final-tests.log`,
+`~/.mfruit-validation/live-after-deploy.log`, `/tmp/mfruit-live-validation/`,
+`/tmp/mfruit-validation-deployment.json`.
+Temporary files may disappear on reboot.
 
-**Still to do for this part:**
-- Bump `SDK_VERSION` to 1.2.0 (`mfruitos/sdk/__init__.py`). Re-sync every
-  copy, including `~/ConnectWifi`.
-- Docs:
-  - CHANGELOG: a new version, 1.4.0.
-  - CLAUDE.md §6: a new root-cause row. Keys reached the tty1 shell; the
-    guard is the exclusive grab and the key hub.
-  - CLAUDE.md §15: while MFruit OS runs, keys come through the hub.
-  - `docs/LAUNCH_LIFECYCLE.md`.
-  - `docs/ARCHITECTURE.md`: the key hub and its protocol.
-  - `docs/APP_RULES.md`, plus each app's `.claude/rules/mfruit-os-app.md`
-    copy. Apps read keys through the SDK with their app id; an app that
-    reads `/dev/input` itself gets nothing while MFruit OS runs.
-  - APP_DEVELOPMENT.md and README.
-  - `docs/HARDWARE_TESTS.md`, new steps:
-    - typed keys do not reach tty1;
-    - keys reach the foreground app;
-    - Daemon desktop releases the grab.
-- **Ask the user**, because these need their sudo or touch their files:
-  - turn off tty1 autologin;
-  - remove the `systemctl restart whisplay-os.service` lines from the
-    Orange Pi's `~/.bash_history`.
+A device reboot during the first final-suite attempt cleared `/tmp`; this
+validation issued no reboot command and the cause is unconfirmed. The launcher
+recovered; the full suite was rerun with persistent output and passed before
+deployment. See the validation record for details.
 
-  The grab only protects while MFruit OS runs. It does not cover Daemon
-  desktop mode or a stopped service.
+## Physical checks the user will do next
 
-## 2. iPhone-style Settings (in progress)
+Follow `docs/HARDWARE_TESTS.md`; do not infer these from virtual keys:
 
-**Done** (backwards compatible; the suite passes; no screen uses it yet):
-- `mfruitos/launcher/ui/components.py`:
-  - `section(title="")` makes a group heading when given a title, and a gap
-    when not.
-  - `selectable(item)`.
-  - `Item.tile = (r, g, b)` draws the item's icon in white on a rounded tile
-    of that colour.
-  - Separators are drawn only between selectable rows, indented past a tile.
-- `mfruitos/launcher/ui/screens/base.py`: `ListScreen` skips sections when it
-  moves (`_step`) and never lands on one (`current_items`).
+1. USB/Bluetooth keyboard routing, hotplug, held-key handover, no tty1 leakage,
+   grab release/reacquisition in Daemon desktop. A real keyboard is now attached; physical routing still needs observation.
+2. Actual Bluetooth passkey/numeric comparison, rejection/cancellation,
+   reconnect/disconnect and forget. No peripheral was paired or forgotten.
+3. Physical button feel, RGB colours, and an observed reboot/logo.
+4. Updater use with a physical keyboard. Automated install/rollback and live
+   update checking passed; production app updates were not applied.
+5. Real LoRa/audio exchange remains unverified. The prior handoff noted
+   WalkieTalkie `/dev/gpiomem` diagnostics; this session was not a radio repair
+   task and sent no message, voice recording or chatbot question.
 
-**To do**, in `mfruitos/launcher/ui/screens/settings.py`. Today
-`SettingsScreen` (line 35) has Applications, Display, Button, LED, Audio,
-Network, System, Developer, About.
-- The new layout is five groups, each row with an icon tile:
-  1. Wi-Fi (value: network name), Bluetooth (value: On / Off / device)
-  2. Display & Brightness, Sounds, Button, Light
-  3. General
-  4. Apps, Developer
-  5. Back
-- A new `WifiScreen` shows:
-  - the network and IP address;
-  - whether the internet is reachable;
-  - **Choose a network…** (opens Connect WiFi; see §3);
-  - Check internet.
-- A new `GeneralScreen` holds About, Software Update, System info,
-  Diagnostics, Power and Restart launcher. Today these are spread over
-  `SystemScreen` (line 225) and `AboutScreen` (line 311).
-- `NetworkScreen` (line 199) goes away.
-- The icons already exist in `mfruitos/launcher/ui/icons.py`: wifi, bluetooth,
-  display, audio, button, led, system, info, apps, developer, power,
-  diagnostics, updater.
-- After every screen change:
-  - update the self-test / `preview.py` and the screen tests;
-  - look at a rendered PNG.
+Existing board issue: `dnsmasq.service` fails because port 53 is occupied
+by the DNS stub at `127.0.0.53`. Wi-Fi networking and scans work; no DNS
+configuration was changed.
 
-## 3. Connect WiFi moves into Settings (to do)
-
-- **Hide it from Home.** Add a "settings apps" list to the registry and
-  exclude it from `launcher_entries()` (`mfruitos/apps/registry.py:318`).
-  - The list starts with `connectwifi`. Check the board for other WiFi-setup
-    app ids.
-  - It stays launchable, and stays listed in Settings → Apps.
-- **Open it from Settings.** Settings → Wi-Fi → Choose a network… calls
-  `ApplicationManager.launch("connectwifi")`, the only launch authority
-  (§9).
-  - If Connect WiFi is not installed, fall back to the daemon's `whisplay-wifi`
-    page (`SYSTEM_PAGES`, registry.py:32).
-- Leaving Connect WiFi should return to Settings → Wi-Fi, not to Home. Check how
-  the runtime picks the screen after an app exits.
-
-## 4. Bluetooth UI (back end drafted, screens to do)
-
-**The back end:** `mfruitos/system/bluetooth.py` (new). **Nothing imports it
-yet. It is not linted and has no tests.**
-- `Bluetooth` provides:
-  - `available()`, `powered()`, `set_powered()`;
-  - `devices()`, returning `BtDevice` objects (address, name, paired,
-    connected, trusted, icon → kind, rssi);
-  - `search(seconds)`;
-  - `pair()` (pair, trust, connect), `connect()`, `disconnect()`, `forget()`.
-- It drives BlueZ over D-Bus; `python3-dbus` and `gi` are both on the
-  Orange Pi.
-- Without them it falls back to `bluetoothctl` (version 5.64 on the Orange Pi).
-  That version has no `devices Paired`, so the fallback uses `devices` plus
-  `info`.
-- A pairing agent (`KeyboardDisplay`) reports passkeys and confirmation
-  requests through `on_prompt(Prompt)`. `answer(accept)` answers a
-  confirmation.
-
-**Review it before wiring it in:**
-- `_interface()` opens a private system bus on every call and never closes
-  it. Keep one bus per `Bluetooth` instead.
-- `RequestConfirmation` blocks the agent's GLib loop while it waits, up to
-  30 s. That is acceptable only because the loop serves nothing else.
-- whisplay-daemon has its own pairing agent (`bluetooth_pairing_agent.py` in
-  the Whisplay checkout), and ours calls `RequestDefaultAgent`. On the board,
-  check that:
-  - the two agents do not fight;
-  - the service user is allowed to call `org.bluez` (D-Bus policy).
-- Write `tests/test_bluetooth.py`: `parse_info`, `named`, the sort order, and
-  the `bluetoothctl` paths with a fake `run`.
-
-**The screens:**
-- `BluetoothScreen`:
-  - an On/Off toggle;
-  - **My devices**: paired devices, with name, kind and Connected / Not
-    connected;
-  - **Other devices**: named devices found while searching. The search starts
-    when the screen opens and shows "Searching…".
-  - Every call runs through `os.run_task`, because the calls block.
-- `BtDeviceScreen`: Connect / Disconnect, and Forget This Device (asks for
-  confirmation).
-- **Pairing dialog.** It shows one of:
-  - the passkey to type ("Type 123456 on the keyboard, then press Enter");
-  - a Yes/No confirmation, for numeric comparison.
-
-  `Prompt("done")` closes it.
-- Settings → Bluetooth opens these screens instead of the daemon's
-  `whisplay-bluetooth` page.
-
-## 5. Logo-only boot screen (to do)
-
-- `mfruitos/launcher/ui/screens/boot.py` (65 lines) draws the start-up steps
-  and the info. `runtime.py` drives it: `BootScreen(...)` and `set_step(...)`,
-  around lines 118–150.
-- It should draw only the MFruit OS logo on a dark background.
-- Keep the step tracking for the log. A failed step must still reach the user,
-  for example as a message screen.
-- Check `preview.py` and the tests that expect the step list.
-
-## 6. Remove Run Test and Hello Whisplay (to do, on the Orange Pi)
-
-- **`hello-whisplay`** is an MFruit package (`~/.whisplay-os/apps/hello-whisplay`).
-  Uninstall it through the package manager: `Installer.uninstall`, the same
-  path as Settings → Apps → Uninstall (`screens/apps.py:152`).
-- **`whisplay-run-test`** is a whisplay-daemon app that MFruit OS adopted. Its
-  original is in `~/.whisplay-os/adopted/whisplay-run-test`. The daemon has no
-  unregister command, so:
-  1. Send `app.register` for it with `persist: false`; the daemon then deletes
-     its registration file (`_save_app`).
-  2. Delete the adopted copy.
-  3. Restart whisplay-daemon; sudoers allows it.
-- Consider a general "Remove" for daemon apps in Settings → Apps (a ctl
-  command, the UI and a test).
-- Check that nothing registers either app again at boot.
-
-## 7. Deploy and verify (after 1–6)
-
-**The boards:**
-- The Orange Pi (`orangepi@192.168.0.130`) was reachable on 2026-09-30. It runs
-  MFruit OS 1.3.0 **without** the key hub.
-  - Registered there: connectwifi, whisplay-ai-chatbot, whisplay-flappy-bird,
-    whisplay-jump, whisplay-lora-messenger, whisplay-lora-walkie,
-    whisplay-play-mp4, whisplay-run-test (all adopted), and hello-whisplay
-    (MFruit package).
-- The Pi (`jarvis@192.168.0.33`) is often unreachable.
-
-**Deploy MFruit OS and every app that uses the keyboard together.** Once MFruit
-OS grabs the keyboards, an app still on the old SDK copy (which reads
-`/dev/input` itself) gets no keys at all.
-
-- Before each deploy, do an rsync dry run with the deploy script's excludes.
-  Confirm the device tree differs only by this work.
-- Run each app's tests before deploying it.
-- **MFruit OS:**
-  1. `scripts/deploy.sh orangepi@192.168.0.130 --no-service`
-  2. `sudo -n systemctl restart whisplay-os.service`
-  3. `mfruitctl status` should show the new version and `keyboards`.
-- **The apps:**
-  - WalkieTalkie and Messenger: `./deploy.sh orangepi@192.168.0.130`. Then remove
-    older leftovers: `app/input/` in WalkieTalkie, and
-    `controls/__pycache__/button*` and `keys*` in Messenger.
-  - ConnectWifi: its own deploy script.
-  - Chatbot: copy the tree, then run `bash build.sh` on the device. Node runs
-    the compiled `dist/`.
-  - The dashboard is not installed on the Orange Pi. Ask before installing it.
-- **Verify:**
-  - `mfruitctl key down|enter|escape` moves, opens and goes back in the new
-    Settings.
-  - Settings → Wi-Fi → Choose a network… opens Connect WiFi, and leaving it
-    returns to Settings.
-  - The Bluetooth screens render and search.
-  - Boot shows only the logo.
-  - Home no longer lists Connect WiFi, Run Test or Hello Whisplay.
-  - Take screenshots from `/tmp/whisplay-fb-<id>-*.bin` and convert them with
-    `mfruitos.launcher.ui.rgb565.from_rgb565`.
-- **These need the user:** a physical keyboard and the button. The key hub
-  (keys reach the foreground app, nothing reaches tty1) is **not verified on
-  hardware**.
-
-## 8. At the end
-
-- Update this file.
-- Give the user commit messages for the rest, in each repo's style. The key hub
-  fix already has its messages (2026-09-30): in MFruitOS,
-  `fix: hold keyboards exclusively so keys cannot reach the console shell`;
-  in each app, "Take keyboard keys from MFruit OS's key hub".
-  - Still to commit: `ui/components.py` and `screens/base.py` (list groups
-    and tiles), and `mfruitos/system/bluetooth.py`, together with the
-    screens that use them.
-  - Then the Settings, Bluetooth and boot work, and the SDK 1.2.0 bump with
-    the docs.
-
-## Open items from before
-
-- Unless the user has done it since, they still need to run
-  `bash ~/MFruitOS/scripts/install.sh` on both boards. It needs their sudo
-  password, and installs the whisplay-daemon background drop-in.
-- Hardware checklist steps 9–18 are not verified.
-- Milestones M2+ (core/hardware separation, mock/headless) are deferred.
-- Messenger's own CONTINUE.md: set both boards' timezone (needs sudo).
-- Compiled `.pyc` files are still tracked in git. To untrack them:
-  `git rm -r --cached -q $(git ls-files '*.pyc')`.
+Do not change tty1 autologin or shell history as part of these fixes. Raspberry
+Pi rollout and dashboard installation on Orange Pi need new user intent.
+Headless/hardware abstraction and Messenger timezone changes remain deferred.
+Tracked bytecode cleanup is complete in the local checkouts.
 
 ## Useful commands
 
 ```bash
-cd ~/MFruitOS && python3 -m unittest discover -s tests              # 230 tests, ~2.5 min
-python3 -m unittest discover -s tests -p "test_sdk.py"              # SDK and key hub
-python3 -m unittest discover -s tests -p "test_runtime.py"          # key routing
-for d in ~/whisplay-crypto-dashboard ~/WalkieTalkie ~/Messenger ~/ConnectWifi \
-         ~/ai-chatbot/whisplay-ai-chatbot/python \
-         ~/MFruitOS/templates/whisplay-app-template/app; do
-  ~/MFruitOS/scripts/sdk-sync.sh $d; done                           # after any SDK change
-cd ~/ConnectWifi && python3 -m pytest -q                            # 129 passed, 1 skipped
-cd ~/WalkieTalkie && python3 -m pytest -q
-cd ~/Messenger && python3 -m pytest -q
-cd ~/whisplay-crypto-dashboard && python3 -m pytest -q
-cd ~/ai-chatbot/whisplay-ai-chatbot/python && python3 -m pytest -q test/test_keyboard_input.py
-ssh -o ConnectTimeout=6 orangepi@192.168.0.130 '~/.whisplay-os/bin/mfruitctl status'
+cd ~/MFruitOS
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests
+python3 -m mfruitos --preview /tmp/mfruit-preview
+ssh orangepi@192.168.1.122 '~/.whisplay-os/bin/mfruitctl status'
+ssh orangepi@192.168.1.122 '~/.whisplay-os/bin/mfruitctl key down'
+ssh orangepi@192.168.1.122 'cd ~/ai-chatbot/whisplay-ai-chatbot && ~/.nvm/versions/node/v20.20.2/bin/node node_modules/typescript/bin/tsc --noEmit --pretty false'
 ```
 
-`pyflakes` and `vermin` (the Python 3.9 compatibility check) live in a scratch
-venv. Recreate them with
-`python3 -m venv <dir> && <dir>/bin/pip install pyflakes vermin`.
+Noninteractive SSH does not put Node on PATH. Do not run two real-daemon suites
+concurrently on the same machine. `mfruitctl screenshot` renders the launcher
+router, not an external app: decode its existing
+`/tmp/whisplay-fb-<id>-*.bin` with `from_rgb565(raw, 240, 280)`.
+Do not acquire a new framebuffer for screenshots. Keep private conversation
+screenshots in temporary storage. Before deploying, compare checksums and
+preserve board configuration/data.
+
+## Suggested commit messages
+
+The local histories differ from the old Windows handoff. Inspect `git diff`
+and `git log` here when staging; no commits were created for you.
+
+- MFruitOS feature recovery:
+  `feat: add grouped Settings, Bluetooth pairing and integrated Wi-Fi`
+- MFruitOS validation fixes:
+  `fix: cancel pairing on shutdown and preserve Linux script line endings`
+- MFruitOS documentation:
+  `docs: record Orange Pi validation and remaining physical checks`
+- ConnectWifi:
+  `feat: unify Wi-Fi settings and require explicit Back selection`
+- WalkieTalkie:
+  `fix: make Status explicit and add safe Back navigation`
+- Messenger:
+  `feat: show Radio Message metadata and sync MFruit SDK 1.2.0`
+- Chatbot:
+  `fix: defer OpenCV loading and sync MFruit SDK 1.2.0`
+- Dashboard:
+  `chore: sync MFruit SDK 1.2.0 and app rules`

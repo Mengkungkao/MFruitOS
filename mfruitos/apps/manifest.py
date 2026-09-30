@@ -1,4 +1,4 @@
-"""Validation of Whisplay app package manifests (``manifest.json``).
+"""Validation of MFruit OS app package manifests (``manifest.json``).
 
 A manifest is rejected — never partially trusted — if any required field is
 missing or unsafe. See APP_DEVELOPMENT.md for the specification.

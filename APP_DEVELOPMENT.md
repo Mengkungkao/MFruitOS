@@ -35,14 +35,14 @@ my-app/
   "description": "Weather information",
   "entrypoint": "run.sh",
   "icon": "assets/icon.png",
-  "min_os_version": "1.0.0",
+  "min_os_version": "1.4.0",
   "repository": "https://github.com/example/whisplay-weather",
-  "exit_gesture": "quad_click",
+  "exit_gesture": "none",
   "priority": 0,
   "env": {"WEATHER_UNITS": "metric"},
   "test": "test.sh",
   "persist": [".venv", "config.yaml"],
-  "disable_esc_exit_key": false
+  "disable_esc_exit_key": true
 }
 ```
 
@@ -54,9 +54,9 @@ my-app/
 | `entrypoint` | yes | relative path inside the package; no `..`, no absolute paths, only `A-Za-z0-9._/-` |
 | `description` | no | up to 160 chars |
 | `icon` | no | relative path to a PNG; a coloured tile with initials is used otherwise |
-| `min_os_version` | no | installation is refused on older MFruit OS versions |
+| `min_os_version` | no | installation is refused on older MFruit OS versions; apps using the current SDK contract declare `1.4.0` or newer |
 | `repository` | no | `https://github.com/owner/repo`; if present it must match the repository the package is downloaded from |
-| `exit_gesture` | no | `quad_click` (default), `long_press` or `none` — passed to the daemon |
+| `exit_gesture` | no | parser accepts `quad_click` (legacy default), `long_press` or `none`; MFruit apps explicitly use `none` because the SDK implements back |
 | `priority` | no | integer; ordering hint (the user's own order wins) |
 | `env` | no | extra environment variables (string values) |
 | `test` | no | script run after installation, before activation; non-zero = rollback |
@@ -146,7 +146,8 @@ The controls, the same in every app and in the launcher:
 ```python
 from mfruit_sdk.input import BACK, NEXT, SELECT, InputController
 
-controller = InputController(on_action, active=lambda: board.foreground_ready,
+controller = InputController(on_action, app_id=APP_ID,
+                             active=lambda: board.foreground_ready,
                              on_armed=show_release_hint)
 controller.attach(board)          # the daemon's button_pressed / button_released
 controller.start()                # and every keyboard on the board
@@ -158,7 +159,10 @@ def on_action(action):
 ```
 
 Keys only count while the app has the screen (`active`), and only keys that
-went down while it did: every process on the board reads the same keyboards.
+went down while it did. MFruit OS holds keyboards exclusively and routes keys
+through its hub to the foreground app. Pass the registered `APP_ID` or inherit
+`WHISPLAY_APP_ID` from `mfruit-run`; standalone SDK readers fall back to evdev
+when the hub is unavailable.
 Call `controller.reset()` when focus is revoked. Talk screens pass
 `talk=lambda: True` (and `talk_press_ms=350` so the first word is kept);
 screens that take text pass `typing=`, which turns Space into a space.
@@ -188,7 +192,8 @@ check for them in `install.sh` and fail with a clear message.
 Keep Python dependencies in a virtualenv inside `$WHISPLAY_OS_APP_DATA` (see
 the template's `install.sh`), or list `.venv` in `persist`, so updates don't
 rebuild it. Building wheels on a Pi Zero 2 W is slow; prefer
-`--system-site-packages` with apt-provided Pillow/numpy.
+`--system-site-packages` with apt-provided Pillow. Use the SDK's `to_rgb565`
+for frame conversion; it needs no NumPy dependency.
 
 ## How updates are installed
 
@@ -227,8 +232,47 @@ updates for them.
 ## Testing locally
 
 ```bash
+python3 ~/MFruitOS/scripts/check-app.py ./my-app  # static package/rules/SDK checks
+~/MFruitOS/scripts/sdk-sync.sh ./my-app/app --check
 mfruitctl sideload ./my-app        # full install pipeline from a folder or archive
 mfruitctl launch my-app
 tail -f ~/.whisplay-os/logs/my-app.log
 mfruitctl screenshot /tmp/s.png    # what MFruit OS itself is drawing
 ```
+
+Use the creation, development, production and integration checklists in
+[docs/APP_RULES.md](docs/APP_RULES.md) before publishing. Static checks and
+unit tests do not confirm physical button, keyboard, audio, radio or LED
+behaviour. Record each hardware check separately, including checks not run.
+
+An app adopted from the daemon registry can run inside MFruit OS without
+being a complete native release package. A manifest drafted under
+`contrib/manifests/` does not install missing dependencies, build an app, or
+provide its smoke test. Test the actual release artifact through sideload,
+update and rollback before calling it ready for native distribution.
+
+### Existing companion release gaps (2026-09-30)
+
+These describe the current local companion checkouts, not a requirement to
+reinstall working clone-based apps. Continue using their board-specific
+setup instructions and daemon adoption until the native migration is tested.
+
+| App | Work still required before native release sign-off |
+|---|---|
+| Connect WiFi | Native manifest and install-time smoke hook are absent; adapt its standalone setup/registration flow for managed installation. |
+| WalkieTalkie | Add a native manifest and smoke hook. Keep radio/codec/system setup separate from repeatable package hooks; preserve managed registration. |
+| Messenger | A native manifest exists, but lacks a minimum OS version and smoke hook. Persist or relocate downloaded `models/`, migrate data into the managed data contract, and replace assumptions about a sibling `WalkieTalkie/config.yaml` before testing updates and rollback. |
+| Crypto dashboard | Add a native manifest and smoke hook; adapt the standalone installer, which can install system packages and write daemon registration directly, for a noninteractive managed lifecycle. Account for existing external configuration/data. |
+| AI Chatbot | Add the native package manifest and a reproducible Node build/install plus smoke hook, or publish a complete built release artifact. Preserve model/configuration/data paths. Its existing Node button logic still relies on daemon `quad_click` exit; see the explicit compatibility exception in the app rules. |
+
+Shared SDK/UI checks and runtime fixes are separate from these release
+requirements. A passing app test suite does not prove that a new package can
+install dependencies, preserve models/messages, or reverse a data migration.
+
+## SDK 1.2.0 keyboard migration
+
+Pass the stable app id to InputController(app_id=APP_ID). The SDK uses MFruit
+OS's key hub while available and direct evdev input when running standalone.
+Do not open /dev/input yourself: the platform grabs keyboards exclusively.
+Synchronize SDK copies and deploy keyboard apps together with MFruit OS 1.4.0.
+The key hub protocol and ownership rules are in docs/ARCHITECTURE.md.

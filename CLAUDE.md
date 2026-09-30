@@ -242,6 +242,7 @@ daemon code) and fixed in 1.1.0. Full record: `docs/LAUNCH_LIFECYCLE.md`.
 | RC3 | The daemon has a single pending-launch slot; a second launch blocks the first app. | Single flight in the ApplicationManager; nothing else may launch. |
 | RC4 | No single-flight rule: autostart, control socket and Retry could overlap. | ApplicationManager refuses (never queues) requests while a session exists. |
 | RC5 | A "follow whatever took the screen" patch masked RC1. | A foreign app during a launch is an intruder, never adopted as intended. |
+| RC6 | Keyboard input also reached tty1's autologin shell; Up and Enter executed a previous launcher restart command. | MFruit OS exclusively grabs keyboards and routes keys to their foreground owner through the key hub. |
 
 Rules learned:
 
@@ -560,16 +561,16 @@ Applications must not independently read the physical button or input hardware u
 
 The platform owns global navigation input.
 
-## Keyboards and apps (1.3.0)
+## Keyboards and apps (1.4.0)
 
-* whisplay-daemon hands keys only to its own pages (and closes an external app
-  on Esc unless it registers `disable_esc_exit_key`). So MFruit OS and every
-  MFruit app read USB / Bluetooth keyboards themselves, through
-  `mfruitos/sdk/keys.py`. Nobody grabs the device: **every process sees every
-  key**. The guard is ownership: a reader acts only while its program owns the
-  screen, and only on keys whose press it saw while it did (the key-up of the
-  Esc that closed an app, or the repeat of the Enter that opened one, must not
-  act in the next owner — the keyboard form of RC1).
+* MFruit OS reads USB / Bluetooth keyboards through `mfruitos/sdk/keys.py`
+  with `grab=True` (EVIOCGRAB). The key hub routes keys to the foreground
+  owner. Each press, repeat and release stays with the press's original
+  owner. Apps pass their immutable `app_id` to the SDK's InputController.
+  Apps fall back to direct reading only without a reachable hub. Deploy the
+  matching SDK to all keyboard apps together. Developer → Daemon desktop
+  releases the grab; returning to MFruit OS reacquires it. An app still
+  checks screen ownership and ignores a release whose press it never saw.
 * Apps get the platform's controls through the MFruit App SDK
   (`mfruitos/sdk/`, vendored as `mfruit_sdk` by `scripts/sdk-sync.sh`):
   `InputController` is the one interpreter of the button and keyboard in an

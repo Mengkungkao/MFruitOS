@@ -100,7 +100,7 @@ else
   CODE_DIR="$OS_HOME/system/versions/$VERSION-local$STAMP"
   as_user mkdir -p "$CODE_DIR"
   ITEMS=()
-  for item in mfruitos assets config scripts templates manifest.json LICENSE README.md \
+  for item in mfruitos assets config scripts templates docs manifest.json LICENSE README.md \
       APP_DEVELOPMENT.md INSTALL.md CHANGELOG.md CONTRIBUTING.md; do
     [ -e "$SRC/$item" ] && ITEMS+=("$item")
   done

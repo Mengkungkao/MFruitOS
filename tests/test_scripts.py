@@ -128,11 +128,17 @@ class LaunchGateTests(TempHomeTestCase):
 
     def ran(self):
         path = os.path.join(self.paths.app_root("demo"), "data", "ran")
-        return open(path).read().count("ran") if os.path.exists(path) else 0
+        if not os.path.exists(path):
+            return 0
+        with open(path) as fp:
+            return fp.read().count("ran")
 
     def gate_log(self):
         path = os.path.join(self.paths.logs_dir, "launch-gate.log")
-        return open(path).read() if os.path.exists(path) else ""
+        if not os.path.exists(path):
+            return ""
+        with open(path) as fp:
+            return fp.read()
 
     def test_denied_without_ticket_while_launcher_runs(self):
         self.hold_launcher_lock()

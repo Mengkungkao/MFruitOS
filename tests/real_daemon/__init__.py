@@ -43,15 +43,16 @@ class RealDaemon:
                        "persist": True, "exit_gesture": "quad_click"}, fp)
 
     def start(self, whisplay_src: str, mfruit_lock: str = "") -> "RealDaemon":
-        log = open(self.log_path, "w")
         extra = [mfruit_lock] if mfruit_lock else []
-        self.proc = subprocess.Popen([sys.executable, os.path.join(HERE, "runner.py"), whisplay_src,
-                                      self.socket_path, self.home, *extra],
-                                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=log,
-                                     text=True, bufsize=1)
+        with open(self.log_path, "w") as log:
+            self.proc = subprocess.Popen([sys.executable, os.path.join(HERE, "runner.py"), whisplay_src,
+                                          self.socket_path, self.home, *extra],
+                                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=log,
+                                         text=True, bufsize=1)
         deadline = time.time() + 15
         while not os.path.exists(self.socket_path):
             if self.proc.poll() is not None or time.time() > deadline:
+                self.stop()
                 raise RuntimeError(f"real daemon failed to start; see {self.log_path}")
             time.sleep(0.05)
         return self
@@ -92,6 +93,9 @@ class RealDaemon:
             except subprocess.TimeoutExpired:
                 self.proc.kill()
                 self.proc.wait(5)
+        if self.proc:
+            self.proc.stdin.close()
+            self.proc.stdout.close()
         subprocess.run(["pkill", "-f", os.path.join(HERE, "fakeapp.py") + " "], check=False)
 
 

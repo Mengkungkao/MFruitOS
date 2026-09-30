@@ -53,6 +53,7 @@ class FocusIntegrationTests(unittest.TestCase):
 
     def tearDown(self):
         self.stream.stop()
+        self.fm.framebuffer.detach()
         self.daemon.stop()
 
     def wait_for(self, condition, what, timeout=5.0):

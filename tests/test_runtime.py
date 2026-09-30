@@ -116,6 +116,17 @@ class RuntimeEndToEndTests(TempHomeTestCase):
         self.assertFalse(send(self.paths.control_socket, "key", {"name": "f13"})["ok"])
         self.assertIn("keyboards", self.status())
 
+    def test_settings_app_returns_to_wifi_after_exit(self):
+        from mfruitos.launcher.ui.screens.settings import WifiScreen
+        wifi = WifiScreen(self.rt)
+        self.rt.loop.post(self.rt.push, wifi)
+        self.wait(lambda: self.rt.router.top is wifi, "Wi-Fi screen")
+        self.rt.loop.post(self.rt.launch_app, "demo", "settings")
+        self.wait(lambda: self.daemon.foreground == "demo", "settings app foreground")
+        self.daemon.app_exits("demo")
+        self.wait(lambda: self.rt.router.top is wifi and self.rt.focus.has_focus,
+                  "return to Wi-Fi after app exit")
+
     def test_keys_that_went_down_elsewhere_do_nothing(self):
         self.rt.loop.post(self.rt.home_screen.focus_key, "os.settings")
         # e.g. the Enter that opened an app, released after MFruit OS is back

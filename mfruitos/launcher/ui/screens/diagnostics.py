@@ -10,7 +10,7 @@ from mfruitos.launcher.ui.theme import SCREEN_H, SCREEN_W
 from mfruitos.launcher.navigation.gestures import gesture_label
 from mfruitos.system import diagnostics, system_info
 
-CHECK_ORDER = ("Whisplay Daemon", "Whisplay UI", "Display", "Button", "Keyboard", "RGB LED",
+CHECK_ORDER = ("Hardware service", "Hardware desktop", "Display", "Button", "Keyboard", "RGB LED",
                "Audio", "Network", "Storage", "Internet", "GitHub")
 
 

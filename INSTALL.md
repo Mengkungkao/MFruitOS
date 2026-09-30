@@ -1,5 +1,10 @@
 # Installing MFruit OS
 
+For step-by-step setup, SSH deployment, testing, debugging and recovery on
+another board, follow [docs/DEVICE_SETUP.md](docs/DEVICE_SETUP.md). Run
+`bash scripts/setup-device.sh --check` for a read-only prerequisite check;
+`--install` checks first, then invokes the installer below.
+
 ## Requirements
 
 | | |
@@ -101,9 +106,9 @@ own desktop is available again after uninstalling.
 
 | Symptom | What to check |
 |---|---|
-| The daemon's "Opening app…" / desktop still appears | Run `install.sh` again (adds the drop-in); Settings → System → Diagnostics shows *Whisplay UI: background* when active. |
-| Screen shows the Whisplay daemon's desktop, not MFruit OS | `systemctl status whisplay-os`; pick **MFruit OS** on the daemon desktop to bring it back (Developer → *Daemon desktop* switches there on purpose). |
-| "Whisplay daemon — Daemon unavailable" | The daemon service is stopped or failed: `journalctl -u whisplay-daemon -n 50`. *Retry* waits for it, *Restart daemon* restarts it. |
+| The daemon's "Opening app…" / desktop still appears | Run `install.sh` again (adds the drop-in); Settings → System → Diagnostics shows *Hardware desktop: background* when active. |
+| Screen shows the hardware desktop, not MFruit OS | `systemctl status whisplay-os`; pick **MFruit OS** on the hardware desktop to bring it back (Developer → *Daemon desktop* switches there on purpose). |
+| "Hardware service unavailable" | The daemon service is stopped or failed: `journalctl -u whisplay-daemon -n 50`. *Retry* waits for it, *Restart daemon* restarts it. |
 | An app shows "Application failed to start" | *Logs* on that screen, or `~/.whisplay-os/logs/<app>.log` (MFruit OS apps) / `~/.whisplay-daemon/daemon-app.log` (daemon apps). |
 | Updater says "Internet unavailable" | Check the network; the check is retried automatically after 10 minutes. |
 | "GitHub rate limit reached" | Anonymous API access allows 60 requests per hour per IP address. An update check costs one request per app with a repository; release lists are reused for 5 minutes. Add a token as `updater.github_token` in `settings.json` for 5000/hour. |
@@ -117,3 +122,10 @@ mfruitctl status
 mfruitctl screenshot /tmp/screen.png      # exactly what MFruit OS is drawing
 python3 -m mfruitos --self-test           # (with PYTHONPATH set) offline render test
 ```
+
+## Upgrading to 1.4.0
+
+Update all keyboard apps to SDK 1.2.0 before restarting MFruit OS. The launcher
+now grabs keyboards exclusively; older direct-input apps otherwise receive no
+keys. Install the updated daemon wrapper and restart whisplay-daemon as well
+so built-in Volume, Power and Wi-Fi pages receive forwarded keyboard input.

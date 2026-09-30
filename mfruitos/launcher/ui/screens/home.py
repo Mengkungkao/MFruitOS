@@ -152,7 +152,7 @@ class HomeScreen(Screen):
             return ("Running" + (f" · {app.version}" if app.version else ""), "success")
         if app.update_available:
             return (f"Update available · {app.latest_version}", "accent")
-        return (app.description or (f"Version {app.version}" if app.version else "Whisplay app"),
+        return (app.description or (f"Version {app.version}" if app.version else "MFruit OS app"),
                 "muted")
 
     def _draw_card(self, p: Painter, entry: HomeEntry, top: int) -> None:

@@ -4,6 +4,47 @@ All notable changes to MFruit OS are documented here. Versions follow
 [Semantic Versioning](https://semver.org/). App versions are independent of
 the OS version.
 
+## [1.4.0] - 2026-09-30
+
+- Canonical app creation/development/production rules, native package preflight,
+  and a device setup checker with a manual installation/debug/recovery guide.
+- Keep documentation in installed versions; close test fixture resources and
+  remove tracked Python bytecode.
+
+- MFruit OS branding in app labels, diagnostics, CLI help and package errors.
+  Messenger's app description is Radio Message. Existing hardware identifiers,
+  service names, paths and launch behavior stay compatible.
+- Grouped Settings with coloured icon tiles, Wi-Fi and Bluetooth first, and
+  About, Software Update, diagnostics and power under General.
+- Settings → Wi-Fi now opens Connect WiFi directly as one MFruit-styled
+  network manager, with connection/IP status, nearby and hidden networks,
+  saved-profile joining, password recovery and phone setup in one flow. It
+  returns to Settings on exit, stays in Apps for management and leaves Home.
+- Wi-Fi opens directly without the Connect WiFi loading screen. It now uses
+  shared SDK gestures: tap next, double previous, hold/release select, four
+  clicks back; explicit Back to Settings rows remain available.
+- The RGB light gives white button feedback. Connect WiFi also uses it for
+  Wi-Fi signal, scanning/connecting activity and success/failure, while
+  honoring the existing Light switch and brightness.
+- Bluetooth device groups, discovery, power, connect/disconnect, confirmed
+  forgetting, passkey display and numeric confirmation. Blocking operations
+  use a separate worker; the pairing agent does not replace the daemon's agent.
+- Bluetooth recovery: reuse slow agent startup, report discovery failures,
+  preserve completed device actions if refreshing status fails, and ignore
+  pairing callbacks from an earlier operation.
+- Closing Bluetooth cancels pending pairing on its existing agent connection
+  and releases the waiting worker immediately. Queued pairing cannot start
+  after shutdown.
+- Enforce LF source/script line endings across checkouts so Windows-origin
+  copies cannot break the Linux launch gate; refresh boot and Settings images.
+- Boot draws only the centred logo on a dark background; startup steps stay
+  in the log and configuration errors remain visible after boot.
+- SDK 1.2.0: MFruit OS exclusively grabs keyboards and routes each key to
+  the foreground owner through its key hub. This prevents keys reaching tty1's
+  autologin shell and accidentally executing a launcher restart.
+- Deploy the matching SDK to keyboard apps with this release. Daemon desktop
+  mode releases the keyboard grab; returning to MFruit OS takes it again.
+
 ## [1.3.0] - 2026-09-30
 
 ### Added
