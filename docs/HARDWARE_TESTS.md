@@ -17,13 +17,13 @@ tail -f ~/.whisplay-os/logs/launcher.log ~/.whisplay-os/logs/launch-gate.log \
 | 2 | Hold on an app and keep holding 2 s | at 0.7 s the card says **Release to open**; nothing opens while held | `EVENT PRESS`, no `LAUNCH_REQUEST` yet |
 | 3 | Release | **exactly that app** opens | one `LAUNCH_REQUEST app=<it> source=home`, `STATE … -> RUNNING` |
 | 4 | Leave the app (four quick clicks, or the app's own exit) | back on MFruit OS Home, same app highlighted | `SESSION_END … outcome=exited` |
-| 5 | Settings → Audio → Volume (hold, release) | the Volume page opens **and stays open** | `LAUNCH_REQUEST app=whisplay-volume kind=page` |
+| 5 | Settings → Sounds → Volume (hold, release) | the Volume page opens **and stays open** | `LAUNCH_REQUEST app=whisplay-volume kind=page` |
 | 6 | Open a slow app (e.g. WalkieTalkie); while "Opening <App>" is on screen, hold the button ~1 s and release, twice | **nothing else happens**; the slow app opens (without the background wrapper: no other app starts, a daemon page may flash and is closed) | no new `LAUNCH_REQUEST`; without the wrapper `DENIED …` / `INTRUDER …` |
 | 7 | Open an app that crashes (or stop its folder) | error screen with Retry / Logs / Back; launcher keeps working | `SESSION_END … outcome=failed` |
 | 8 | Restart MFruit OS while an app is on screen | MFruit OS waits; after the app exits it shows Home | `EXTERNAL_SESSION`, then `SESSION_END` |
 | 9 | Open any app and watch the screen until it appears | only MFruit OS's **Opening <App>** screen, never the daemon's list or "Opening app…" | Diagnostics: *Whisplay UI: background* |
 | 10 | Leave an app, then check `pgrep -af <app>` over SSH | the app's process is gone within ~5 s | `APP_CLOSED app=… result=exited` (or `terminated`) |
-| 11 | Set the app to *Keep running* (Settings → Applications → app), open and leave it | it keeps running; Home shows *Running* | no `APP_CLOSED` line |
+| 11 | Set the app to *Keep running* (Settings → Apps → app), open and leave it | it keeps running; Home shows *Running* | no `APP_CLOSED` line |
 
 With a keyboard (USB, then Bluetooth), plugged in while MFruit OS runs.
 (`mfruitctl key down|up|enter|escape` exercises MFruit OS's own key handling
@@ -31,7 +31,7 @@ without a keyboard, but not the reading of one.)
 
 | # | Do | Expect | Log shows |
 |---|---|---|---|
-| 12 | Plug the keyboard in; press ↓ ↓ ↑ on Home | the selection moves at once (no restart needed); Settings → System → Diagnostics lists it under *Keyboard* | `keyboard connected: eventN`, `EVENT KEY down …` |
+| 12 | Plug the keyboard in; press ↓ ↓ ↑ on Home | the selection moves at once (no restart needed); Settings → General → Diagnostics lists it under *Keyboard* | `keyboard connected: eventN`, `EVENT KEY down …` |
 | 13 | Enter on an app | exactly that app opens, once | one `LAUNCH_REQUEST … source=home` |
 | 14 | Inside an MFruit app (dashboard, WalkieTalkie, Messenger, chatbot): arrows / Enter / Esc | the app's own list moves / opens / goes back; Esc on its first screen leaves it, back to Home with nothing else opening | `SESSION_END … outcome=exited` |
 | 15 | WalkieTalkie or Messenger on a talk screen: hold Space, speak, let go | it records while Space is held and sends on release | the app's log: listening / sent |
@@ -58,3 +58,29 @@ CHANGELOG entry. A step that could not be run is reported as *not verified*.
 - Bluetooth: scan, pair a keyboard using the displayed code, confirm a numeric
   comparison, reject/cancel pairing, disconnect/reconnect and forget.
 - Boot displays only the logo; configuration errors remain visible afterward.
+
+## Orange Pi checkpoint — 2026-09-30
+
+Deployed MFruit OS 1.4.0 and the matching SDK 1.2.0 apps to
+`orangepi@192.168.0.130`. Both systemd services are active.
+
+- Automated Linux suite: 260 tests passed, including the real-daemon harness;
+  self-test rendered 37 screens. Connect WiFi: 129 passed, 1 skipped;
+  Messenger: 141 passed; WalkieTalkie: 578 passed; chatbot keyboard/startup: 12 passed.
+  Chatbot TypeScript compiled successfully with the existing dependencies.
+- Live control-socket keys opened Settings and Wi-Fi, launched Connect WiFi,
+  and exited it through the key hub back to Wi-Fi. Bluetooth opened and
+  completed discovery. Live screenshots were inspected.
+- Messenger, WalkieTalkie and chatbot launched on the board and returned via
+  key-hub Escape. The chatbot initially missed the launch deadline; deferring
+  its optional OpenCV import reduced UI import time from 4.345 s to 2.078 s,
+  and its subsequent live launch succeeded without changing the timeout.
+- BlueZ queries, discovery, and registration/shutdown of our connection's
+  pairing agent succeeded as `orangepi` while the daemon was running.
+- Home excludes Connect WiFi; it remains in Settings → Apps. Hello Whisplay
+  and Run Test were removed and remained absent after the daemon restart.
+- Physical USB/Bluetooth keyboard input, tty1 isolation, physical button
+  gestures, actual pairing/confirmation/cancellation, and grab release in
+  Daemon desktop mode remain **not verified on hardware**. No keyboards were
+  attached during these checks. Boot appearance was verified in a rendered
+  preview, not observed during a physical reboot.

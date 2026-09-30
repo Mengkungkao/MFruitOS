@@ -13,6 +13,9 @@ the OS version.
 - Bluetooth device groups, discovery, power, connect/disconnect, confirmed
   forgetting, passkey display and numeric confirmation. Blocking operations
   use a separate worker; the pairing agent does not replace the daemon's agent.
+- Bluetooth recovery: reuse slow agent startup, report discovery failures,
+  preserve completed device actions if refreshing status fails, and ignore
+  pairing callbacks from an earlier operation.
 - Boot draws only the centred logo on a dark background; startup steps stay
   in the log and configuration errors remain visible after boot.
 - SDK 1.2.0: MFruit OS exclusively grabs keyboards and routes each key to

@@ -1,3 +1,6 @@
+import sys
+import threading
+import types
 import unittest
 from unittest.mock import Mock, patch
 
@@ -75,3 +78,66 @@ class BluetoothTests(unittest.TestCase):
         reply.assert_called_once_with()
         error.assert_not_called()
         bt._glib.source_remove.assert_called_once_with(42)
+
+    def test_fallback_search_reports_failure_and_no_response(self):
+        for output in ("Failed to start discovery: org.bluez.Error.NotReady", ""):
+            with self.subTest(output=output):
+                bt = self.service({("--timeout", "8", "scan", "on"): output})
+                with self.assertRaises(RuntimeError):
+                    bt.search()
+
+    def test_short_fallback_search_still_has_a_timeout(self):
+        bt = self.service({})
+        bt._run = Mock(return_value="Discovery started")
+        bt.search(0.5)
+        bt._run.assert_called_once_with(["bluetoothctl", "--timeout", "1", "scan", "on"], 5.5)
+
+    def test_timed_out_agent_start_reuses_in_flight_thread(self):
+        bt = self.service({})
+        bt._dbus = Mock()
+        release = threading.Event()
+        entered = threading.Event()
+
+        def agent_loop(ready):
+            entered.set()
+            release.wait(5)
+
+        bt._agent_loop = Mock(side_effect=agent_loop)
+        try:
+            with patch.object(bt._agent_ready, "wait", return_value=False):
+                self.assertFalse(bt.start_agent())
+                self.assertTrue(entered.wait(1))
+                first_thread = bt._agent_thread
+                self.assertFalse(bt.start_agent())
+                self.assertIs(bt._agent_thread, first_thread)
+            bt._agent_loop.assert_called_once_with(bt._agent_ready)
+        finally:
+            release.set()
+            bt._agent_thread.join(2)
+        self.assertFalse(bt._agent_thread.is_alive())
+
+    def test_closed_service_does_not_start_an_agent(self):
+        bt = self.service({})
+        bt._dbus = Mock()
+        bt.close()
+        with patch("mfruitos.system.bluetooth.threading.Thread") as thread:
+            self.assertFalse(bt.start_agent())
+        thread.assert_not_called()
+
+    def test_agent_bus_failure_signals_startup_completion(self):
+        bt = self.service({})
+        dbus = types.ModuleType("dbus")
+        dbus.SystemBus = Mock(side_effect=RuntimeError("System bus unavailable"))
+        dbus.service = types.ModuleType("dbus.service")
+        mainloop = types.ModuleType("dbus.mainloop.glib")
+        mainloop.DBusGMainLoop = Mock()
+        gi = types.ModuleType("gi.repository")
+        gi.GLib = Mock()
+        ready = threading.Event()
+        with patch.dict(sys.modules, {"dbus": dbus, "dbus.service": dbus.service,
+                                      "dbus.mainloop.glib": mainloop,
+                                      "gi.repository": gi}):
+            bt._agent_loop(ready)
+        self.assertTrue(ready.is_set())
+        self.assertIsNone(bt._agent)
+        self.assertIsNone(bt._agent_bus)

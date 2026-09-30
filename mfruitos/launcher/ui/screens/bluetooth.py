@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import logging
+from dataclasses import replace
+
 from mfruitos.launcher.ui.components import Item, back_item, section
 from mfruitos.launcher.ui.screens.base import ListScreen
 from mfruitos.launcher.ui.screens.dialogs import MessageScreen, confirm
 from mfruitos.system.bluetooth import Prompt, named
+
+log = logging.getLogger("mfruitos.bluetooth.ui")
 
 
 class BluetoothScreen(ListScreen):
@@ -122,6 +127,7 @@ class BtDeviceScreen(ListScreen):
         self.busy = False
         self.status = ""
         self.prompt_screen = None
+        self._operation = 0
 
     @property
     def modal(self):
@@ -154,15 +160,25 @@ class BtDeviceScreen(ListScreen):
         if self.busy:
             return
         self.busy = True
+        self._operation += 1
+        operation = self._operation
         self.status = {"pair": "Pairing…", "connect": "Connecting…",
                        "disconnect": "Disconnecting…", "forget": "Forgetting…"}[action]
         bt = self.os.bluetooth
-        bt.on_prompt = lambda prompt: self.os.loop.post(self.on_prompt, prompt)
+        bt.on_prompt = lambda prompt: self.os.loop.post(self._operation_prompt, operation, prompt)
         self.redraw()
 
         def work():
             result = getattr(bt, action)(self.device.address)
-            devices = bt.devices()
+            if action == "forget":
+                return result, None
+            try:
+                devices = bt.devices()
+            except Exception as exc:
+                # The action has already completed. A status lookup must not
+                # turn a successful connection into an apparent failure.
+                log.info("Bluetooth status after %s: %s", action, exc)
+                devices = None
             return result, devices
 
         def done(result):
@@ -170,9 +186,17 @@ class BtDeviceScreen(ListScreen):
             self.finish()
             self.status = message
             if ok and action == "forget":
-                self.os.pop()
+                if self.os.router_top() is self:
+                    self.os.pop()
             else:
-                self.device = next((d for d in devices if d.address == self.device.address), self.device)
+                if devices is not None:
+                    self.device = next((d for d in devices if d.address == self.device.address), self.device)
+                elif ok:
+                    if action == "pair":
+                        self.device = replace(self.device, paired=True, connected=message == "Connected")
+                    elif action in ("connect", "disconnect"):
+                        self.device = replace(self.device, connected=action == "connect")
+                    self.status = message + "; status unavailable"
                 self.os.toast(message, "success" if ok else "error")
             self.redraw()
 
@@ -183,9 +207,14 @@ class BtDeviceScreen(ListScreen):
         self.os.run_task("bluetooth-" + action, work, done, failed, lane="bluetooth")
 
     def finish(self):
+        self._operation += 1
         self.on_prompt(Prompt("done"))
         self.os.bluetooth.on_prompt = lambda prompt: None
         self.busy = False
+
+    def _operation_prompt(self, operation, prompt):
+        if operation == self._operation:
+            self.on_prompt(prompt)
 
     def on_prompt(self, prompt):
         if prompt.kind == "done":

@@ -77,6 +77,8 @@ class Bluetooth:
         self._dbus = _load_dbus()
         self._agent = None
         self._agent_lock = threading.Lock()
+        self._agent_thread = None
+        self._agent_ready = threading.Event()
         self._query_bus = None
         self._agent_bus = None
         self._glib = self._mainloop = None
@@ -156,7 +158,10 @@ class Bluetooth:
                     except self._dbus.exceptions.DBusException as exc:
                         log.info("Stop discovery: %s", exc)
             return
-        self._ctl("--timeout", str(int(seconds)), "scan", "on", timeout=seconds + 5)
+        output = self._ctl("--timeout", str(max(1, int(seconds))), "scan", "on", timeout=seconds + 5)
+        reason = _reason(output)
+        if reason or not output.strip():
+            raise RuntimeError(reason or "Bluetooth search did not respond")
 
     def pair(self, address: str) -> tuple[bool, str]:
         """Pair, trust (so it reconnects by itself) and connect. (ok, message)."""
@@ -297,14 +302,20 @@ class Bluetooth:
         if self._dbus is None:
             return False
         with self._agent_lock:
-            if self._agent is not None:
+            if self._closed:
+                return False
+            if self._agent is not None and self._agent_ready.is_set():
                 return True
-            ready = threading.Event()
-            thread = threading.Thread(target=self._agent_loop, args=(ready,),
-                                      name="bt-agent", daemon=True)
-            thread.start()
-            ready.wait(5.0)
-            return self._agent is not None
+            # A slow system bus may outlive the caller's wait. Reuse that
+            # startup attempt instead of leaking another connection and agent.
+            if self._agent_thread is None or not self._agent_thread.is_alive():
+                self._agent_ready.clear()
+                self._agent_thread = threading.Thread(target=self._agent_loop,
+                                                      args=(self._agent_ready,),
+                                                      name="bt-agent", daemon=True)
+                self._agent_thread.start()
+        self._agent_ready.wait(5.0)
+        return not self._closed and self._agent is not None
 
     def _agent_loop(self, ready: threading.Event) -> None:
         try:
@@ -317,15 +328,22 @@ class Bluetooth:
             ready.set()
             return
         outer = self
+        try:
+            bus = dbus.SystemBus(private=True, mainloop=DBusGMainLoop())
+        except Exception as exc:
+            log.warning("Cannot open the pairing agent's bus: %s", exc)
+            ready.set()
+            return
         self._glib = GLib
-        bus = dbus.SystemBus(private=True, mainloop=DBusGMainLoop())
         self._agent_bus = bus
 
         class Agent(dbus.service.Object):
             @dbus.service.method("org.bluez.Agent1", in_signature="", out_signature="")
             def Release(self):
                 outer._agent = None
-                outer.answer(False)
+                outer._resolve_confirmation(False)
+                if outer._mainloop is not None:
+                    outer._mainloop.quit()
 
             @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="s")
             def RequestPinCode(self, device):
@@ -380,6 +398,7 @@ class Bluetooth:
             log.warning("Cannot register the pairing agent: %s", exc)
             bus.close()
             self._agent_bus = None
+            self._glib = None
             ready.set()
             return
         self._mainloop = GLib.MainLoop()
@@ -392,6 +411,7 @@ class Bluetooth:
             self._agent = None
             bus.close()  # BlueZ unregisters this connection's agent.
             self._agent_bus = None
+            self._mainloop = self._glib = None
 
     # ------------------------------------------------------ D-Bus helpers
     def _bus(self):
