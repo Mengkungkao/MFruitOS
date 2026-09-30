@@ -1,5 +1,42 @@
 # CONTINUE — MFruit OS validation and app integration, 2026-09-30
 
+## Current uncommitted work — app installer and first-install setup, 2026-10-01
+
+The working tree now contains a new app-installation flow, first-install
+provisioning, and a daemon startup handoff adjustment. No commits or pushes have
+been made for these changes.
+
+- Home now opens **App installer**; its curated catalogue installs
+  checksum-pinned app snapshots, prepares package-local venv scripts and the
+  current SDK, and leaves more-source discovery, local packages and updates
+  available. Apps already on disk can be restored to the Apps menu without
+  deleting their files or data.
+- Installation provisions the bundled ConnectWifi package, a clean initial
+  Apps menu and the two starter games where their daemon definitions exist.
+  Settings tracks the curated app IDs so unrelated daemon apps remain disabled
+  or out of the menu until explicitly added. Wi-Fi selection now uses
+  ConnectWifi rather than the daemon's Wi-Fi page.
+- The installer checks NetworkManager and Python venv support and grants the
+  target user the listed NetworkManager actions through a polkit rule. The
+  daemon wrapper treats MFruit OS as active for up to 30 seconds at startup to
+  avoid briefly exposing the daemon UI before the launcher acquires its lock.
+- Pending files: `config/catalog.json`, `config/default.json`,
+  `bundled/connectwifi/`, `mfruitos/provision.py`,
+  `mfruitos/updater/catalog.py`, and changes in the registry, launcher screens
+  and services, settings, updater, installer script and daemon wrapper.
+- At handoff, `git diff --check` passes. Focused tests for catalogue
+  verification, first-install provisioning, clean-menu behavior, polkit setup
+  and daemon startup grace have not been run or added yet. Run the relevant
+  suite and full tests before deploying; inspect the installer changes because
+  they add system packages and a persistent polkit rule.
+
+Suggested commit messages for this pending work:
+
+- `feat: add checksum-pinned app installer catalogue`
+- `feat: provision ConnectWifi and a curated first-run app menu`
+- `fix: keep daemon UI hidden during launcher startup`
+- `docs: record app installer work and remaining validation`
+
 ## Current Settings and updater checkpoint
 
 The Settings spacing and package-management follow-up is deployed at

@@ -31,9 +31,7 @@ class ApplicationsScreen(ListScreen):
         self.subtitle = f"{len(self.os.registry.apps())} installed"
 
     def items(self) -> list[Item]:
-        from mfruitos.launcher.ui.screens.updater import InstallAppScreen
-        rows = [Item("Install app", lambda: self.os.push(InstallAppScreen(self.os)),
-                     kind="nav", icon="package")]
+        rows = []
         for app in self.os.registry.apps():
             label, tone = status_tag(app)
             rows.append(Item(app.name, lambda a=app.id: self.os.push(AppDetailScreen(self.os, a)),

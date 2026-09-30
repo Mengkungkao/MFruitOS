@@ -156,9 +156,11 @@ class ScreenServices:
 
     def open_home_entry(self, entry) -> None:
         from mfruitos.launcher.ui.screens.settings import SettingsScreen
-        from mfruitos.launcher.ui.screens.updater import UpdaterScreen
+        from mfruitos.launcher.ui.screens.updater import UpdaterScreen, InstallAppScreen
         if entry.key == "os.settings":
             self.push(SettingsScreen(self))
+        elif entry.key == "os.installer":
+            self.push(InstallAppScreen(self))
         elif entry.key == "os.updater":
             self.push(UpdaterScreen(self))
         elif entry.kind == "system":
@@ -275,9 +277,34 @@ class ScreenServices:
                        on_success=lambda r: self._after_new_install(r.app_id, r.version))
 
     def _after_new_install(self, app_id: str, version: str) -> None:
+        self.enable_installed_app(app_id)
         self.updater.mark_installed(app_id, version)
         self.refresh_registry(query_daemon=True)
         self.home_screen.focus_key(app_id)
+
+    def enable_installed_app(self, app_id: str) -> None:
+        ids = self.settings.get("apps.installed_ids")
+        if app_id not in ids:
+            self.settings.set("apps.installed_ids", ids + [app_id])
+        self.settings.set_app_flag(app_id, "enabled", True)
+        self.settings.set_app_flag(app_id, "hidden", False)
+        self.settings.set_app_flag(app_id, "autostart", False)
+        self.flush_settings()
+
+    def restore_catalog_app(self, app_id: str) -> None:
+        entry = self.registry.get(app_id)
+        if entry is None or entry.broken:
+            self.toast("App files are missing", "error")
+            return
+        self.enable_installed_app(app_id)
+        self.refresh_registry(query_daemon=True)
+        self.home_screen.focus_key(app_id)
+        self.toast(f"{entry.name} added to Apps", "success")
+
+    def install_catalog_app(self, app_id: str) -> None:
+        self.start_job("Install app", lambda progress: self.updater.install_catalog(app_id, progress),
+                       lambda r: f"{r.name} installed",
+                       on_success=lambda r: self._after_new_install(r.app_id, r.version))
 
     def update_all(self) -> None:
         targets = [(a, self.updater.info(a.id)) for a in self.registry.apps()]

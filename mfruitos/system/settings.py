@@ -144,6 +144,8 @@ SCHEMA: dict[str, tuple[Any, Callable[[Any], Any]]] = {
     "daemon.fallback_direct_display": (True, _boolean),
     "daemon.whisplay_root": ("", _string(300)),
     "apps.order": ([], _id_list),
+    "apps.clean_menu": (False, _boolean),
+    "apps.installed_ids": ([], _id_list),
     "apps.default_app": ("", _app_id_or_empty),
 }
 

@@ -41,9 +41,8 @@ class HomeScreen(Screen):
             for page in self.os.registry.system_pages():
                 label, icon, _ = SYSTEM_PAGES[page.id]
                 entries.append(HomeEntry(page.id, label, "system", icon=icon, app=page))
-        updates = self.os.updates_available_count()
+        entries.append(HomeEntry("os.installer", "App installer", "builtin", icon="package"))
         entries.append(HomeEntry("os.settings", "Settings", "builtin", icon="settings"))
-        entries.append(HomeEntry("os.updater", "Updater", "builtin", icon="updater", badge=updates))
         return entries
 
     def on_show(self) -> None:

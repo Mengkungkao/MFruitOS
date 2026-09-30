@@ -66,6 +66,7 @@ class InstallRequest:
     app_id: str = ""                # expected id ("" for a first install)
     mode: str = "install"           # install | update | downgrade | reinstall | system
     notes: list[str] = field(default_factory=list)
+    catalog_id: str = ""
 
 
 @dataclass
@@ -287,6 +288,13 @@ class _Job:
                             ignore=shutil.ignore_patterns(".git", "__pycache__", "*.pyc"))
         else:
             self.package_dir = safe_extract(self.archive, os.path.join(self.work, "pkg"))
+        if self.req.catalog_id:
+            from mfruitos.updater import catalog
+            item = catalog.get(self.req.catalog_id)
+            if (self.req.expected_sha256 != item['sha256'] or not self.verified
+                    or self.req.repository != item['repository']):
+                raise InstallError('verify', 'Catalogue source verification failed')
+            catalog.prepare(self.package_dir, item)
         try:
             manifest = load_manifest(self.package_dir, os_version=self.i.os_version)
         except ManifestError as exc:

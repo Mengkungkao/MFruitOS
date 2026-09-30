@@ -1,0 +1,648 @@
+"""The app: a menu, a Wi-Fi scan list, SSID and password entry from a USB
+or Bluetooth keyboard, and a switch for the BLE setup service.
+
+The MFruit controller handles both button gestures and keyboard input.
+Typing needs a keyboard; without one, the BLE service is the way on.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import threading
+import time
+
+from connectwifi import network
+from connectwifi import APP_ID
+from connectwifi.ble import BleService, BleStatus
+from connectwifi.keyboard import keyboard_device_paths
+from connectwifi.screens import (
+    MENU_COUNT, MENU_EXIT, MENU_HIDDEN, MENU_SCAN, MENU_TOGGLE_BLE, MODE_CONNECTING,
+    MODE_MENU, MODE_PASSWORD, MODE_RESULT, MODE_SCAN, MODE_SSID, SCAN_LEADING,
+    VISIBLE_SCAN_ROWS, Screens, View, rgb565_bytes,
+)
+from connectwifi.system import Commands, output_of
+from mfruit_sdk.status import StatusMonitor
+from mfruit_sdk.input import BACK, CHAR, ERASE, NEXT, PREVIOUS, SELECT, InputController
+
+POLL_INTERVAL_SEC = 2.0
+FRAME_INTERVAL_SEC = 0.08
+SSID_MAX_LEN = 32
+PASSWORD_MAX_LEN = 63
+WPA_MIN_LEN = 8
+# First pass shows only what is comfortably in range; Rescan drops the floor.
+NEARBY_MIN_SIGNAL = 40
+
+LED_SIGNAL = {
+    0: (220, 36, 30),       # disconnected
+    1: (255, 150, 20),      # weak
+    2: (30, 150, 255),      # usable
+    3: (35, 215, 95),       # strong
+}
+
+
+def _start_daemon_thread(target):
+    threading.Thread(target=target, daemon=True).start()
+
+
+class ConnectWifiApp:
+    def __init__(self, board, commands: Commands | None = None, ble: BleService | None = None,
+                 start_thread=_start_daemon_thread, keyboard_paths=keyboard_device_paths,
+                 input_factory=InputController):
+        self.board = board
+        self.commands = commands or Commands()
+        self.ble = ble or BleService(self.commands)
+        self._start_thread = start_thread
+        self._keyboard_paths = keyboard_paths
+        self.screens = Screens(board.LCD_WIDTH, board.LCD_HEIGHT)
+        self.status_monitor = StatusMonitor(interval=5.0)
+        self.running = True
+
+        self.lock = threading.RLock()
+        self.mode = MODE_MENU
+        self.menu_index = MENU_SCAN
+        self.ssid_buffer = ""
+        self.password_buffer = ""
+        self.status_line = ""
+        self.busy = False
+
+        self.networks: list[network.Network] = []
+        self.saved: dict[str, network.SavedNetwork] = {}
+        self.scan_index = 0
+        self.scan_window = 0
+        self.scan_wide = False
+        self.password_return = MODE_SCAN
+        self.password_known_secured = False
+        self.connect_ssid = ""
+        self.connect_started_at = 0.0
+        self.result_ok = False
+        self.result_message = ""
+
+        self.ble_status = BleStatus()
+        self.wifi_ssid = ""
+        self.wifi_ip = ""
+        self.keyboard_ready = False
+
+        self.device = ""
+        self.can_scan_wide = False
+
+        self._last_view = None
+        self._last_poll_at = 0.0
+        self.input = input_factory(
+            self._on_action, app_id=APP_ID,
+            active=lambda: self.running and getattr(self.board, "foreground_ready", True),
+            typing=lambda: self.mode in (MODE_SSID, MODE_PASSWORD),
+        )
+        self._led_enabled, self._led_brightness = _led_preferences()
+        self._last_led = None
+
+        self.input.attach(board)
+        if hasattr(board, "on_exit_request"):
+            board.on_exit_request(self._on_exit)
+        if hasattr(board, "on_focus_revoked"):
+            board.on_focus_revoked(self._on_revoked)
+
+    # ---------- startup ----------
+
+    def probe(self):
+        """What this process may do, asked once. Logged, because a missing
+        permission otherwise shows up only as a scan that never changes."""
+        self.commands.probe_sudo()
+        self.device = network.wifi_device(
+            output_of(self.commands.run(["nmcli", "-t", "-f", "DEVICE,TYPE", "device"], timeout=10))
+        )
+        self.can_scan_wide = self.commands.can_sudo or network.scan_permitted(output_of(
+            self.commands.run(["nmcli", "-t", "-f", "permission,value", "general", "permissions"],
+                              timeout=10)
+        ))
+        print(f"[connectwifi] wifi device={self.device or 'none'} sudo={self.commands.can_sudo} "
+              f"scan={self.can_scan_wide}", flush=True)
+
+    # ---------- lifecycle ----------
+
+    def _on_exit(self, _payload=None):
+        self.running = False
+        self.input.reset()
+
+    def _on_revoked(self, _payload=None):
+        self._on_exit()
+
+    # ---------- button ----------
+
+    def _on_action(self, action):
+        named = {NEXT: "down", PREVIOUS: "up", SELECT: "submit",
+                 BACK: "cancel", ERASE: "backspace"}
+        if action.name == CHAR:
+            self.handle_key(("char", action.char))
+        elif action.name in named:
+            self.handle_key(named[action.name])
+
+    # ---------- keyboard ----------
+
+    def handle_key(self, action):
+        with self.lock:
+            if self.busy:
+                return
+            if self.mode == MODE_MENU:
+                self._menu_key(action)
+            elif self.mode == MODE_SCAN:
+                self._scan_key(action)
+            elif self.mode == MODE_RESULT:
+                self._dismiss_result()
+            elif self.mode == MODE_CONNECTING:
+                return
+            else:
+                self._entry_key(action)
+
+    def _menu_key(self, action):
+        if action == "up":
+            self.menu_index = (self.menu_index - 1) % MENU_COUNT
+        elif action == "down":
+            self.menu_index = (self.menu_index + 1) % MENU_COUNT
+        elif action == "submit":
+            self._activate_menu_item()
+        elif action == "cancel":
+            self.running = False
+
+    def _scan_key(self, action):
+        if action == "up":
+            self._move_scan(-1)
+        elif action == "down":
+            self._move_scan(1)
+        elif action == "submit":
+            self._activate_scan_row()
+        elif action == "cancel":
+            self._leave_scan()
+
+    def _entry_key(self, action):
+        if action == "cancel":
+            self._cancel_entry()
+            return
+        if action == "backspace":
+            if self.mode == MODE_SSID:
+                self.ssid_buffer = self.ssid_buffer[:-1]
+            else:
+                self.password_buffer = self.password_buffer[:-1]
+            return
+        if action == "submit":
+            self._submit_entry()
+            return
+        if isinstance(action, tuple) and len(action) == 2 and action[0] == "char":
+            if self.mode == MODE_SSID:
+                if len(self.ssid_buffer) < SSID_MAX_LEN:
+                    self.ssid_buffer += action[1]
+            elif len(self.password_buffer) < PASSWORD_MAX_LEN:
+                self.password_buffer += action[1]
+
+    # ---------- navigation ----------
+
+    def _scan_row_count(self) -> int:
+        return len(SCAN_LEADING) + len(self.networks) + 2  # Rescan, Back to Settings
+
+    def _move_scan(self, delta: int):
+        total = self._scan_row_count()
+        self.scan_index = (self.scan_index + delta) % total
+        if self.scan_index < self.scan_window:
+            self.scan_window = self.scan_index
+        elif self.scan_index >= self.scan_window + VISIBLE_SCAN_ROWS:
+            self.scan_window = self.scan_index - VISIBLE_SCAN_ROWS + 1
+        self.scan_window = max(0, min(self.scan_window, max(0, total - VISIBLE_SCAN_ROWS)))
+
+    def _leave_scan(self):
+        self.mode = MODE_MENU
+        self.status_line = ""
+
+    def _activate_menu_item(self):
+        if self.menu_index == MENU_SCAN:
+            self.mode = MODE_SCAN
+            self.scan_index = len(SCAN_LEADING) if self.networks else 0
+            self.scan_window = 0
+            self.status_line = "Checking nearby..."
+            self._spawn(lambda: self._scan(wide=False))
+        elif self.menu_index == MENU_HIDDEN:
+            self.mode = MODE_SSID
+            self.ssid_buffer = ""
+            self.password_buffer = ""
+            self.password_return = MODE_SSID
+            self.status_line = "Type the network name"
+        elif self.menu_index == MENU_TOGGLE_BLE:
+            if not self.ble_status.installed:
+                self.status_line = "BLE: run the installer to add it"
+                return
+            self.status_line = "Working..."
+            self._spawn(self._toggle_ble)
+        elif self.menu_index == MENU_EXIT:
+            self.running = False
+
+    def _activate_scan_row(self):
+        index = self.scan_index
+        if index == self._scan_row_count() - 1:
+            self.running = False
+            return
+        if index == 0:
+            self._leave_scan()
+            return
+        if index == 1:
+            self.mode = MODE_SSID
+            self.ssid_buffer = ""
+            self.password_buffer = ""
+            self.password_return = MODE_SSID
+            self.status_line = "Type the network name"
+            return
+        position = index - len(SCAN_LEADING)
+        if position >= len(self.networks):
+            self.status_line = "Scanning wider range..."
+            self._spawn(lambda: self._scan(wide=True))
+            return
+        chosen = self.networks[position]
+        if chosen.active:
+            self.status_line = f"Already on {chosen.ssid}"
+            return
+        self.ssid_buffer = chosen.ssid
+        self.password_buffer = ""
+        # A network joined before comes up on its saved password; the
+        # password field appears only if that one is refused.
+        if chosen.saved or chosen.is_open:
+            self._start_connect(chosen.ssid, "")
+            return
+        self.password_return = MODE_SCAN
+        self.password_known_secured = True
+        self.mode = MODE_PASSWORD
+        self.status_line = ""
+
+    def _dismiss_result(self):
+        self.mode = MODE_MENU if self.result_ok or not self.networks else MODE_SCAN
+        self.result_message = ""
+        self.status_line = ""
+
+    def _cancel_entry(self):
+        if self.mode == MODE_PASSWORD:
+            self.password_buffer = ""
+            self.mode = self.password_return
+            self.status_line = "Type the network name" if self.mode == MODE_SSID else ""
+            return
+        self.mode = MODE_SCAN if self.networks else MODE_MENU
+        self.ssid_buffer = ""
+        self.password_buffer = ""
+        self.status_line = ""
+
+    def _security_of(self, ssid: str) -> str:
+        for known in self.networks:
+            if known.ssid == ssid:
+                return known.security
+        return ""
+
+    def _submit_entry(self):
+        if self.mode == MODE_SSID:
+            if not self.ssid_buffer.strip():
+                self.status_line = "SSID cannot be empty"
+                return
+            if self.ssid_buffer.strip() in self.saved:
+                self._start_connect(self.ssid_buffer.strip(), "")
+                return
+            self.mode = MODE_PASSWORD
+            self.password_return = MODE_SSID
+            self.password_known_secured = False
+            self.password_buffer = ""
+            self.status_line = "Blank = open network"
+            return
+        ssid = self.ssid_buffer.strip()
+        # A blank password is allowed: it retries the saved one, or joins an
+        # open network. A short one can only fail, and nmcli takes a while
+        # to say so, so catch it here. WEP keys are shorter.
+        if 0 < len(self.password_buffer) < WPA_MIN_LEN and "wep" not in self._security_of(ssid).lower():
+            self.status_line = f"Password needs {WPA_MIN_LEN}+ characters"
+            return
+        self._start_connect(ssid, self.password_buffer)
+
+    # ---------- workers ----------
+
+    def _spawn(self, target):
+        with self.lock:
+            if self.busy:
+                return
+            self.busy = True
+        self._start_thread(lambda: self._run_worker(target))
+
+    def _run_worker(self, target):
+        try:
+            target()
+        except Exception as exc:
+            with self.lock:
+                self.status_line = str(exc)[:60]
+        finally:
+            with self.lock:
+                self.busy = False
+                self._last_poll_at = 0.0
+
+    def _toggle_ble(self):
+        start = not self.ble.status().active
+        result = self.ble.set_running(start)
+        with self.lock:
+            if result.returncode == 0:
+                self.status_line = "BLE started" if start else "BLE stopped"
+            else:
+                self.status_line = self.commands.short_error(
+                    (result.stderr or result.stdout or "Failed").strip()
+                )[:60]
+
+    def _start_connect(self, ssid: str, password: str):
+        self.mode = MODE_CONNECTING
+        self.connect_ssid = ssid
+        self.connect_started_at = time.time()
+        self.password_buffer = ""
+        self.status_line = ""
+        self._spawn(lambda: self._connect(ssid, password))
+
+    def _list(self, rescan: str, timeout: float) -> list[network.Network]:
+        result = self.commands.run_privileged(network.list_command(self.device, rescan), timeout=timeout)
+        return network.parse_networks(output_of(result))
+
+    def _sweep(self) -> list[network.Network]:
+        """A real sweep when allowed. Without permission NetworkManager would
+        answer a sweep from its cache anyway, so ask for the cache outright."""
+        if self.can_scan_wide:
+            return self._list("yes", timeout=45)
+        return self._list("no", timeout=20)
+
+    def _profile_uuids(self) -> list[str]:
+        return network.wifi_profile_uuids(output_of(
+            self.commands.run(["nmcli", "-t", "-f", "UUID,TYPE", "connection", "show"], timeout=10)
+        ))
+
+    def _load_saved(self, uuids: list[str] | None = None) -> dict[str, network.SavedNetwork]:
+        """Saved Wi-Fi profiles by SSID. Reading them needs no privilege;
+        their passwords stay hidden, and the app never needs to see them."""
+        uuids = self._profile_uuids() if uuids is None else uuids
+        if not uuids:
+            return {}
+        return network.parse_profiles(output_of(
+            self.commands.run(network.profiles_command(uuids), timeout=10)
+        ))
+
+    def _scan(self, wide: bool):
+        """Two tiers. The first pass reads NetworkManager's cached scan: no
+        radio sweep, so it costs no power and lands instantly, then keeps only
+        what is comfortably in range. Rescan forces a real sweep and shows
+        everything. An empty first pass escalates on its own, so entering the
+        list never dead-ends on a cold or stale cache."""
+        if wide:
+            found = self._sweep()
+        else:
+            found = [n for n in self._list("no", timeout=20) if n.signal >= NEARBY_MIN_SIGNAL]
+            # Nothing to choose from - only the network we are already on, or
+            # nothing at all - means the cache is too cold to be useful.
+            if not any(not n.active for n in found):
+                wide = True
+                found = self._sweep()
+        saved = self._load_saved()
+        for found_network in found:
+            found_network.saved = found_network.ssid in saved
+
+        with self.lock:
+            self.saved = saved
+            self.networks = found
+            self.scan_wide = wide
+            if found:
+                if not wide:
+                    self.status_line = f"{len(found)} nearby"
+                elif self.can_scan_wide:
+                    self.status_line = f"{len(found)} networks"
+                else:
+                    self.status_line = f"{len(found)} cached (no scan permission)"
+                self.scan_index = len(SCAN_LEADING)
+            else:
+                self.status_line = "No networks found"
+                self.scan_index = 0
+            self.scan_window = 0
+            self._move_scan(0)
+
+    def _ssid_visible(self, ssid: str) -> bool:
+        with self.lock:
+            if self.networks:
+                return any(known.ssid == ssid for known in self.networks)
+        result = self.commands.run(network.list_command(self.device, "no", fields="SSID"), timeout=10)
+        if result.returncode != 0:
+            return True
+        return network.ssid_listed(result.stdout, ssid)
+
+    def _connect(self, ssid: str, password: str):
+        """A saved network comes up on its own profile, with a newly typed
+        password written into it first. Anything else goes through
+        `nmcli device wifi connect`, which makes a profile for it. A refused
+        password leads back to the password field rather than a dead end."""
+        before = self._profile_uuids()
+        profile = self._load_saved(before).get(ssid)
+        result = None
+        if profile is not None:
+            if password:
+                result = self.commands.run_privileged(
+                    network.set_password_command(profile.uuid, password), timeout=15)
+            if result is None or result.returncode == 0:
+                result = self.commands.run_privileged(network.up_command(profile.uuid, self.device), timeout=90)
+        else:
+            args = network.connect_command(ssid, password, self.device, hidden=not self._ssid_visible(ssid))
+            result = self.commands.run_privileged(args, timeout=90)
+        ok = result.returncode == 0
+        message = (result.stdout if ok else (result.stderr or result.stdout)).strip()
+        if not ok and profile is None:
+            self._forget_failed_profile(ssid, before)
+        refused = not ok and network.is_auth_failure(message)
+        with self.lock:
+            if refused:
+                self._ask_password_again(ssid, tried_one=bool(password) or profile is not None)
+                return
+            self.result_ok = ok
+            self.result_message = (message if ok else self.commands.short_error(message or "Failed")) \
+                or ("Connected" if ok else "Failed")
+            self.mode = MODE_RESULT
+            self.status_line = ""
+            if ok:
+                self.ssid_buffer = ""
+
+    def _forget_failed_profile(self, ssid: str, before: list[str]):
+        """`nmcli device wifi connect` can leave the profile it made behind
+        even when joining failed. With a wrong password in it, NetworkManager
+        would keep trying it on its own, and the list would call the network
+        saved. Delete what this attempt created."""
+        created = [uuid for uuid in self._profile_uuids() if uuid not in before]
+        for made in self._load_saved(created).values() if created else ():
+            if made.ssid == ssid:
+                self.commands.run_privileged(network.delete_command(made.uuid), timeout=15)
+
+    def _ask_password_again(self, ssid: str, tried_one: bool):
+        self.mode = MODE_PASSWORD
+        self.ssid_buffer = ssid
+        self.password_buffer = ""
+        self.password_known_secured = True
+        self.password_return = MODE_SCAN if self.networks else MODE_MENU
+        self.status_line = "Wrong password - type it again" if tried_one else "This network needs a password"
+
+    # ---------- status ----------
+
+    def _wifi_state(self) -> tuple[str, str]:
+        if not self.device:
+            self.device = network.wifi_device(
+                output_of(self.commands.run(["nmcli", "-t", "-f", "DEVICE,TYPE", "device"], timeout=5))
+            )
+        ssid = network.active_ssid(output_of(
+            self.commands.run(network.list_command(self.device, "no", fields="ACTIVE,SSID"), timeout=5)
+        ))
+        ipv4 = ""
+        if ssid and self.device:
+            ipv4 = network.ipv4_address(output_of(self.commands.run(
+                ["nmcli", "-t", "-f", "IP4.ADDRESS", "device", "show", self.device], timeout=5
+            )))
+        return ssid, ipv4
+
+    def poll_status(self):
+        ble_status = self.ble.status()
+        ssid, ipv4 = self._wifi_state()
+        keyboard_ready = bool(self._keyboard_paths())
+        with self.lock:
+            self.ble_status = ble_status
+            self.wifi_ssid = ssid
+            self.wifi_ip = ipv4
+            self.keyboard_ready = keyboard_ready
+
+    # ---------- rendering ----------
+
+    def view(self) -> View:
+        with self.lock:
+            connecting = self.mode == MODE_CONNECTING
+            device = self.status_monitor.sample()
+            return View(
+                mode=self.mode,
+                menu_index=self.menu_index,
+                ssid=self.ssid_buffer,
+                password_len=len(self.password_buffer),
+                status=self.status_line,
+                busy=self.busy,
+                ble_installed=self.ble_status.installed,
+                ble_active=self.ble_status.active,
+                ble_name=self.ble_status.name,
+                ble_key=self.ble_status.key,
+                wifi_ssid=self.wifi_ssid,
+                wifi_ip=self.wifi_ip,
+                wifi_level=device.wifi_level,
+                battery=device.battery,
+                charging=device.charging,
+                keyboard_ready=self.keyboard_ready,
+                button_down=self.input.gestures.pressed,
+                hold_armed=self.input.armed,
+                password_known_secured=self.password_known_secured,
+                scan_index=self.scan_index,
+                scan_window=self.scan_window,
+                scan_wide=self.scan_wide,
+                networks=tuple((n.ssid, n.signal, n.active, n.is_open, n.saved) for n in self.networks),
+                connect_ssid=self.connect_ssid,
+                result_ok=self.result_ok,
+                result_message=self.result_message,
+                phase=int(time.time() * 8) % 24 if connecting else 0,
+                elapsed=int(time.time() - self.connect_started_at)
+                if connecting and self.connect_started_at else 0,
+            )
+
+    def render(self, force: bool = False):
+        view = self.view()
+        if not force and view == self._last_view:
+            return
+        self._last_view = view
+        image = self.screens.render(view)
+        self.board.draw_image(0, 0, image.width, image.height, rgb565_bytes(image))
+
+    # ---------- RGB status light ----------
+
+    def _led_color(self) -> tuple[int, int, int]:
+        """Turn the decorative RGB LED into a readable Wi-Fi indicator."""
+        if not self._led_enabled:
+            return (0, 0, 0)
+        if self.input.gestures.pressed:
+            return (210, 225, 255)
+        if self.mode == MODE_RESULT:
+            return (35, 235, 95) if self.result_ok else (255, 38, 32)
+        if self.mode == MODE_CONNECTING or self.busy:
+            pulse = (85, 135, 210, 135)[int(time.time() * 4) % 4]
+            return (20, pulse, 255)
+        level = self.status_monitor.sample().wifi_level
+        if level is None:
+            level = 2 if self.wifi_ssid else 0
+        return LED_SIGNAL.get(max(0, min(3, level)), LED_SIGNAL[0])
+
+    def _update_led(self, force: bool = False) -> None:
+        setter = getattr(self.board, "set_rgb", None)
+        if setter is None:
+            return
+        base = self._led_color()
+        scale = self._led_brightness / 100.0
+        color = tuple(int(channel * scale) for channel in base)
+        if not force and color == self._last_led:
+            return
+        try:
+            setter(*color)
+            self._last_led = color
+        except Exception as exc:
+            # Losing the status light must never take down network setup.
+            if self._last_led is not False:
+                print(f"[connectwifi] RGB status light unavailable: {exc}", flush=True)
+            self._last_led = False
+
+    def _clear_led(self) -> None:
+        setter = getattr(self.board, "set_rgb", None)
+        if setter is not None:
+            try:
+                setter(0, 0, 0)
+            except Exception:
+                pass
+
+    # ---------- main loop ----------
+
+    def run(self):
+        try:
+            # Draw the real Wi-Fi page before any blocking radio/service reads.
+            # The launcher can hand over directly without an app splash screen.
+            self.busy = True
+            self.status_line = "Checking Wi-Fi..."
+            self.render(force=True)
+            self.status_monitor.start()
+            self.input.start()
+
+            def prepare():
+                self.probe()
+                self.poll_status()
+                with self.lock:
+                    self.status_line = ""
+            self._start_thread(lambda: self._run_worker(prepare))
+            while self.running:
+                now = time.time()
+                if not self.busy and now - self._last_poll_at >= POLL_INTERVAL_SEC:
+                    self._last_poll_at = now
+                    self.poll_status()
+                self.render()
+                self._update_led()
+                time.sleep(FRAME_INTERVAL_SEC)
+        finally:
+            self.input.stop()
+            self.status_monitor.stop()
+            self._clear_led()
+            self.board.cleanup()
+
+
+def main():
+    from connectwifi.board import create_board
+
+    ConnectWifiApp(create_board()).run()
+
+
+def _led_preferences() -> tuple[bool, int]:
+    """Honor MFruit OS's existing Light switch and brightness setting."""
+    home = (os.environ.get("MFRUIT_HOME") or os.environ.get("WHISPLAY_OS_HOME")
+            or os.path.expanduser("~/.whisplay-os"))
+    try:
+        with open(os.path.join(home, "config", "settings.json"), encoding="utf-8") as handle:
+            led = (json.load(handle).get("led") or {})
+        enabled = bool(led.get("enabled", True))
+        brightness = max(0, min(100, int(led.get("brightness", 30))))
+        return enabled, brightness
+    except (OSError, ValueError, TypeError):
+        return True, 30

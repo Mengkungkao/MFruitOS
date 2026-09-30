@@ -1,7 +1,9 @@
 {
   "applications": {},
   "apps": {
+    "clean_menu": false,
     "default_app": "",
+    "installed_ids": [],
     "order": []
   },
   "audio": {

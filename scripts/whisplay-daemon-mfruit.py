@@ -43,17 +43,18 @@ class MfruitProbe:
     and MFruit OS has not handed the screen to the daemon's desktop on purpose
     (``launch-policy`` = ``open``, its "Daemon desktop" developer option)."""
 
-    def __init__(self, lock_path: str):
+    def __init__(self, lock_path: str, startup_grace: float = 0):
         self.lock_path = lock_path
         self._checked_at = 0.0
         self._value = False
+        self._startup_until = time.monotonic() + startup_grace
 
     def __call__(self) -> bool:
         now = time.monotonic()
         if now - self._checked_at < CACHE_SEC:
             return self._value
         self._checked_at = now
-        self._value = self._held() and not self._desktop_mode()
+        self._value = (self._held() or now < self._startup_until) and not self._desktop_mode()
         return self._value
 
     def _desktop_mode(self) -> bool:
@@ -81,12 +82,12 @@ class MfruitProbe:
         return False
 
 
-def apply(module, lock_path: str, log=print) -> list[str]:
+def apply(module, lock_path: str, log=print, startup_grace: float = 0) -> list[str]:
     """Patch ``module.WhisplayDaemon``; returns the names of patched methods."""
     cls = getattr(module, "WhisplayDaemon", None)
     if cls is None:
         return []
-    mfruit_running = MfruitProbe(lock_path)
+    mfruit_running = MfruitProbe(lock_path, startup_grace)
     size = getattr(module, "FRAMEBUFFER_SIZE", 240 * 280 * 2)
     width = getattr(module, "SCREEN_WIDTH", 240)
     height = getattr(module, "SCREEN_HEIGHT", 280)
@@ -205,7 +206,7 @@ def main(argv=None) -> int:
         import runpy
         runpy.run_path(sys.argv[0], run_name="__main__")
         return 0
-    patched = apply(daemon, args.lock)
+    patched = apply(daemon, args.lock, startup_grace=30)
     print(f"[mfruit] daemon user interface in the background while MFruit OS runs "
           f"(patched: {', '.join(patched)})", flush=True)
 

@@ -100,7 +100,7 @@ else
   CODE_DIR="$OS_HOME/system/versions/$VERSION-local$STAMP"
   as_user mkdir -p "$CODE_DIR"
   ITEMS=()
-  for item in mfruitos assets config scripts templates docs manifest.json LICENSE README.md \
+  for item in mfruitos assets config scripts templates docs bundled manifest.json LICENSE README.md \
       APP_DEVELOPMENT.md INSTALL.md CHANGELOG.md CONTRIBUTING.md; do
     [ -e "$SRC/$item" ] && ITEMS+=("$item")
   done
@@ -160,6 +160,10 @@ atomic_write_json(os.path.join(home, "system", "app.json"), {
 })
 PY
 
+# Wi-Fi is an offline OS component; do not depend on a second manual clone.
+as_user env PYTHONPATH="$CODE_DIR" "$PYTHON" -m mfruitos.provision \
+  --home "$OS_HOME" --daemon-home "$TARGET_HOME/.whisplay-daemon" --whisplay "$WHISPLAY_ROOT"
+
 # Keep the two most recent local installs (the updater manages its own).
 if [ "$DEV" = 0 ]; then
   ls -1dt "$OS_HOME"/system/versions/*-local* 2>/dev/null | tail -n +3 | while read -r old; do
@@ -178,6 +182,29 @@ fi
 # ------------------------------------------------------------------ system
 say "Installing $SERVICE"
 sudo ln -sfn "$OS_HOME/bin/mfruitctl" /usr/local/bin/mfruitctl && ok "/usr/local/bin/mfruitctl"
+
+# The launcher is a system service without an interactive polkit session.
+# Permit only NetworkManager Wi-Fi actions for this installation's user.
+if ! command -v nmcli >/dev/null; then
+  sudo apt-get install -y network-manager || fail "NetworkManager is required for Settings > Wi-Fi"
+fi
+if ! "$PYTHON" -c "import ensurepip" 2>/dev/null; then
+  sudo apt-get install -y python3-venv || fail "python3-venv is required for App installer"
+fi
+sudo mkdir -p /etc/polkit-1/rules.d
+POLKIT_TMP="$(mktemp)"
+"$PYTHON" - "$TARGET_USER" > "$POLKIT_TMP" <<'PYRULE'
+import json, sys
+user = json.dumps(sys.argv[1])
+print('polkit.addRule(function(action, subject) {')
+print('  if (subject.user === ' + user + ' && [')
+for action in ['wifi.scan', 'network-control', 'settings.modify.system', 'enable-disable-wifi']:
+    print('    "org.freedesktop.NetworkManager.' + action + '",')
+print('  ].indexOf(action.id) !== -1) return polkit.Result.YES;')
+print('});')
+PYRULE
+sudo install -m 0644 "$POLKIT_TMP" /etc/polkit-1/rules.d/49-mfruit-wifi.rules
+rm -f "$POLKIT_TMP"
 
 GROUPS_LIST=""
 for g in audio video gpio spi input; do getent group "$g" >/dev/null && GROUPS_LIST="$GROUPS_LIST $g"; done

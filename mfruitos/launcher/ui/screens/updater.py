@@ -243,22 +243,47 @@ class VersionListScreen(ListScreen):
 
 
 class InstallAppScreen(ListScreen):
-    title = "Install app"
+    title = "App installer"
 
     def items(self) -> list[Item]:
+        from mfruitos.updater import catalog
         os = self.os
-        return [
-            Item("Discover apps", lambda: os.push(DiscoverScreen(os)), kind="nav", icon="search",
-                 subtitle="GitHub topic & your sources"),
-            Item("Local packages", lambda: os.push(LocalPackagesScreen(os)), kind="nav",
-                 icon="package", subtitle="Install a downloaded package"),
-            Item("From a terminal", lambda: os.show_message(
-                "Install from GitHub",
-                "On the device run:\n  mfruitctl install github.com/user/repo\n"
-                "The repository must contain a manifest.json (see APP_DEVELOPMENT.md)."),
-                kind="nav", icon="developer"),
+        installed = {a.id for a in os.registry.apps()}
+        local = {a.id: a for a in os.registry.all() if a.kind != "system"
+                 and a.id not in {"connectwifi", "whisplay-wifi-config", "whisplay-run-test"}}
+        entries = {item['id']: item for item in catalog.entries()}
+        for app in local.values():
+            if not app.broken:
+                entries.setdefault(app.id, dict(id=app.id, name=app.name,
+                                               description="Saved on this device"))
+        rows = []
+        for app_id, item in entries.items():
+            saved = local.get(app_id)
+            present = saved is not None and not saved.broken
+            added = app_id in installed
+            rows.append(Item(item['name'],
+                lambda i=item, p=present, a=added: self._pick(i, p, a), icon="package",
+                value="Installed" if added else "On device" if present else "Download",
+                subtitle=item['description'], tone="success" if added else None))
+        rows += [
+            Item("More sources", lambda: os.push(DiscoverScreen(os)), kind="nav", icon="search"),
+            Item("Local packages", lambda: os.push(LocalPackagesScreen(os)), kind="nav", icon="package"),
+            Item("Updates", lambda: os.push(UpdaterScreen(os)), kind="nav", icon="updater"),
             back_item(),
         ]
+        return rows
+
+    def _pick(self, item: dict, saved: bool, installed: bool) -> None:
+        os = self.os
+        if installed:
+            from mfruitos.launcher.ui.screens.apps import AppDetailScreen
+            os.push(AppDetailScreen(os, item['id']))
+            return
+        action = (lambda: os.restore_catalog_app(item['id'])) if saved else (
+            lambda: os.install_catalog_app(item['id']))
+        message = ("Add the saved app to your Apps menu. Its files and data are kept." if saved else
+                   "Download and install this app. It will appear in Apps when finished.")
+        os.push(confirm(os, item['name'], message, "Add" if saved else "Install", action, danger=False))
 
 
 class LocalPackagesScreen(ListScreen):

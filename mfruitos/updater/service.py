@@ -280,6 +280,13 @@ class UpdateService:
         raise InstallError("check", last_error or "No compatible release found")
 
     # ============================================================ actions
+    def install_catalog(self, app_id: str, progress=None) -> InstallResult:
+        from mfruitos.updater import catalog
+        item = catalog.get(app_id)
+        return self.installer.run(InstallRequest(
+            repository=item['repository'], version='1.0.0', ref=item['ref'], url=item['url'],
+            expected_sha256=item['sha256'], app_id=app_id, catalog_id=app_id), progress)
+
     def install_from_repository(self, repository: str, progress=None) -> InstallResult:
         repository = normalize_repository(repository)
         release, app_id = self.latest_compatible(repository)
@@ -327,7 +334,13 @@ class UpdateService:
                                 "stars": None, "url": repo})
         topic = self.settings.get("updater.discovery_topic")
         if topic:
-            for item in self.github.search_topic(topic):
+            try:
+                found = self.github.search_topic(topic)
+            except GitHubError:
+                if not results:
+                    raise
+                found = []
+            for item in found:
                 if item["full_name"].lower() not in seen:
                     seen.add(item["full_name"].lower())
                     results.append(item)

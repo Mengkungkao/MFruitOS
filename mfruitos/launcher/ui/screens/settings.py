@@ -59,8 +59,7 @@ class SettingsScreen(ListScreen):
         """Open the full network manager directly; keep the small status
         page as a useful fallback on installations that do not have one."""
         wifi = WifiScreen(self.os)
-        if (self.os.registry.get("connectwifi") is not None
-                or self.os.system_page_available("whisplay-wifi")):
+        if self.os.registry.get("connectwifi") is not None:
             wifi.choose_network()
         else:
             self.os.push(wifi)
@@ -246,8 +245,6 @@ class WifiScreen(ListScreen):
     def choose_network(self) -> None:
         if self.os.registry.get("connectwifi") is not None:
             self.os.launch_app("connectwifi", source="settings")
-        elif self.os.system_page_available("whisplay-wifi"):
-            self.os.open_system_page("whisplay-wifi")
         else:
             self.os.show_message("Wi-Fi", "Install Connect WiFi to choose a network.")
 

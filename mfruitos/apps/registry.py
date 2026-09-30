@@ -161,6 +161,9 @@ class AppRegistry:
             entry.enabled = flags["enabled"]
             entry.hidden = flags["hidden"]
             entry.autostart = flags["autostart"]
+            if self.settings.get("apps.clean_menu") and entry.id not in self.settings.get("apps.installed_ids"):
+                entry.enabled = False
+                entry.autostart = False
             explicit = self.settings.app_flag_explicit(entry.id, "background")
             entry.background = explicit if explicit is not None else entry.background_default
             latest = self._latest.get(entry.id, "")
@@ -311,7 +314,8 @@ class AppRegistry:
 
     def apps(self) -> list[AppEntry]:
         """Installed applications (excludes daemon system pages)."""
-        return [e for e in self.all() if e.kind != "system"]
+        allowed = self.settings.get("apps.installed_ids") if self.settings.get("apps.clean_menu") else None
+        return [e for e in self.all() if e.kind != "system" and (allowed is None or e.id in allowed)]
 
     def system_pages(self) -> list[AppEntry]:
         return [e for e in self.all() if e.kind == "system"]
