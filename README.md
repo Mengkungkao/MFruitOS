@@ -1,9 +1,9 @@
 # MFruit OS
 
-**A tiny operating system for [Whisplay](https://github.com/PiSugar/Whisplay) applications.**
+**A compact application platform for small Linux devices.**
 
-MFruit OS turns a PiSugar Whisplay HAT on a Raspberry Pi Zero 2 W (or Orange
-Pi Zero 2W / similar) into a small, polished device: it boots into a launcher,
+MFruit OS turns a Raspberry Pi Zero 2 W, Orange Pi Zero 2W or similar Linux
+board with a display HAT into a small device: it boots into a launcher,
 installs and updates apps from GitHub with automatic rollback, and is used
 entirely with the HAT's single button.
 
@@ -18,7 +18,11 @@ entirely with the HAT's single button.
 It runs **on top of `whisplay-daemon`**, not instead of it. The daemon keeps
 owning the LCD, backlight, RGB LED, button and the foreground-app lifecycle;
 MFruit OS is a daemon foreground app that draws into the daemon's shared
-framebuffer. Every existing Whisplay app keeps working unchanged.
+framebuffer. Existing apps keep working unchanged.
+
+The interface uses MFruit OS names and app descriptions, such as **Radio
+Message** beneath Messenger. Hardware integration identifiers, service names
+and storage paths remain stable for compatibility with existing installations.
 
 ```
 ┌─────────────────────────────┐
@@ -30,7 +34,7 @@ framebuffer. Every existing Whisplay app keeps working unchanged.
 │ whisplay-daemon             │  LCD · button · LED · backlight · app lifecycle
 └──────────────┬──────────────┘
 ┌──────────────▼──────────────┐
-│ Whisplay HAT                │
+│ Display HAT                 │
 └─────────────────────────────┘
 ```
 
@@ -74,7 +78,7 @@ framebuffer. Every existing Whisplay app keeps working unchanged.
 
 ## Quick start
 
-On the device, with [Whisplay and whisplay-daemon installed](https://github.com/PiSugar/Whisplay):
+On the device, with the [display driver and hardware service installed](https://github.com/PiSugar/Whisplay):
 
 ```bash
 git clone https://github.com/Mengkungkao/MFruitOS.git
@@ -114,7 +118,7 @@ mfruitctl help
 
 ## Building apps
 
-Any Whisplay daemon app works. To make it installable and updatable through
+Any compatible daemon app works. To make it installable and updatable through
 MFruit OS, add a `manifest.json` and publish GitHub releases. Start from
 [`templates/whisplay-app-template`](templates/whisplay-app-template) and read
 [APP_DEVELOPMENT.md](APP_DEVELOPMENT.md): its MFruit App SDK section gives your

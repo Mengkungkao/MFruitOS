@@ -55,11 +55,21 @@ class SettingsScreen(ListScreen):
             self.redraw()
         self.os.run_task("settings-status", read, done, lane="bluetooth")
 
+    def open_wifi(self) -> None:
+        """Open the full network manager directly; keep the small status
+        page as a useful fallback on installations that do not have one."""
+        wifi = WifiScreen(self.os)
+        if (self.os.registry.get("connectwifi") is not None
+                or self.os.system_page_available("whisplay-wifi")):
+            wifi.choose_network()
+        else:
+            self.os.push(wifi)
+
     def items(self) -> list[Item]:
         os = self.os
         apps = os.registry.apps()
         rows = [
-            Item("Wi-Fi", lambda: os.push(WifiScreen(os)), kind="nav", icon="wifi",
+            Item("Wi-Fi", self.open_wifi, kind="nav", icon="wifi",
                  subtitle=self.ssid or "Not connected", tile=(46, 140, 255)),
             Item("Bluetooth", lambda: os.push(BluetoothScreen(os)), kind="nav", icon="bluetooth",
                  subtitle=self.bluetooth, tile=(46, 140, 255)),

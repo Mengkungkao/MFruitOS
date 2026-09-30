@@ -274,7 +274,7 @@ class UpdateService:
                                              os_version=self.os_version)
                 return release, manifest.id
             except NotFoundError:
-                last_error = "No manifest.json in the repository (not a Whisplay app package)"
+                last_error = "No manifest.json in the repository (not an MFruit OS app package)"
             except (ValueError, ManifestError) as exc:
                 last_error = f"{release.tag}: {exc}"
         raise InstallError("check", last_error or "No compatible release found")

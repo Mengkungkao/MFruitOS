@@ -92,6 +92,16 @@ class LedController:
             log.warning("led.set failed: %s", exc)
             self.current = None
 
+    def button_feedback(self, pressed: bool) -> None:
+        """A brief physical acknowledgement while the display button is held."""
+        if pressed:
+            if not self.settings.get("led.enabled"):
+                return
+            scale = self.settings.get("led.brightness") / 100.0
+            self.set_rgb(tuple(int(channel * scale) for channel in LED_RGB["white"]), force=True)
+        else:
+            self.show(self.state, force=True)
+
     def forget(self) -> None:
         self.current = None
 

@@ -411,6 +411,7 @@ class Runtime(ScreenServices):
         lifecycle_log.info("EVENT %s%s app_state=%s", "PRESS" if pressed else "RELEASE",
                            "".join(f" {k}={v}" for k, v in self._lifecycle_context().items()),
                            self.apps.state)
+        self.led.button_feedback(pressed)
         top = self.router.top
         hook = getattr(top, "on_raw_button", None)
         if pressed:

@@ -1,4 +1,4 @@
-"""MFruit OS — a tiny operating system for Whisplay applications.
+"""MFruit OS — a compact application platform for Linux devices.
 
 MFruit OS runs on top of ``whisplay-daemon``. The daemon owns the hardware
 (LCD, backlight, RGB LED, button) and the foreground-app lifecycle; MFruit OS

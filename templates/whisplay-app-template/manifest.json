@@ -1,6 +1,6 @@
 {
   "id": "hello-whisplay",
-  "name": "Hello Whisplay",
+  "name": "Hello MFruit",
   "version": "1.1.0",
   "description": "Template app: a counter with MFruit OS controls",
   "entrypoint": "run.sh",

@@ -33,9 +33,9 @@ def check_daemon(client: WhisplayDaemonClient) -> CheckResult:
     try:
         client.ping()
     except DaemonError as exc:
-        return CheckResult("Whisplay Daemon", False, str(exc)[:80])
+        return CheckResult("Hardware service", False, str(exc)[:80])
     ms = (time.monotonic() - start) * 1000
-    return CheckResult("Whisplay Daemon", True, f"{ms:.0f} ms")
+    return CheckResult("Hardware service", True, f"{ms:.0f} ms")
 
 
 def daemon_ui_in_background() -> bool:
@@ -54,8 +54,8 @@ def daemon_ui_in_background() -> bool:
 
 def check_daemon_ui() -> CheckResult:
     if daemon_ui_in_background():
-        return CheckResult("Whisplay UI", True, "background")
-    return CheckResult("Whisplay UI", None, "visible (run install.sh)")
+        return CheckResult("Hardware desktop", True, "background")
+    return CheckResult("Hardware desktop", None, "visible (run install.sh)")
 
 
 def check_keyboard(devices: list) -> CheckResult:

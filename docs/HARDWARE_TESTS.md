@@ -21,7 +21,7 @@ tail -f ~/.whisplay-os/logs/launcher.log ~/.whisplay-os/logs/launch-gate.log \
 | 6 | Open a slow app (e.g. WalkieTalkie); while "Opening <App>" is on screen, hold the button ~1 s and release, twice | **nothing else happens**; the slow app opens (without the background wrapper: no other app starts, a daemon page may flash and is closed) | no new `LAUNCH_REQUEST`; without the wrapper `DENIED …` / `INTRUDER …` |
 | 7 | Open an app that crashes (or stop its folder) | error screen with Retry / Logs / Back; launcher keeps working | `SESSION_END … outcome=failed` |
 | 8 | Restart MFruit OS while an app is on screen | MFruit OS waits; after the app exits it shows Home | `EXTERNAL_SESSION`, then `SESSION_END` |
-| 9 | Open any app and watch the screen until it appears | only MFruit OS's **Opening <App>** screen, never the daemon's list or "Opening app…" | Diagnostics: *Whisplay UI: background* |
+| 9 | Open an app and watch the screen until it appears | MFruit OS's **Opening <App>** screen, never the daemon desktop; Wi-Fi retains Settings until its own page appears, with no loading screen | Diagnostics: *Hardware desktop: background* |
 | 10 | Leave an app, then check `pgrep -af <app>` over SSH | the app's process is gone within ~5 s | `APP_CLOSED app=… result=exited` (or `terminated`) |
 | 11 | Set the app to *Keep running* (Settings → Apps → app), open and leave it | it keeps running; Home shows *Running* | no `APP_CLOSED` line |
 
@@ -54,12 +54,35 @@ CHANGELOG entry. A step that could not be run is reported as *not verified*.
   owner. Test USB hotplug and Bluetooth keyboard reconnection.
 - Developer > Daemon desktop releases the grab; returning to MFruit OS takes it.
 - Volume and Power pages accept forwarded arrows, Enter and Esc.
-- Settings > Wi-Fi opens Connect WiFi; closing it returns to Wi-Fi.
+- Settings > Wi-Fi opens the unified Wi-Fi manager directly, without a loading
+  screen; closing it returns to Settings. Tap rapidly through Wi-Fi and
+  Networks: selection moves and wraps without exiting. Hold the bottom
+  **Back to Settings** row for one second, then release to exit.
+- RGB: white button feedback, signal colour while Wi-Fi is idle, blue activity
+  while scanning/connecting, green/red results; Light switch and brightness
+  apply. Leaving Wi-Fi must restore the launcher's LED state.
 - Bluetooth: scan, pair a keyboard using the displayed code, confirm a numeric
   comparison, reject/cancel pairing, disconnect/reconnect and forget.
 - Boot displays only the logo; configuration errors remain visible afterward.
 
 ## Orange Pi checkpoint — 2026-09-30
+
+Latest Wi-Fi/RGB follow-up (active OS `1.4.0-local20260930054411`):
+
+- ConnectWifi 1.1.0: 136 tests passed, 1 skipped. MFruitOS focused launch,
+  Settings, runtime, gesture and hardware checks: 46 tests passed. The install
+  self-test rendered 37 screens. Earlier full-suite results below predate this
+  follow-up and were not rerun in full.
+- A private instance of the real daemon with simulated GPIO accepted 24 rapid
+  hub taps and 28 network-list taps without exiting. All three Back routes
+  acted only on a 1.12-second hold. No real network changes were performed.
+- Live key-hub navigation verified direct Wi-Fi opening, no `LoadingScreen`,
+  12 repeated hub moves without losing focus, and both bottom Back rows
+  returning to Settings. Inspected the actual ConnectWifi RGB565 framebuffer.
+- Both services active; left on Settings with an idle app session. Physical
+  LED appearance and hand-operated buttons still need observation.
+
+Earlier deployment checks:
 
 Deployed MFruit OS 1.4.0 and the matching SDK 1.2.0 apps to
 `orangepi@192.168.0.130`. Both systemd services are active.

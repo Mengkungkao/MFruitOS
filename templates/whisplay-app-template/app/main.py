@@ -1,4 +1,4 @@
-"""Hello Whisplay -- the MFruit OS app template: a counter.
+"""Hello MFruit -- the MFruit OS app template: a counter.
 
     button            keyboard            action
     tap               Down, Right, Tab    +1
@@ -47,7 +47,7 @@ def render(count: int, status=None, armed: bool = False):
     status_bar(c, "Counter", status)
     middle = (CONTENT_TOP + CONTENT_BOTTOM) // 2
     c.text(SCREEN_W // 2, middle, str(count), 64, "bold", anchor="mm")
-    c.text(SCREEN_W // 2, middle + 48, "Hello Whisplay", 14, "medium", c.theme.text_muted,
+    c.text(SCREEN_W // 2, middle + 48, "Hello MFruit", 14, "medium", c.theme.text_muted,
            anchor="mm")
     footer(c, [("release", "to reset")] if armed else HINTS)
     return c.image

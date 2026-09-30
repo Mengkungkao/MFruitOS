@@ -1,4 +1,4 @@
-# Hello Whisplay — MFruit OS app template
+# Hello MFruit — MFruit OS app template
 
 A minimal, complete MFruit OS app package: a counter with MFruit OS's own
 controls and look. Copy this folder to start a new app.

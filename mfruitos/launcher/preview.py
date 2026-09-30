@@ -181,7 +181,7 @@ def run_preview(outdir: str | None) -> int:
 
         diag = diagnostics.DiagnosticsScreen(rt)
         diag.results = {n: CheckResult(n, ok, d) for n, ok, d in [
-            ("Whisplay Daemon", True, "4 ms"), ("Display", True, "OK"),
+            ("Hardware service", True, "4 ms"), ("Display", True, "OK"),
             ("Button", True, "released"), ("RGB LED", True, "OK"), ("Audio", True, "wm8960"),
             ("Network", True, "192.168.0.33"), ("Storage", True, "15.1 GB free"),
             ("Internet", True, "reachable"), ("GitHub", False, "rate limited")]}

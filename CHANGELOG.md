@@ -6,10 +6,20 @@ the OS version.
 
 ## [1.4.0] - 2026-09-30
 
+- MFruit OS branding in app labels, diagnostics, CLI help and package errors.
+  Messenger's app description is Radio Message. Existing hardware identifiers,
+  service names, paths and launch behavior stay compatible.
 - Grouped Settings with coloured icon tiles, Wi-Fi and Bluetooth first, and
   About, Software Update, diagnostics and power under General.
-- Connect WiFi opens from Settings → Wi-Fi → Choose a network and returns
-  there on exit. It stays in Apps for management and leaves the Home list.
+- Settings → Wi-Fi now opens Connect WiFi directly as one MFruit-styled
+  network manager, with connection/IP status, nearby and hidden networks,
+  saved-profile joining, password recovery and phone setup in one flow. It
+  returns to Settings on exit, stays in Apps for management and leaves Home.
+- Wi-Fi opens directly without the Connect WiFi loading screen. Rapid taps
+  only move the selection; hold the explicit Back to Settings row to exit.
+- The RGB light gives white button feedback. Connect WiFi also uses it for
+  Wi-Fi signal, scanning/connecting activity and success/failure, while
+  honoring the existing Light switch and brightness.
 - Bluetooth device groups, discovery, power, connect/disconnect, confirmed
   forgetting, passkey display and numeric confirmation. Blocking operations
   use a separate worker; the pairing agent does not replace the daemon's agent.

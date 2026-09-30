@@ -2,7 +2,7 @@
   "id": "whisplay-lora-messenger",
   "name": "Messenger",
   "version": "1.0.0",
-  "description": "LoRa text messenger with voice input",
+  "description": "Radio Message",
   "entrypoint": "run.sh",
   "repository": "https://github.com/Mengkungkao/Messenger",
   "exit_gesture": "none",
