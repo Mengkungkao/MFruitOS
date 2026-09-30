@@ -139,6 +139,27 @@ else
   fail "self-test failed"
 fi
 
+# Record local installs too, so Settings can roll back without a GitHub release.
+as_user env PYTHONPATH="$CODE_DIR" "$PYTHON" - "$OS_HOME" "$CODE_DIR" "$PREVIOUS" <<'PY'
+import os
+import sys
+from mfruitos.apps.manifest import load_manifest
+from mfruitos.paths import is_within
+from mfruitos.system.settings import atomic_write_json
+
+home, current, previous = sys.argv[1:]
+manifest = load_manifest(current)
+versions = os.path.join(home, "system", "versions")
+if not previous or previous == current or not is_within(previous, versions):
+    previous = ""
+previous_version = load_manifest(previous).version if previous else ""
+atomic_write_json(os.path.join(home, "system", "app.json"), {
+    "id": manifest.id, "name": manifest.name, "installed_version": manifest.version,
+    "installed_dir": current, "previous_dir": previous, "previous_version": previous_version,
+    "repository": manifest.repository, "source": "local",
+})
+PY
+
 # Keep the two most recent local installs (the updater manages its own).
 if [ "$DEV" = 0 ]; then
   ls -1dt "$OS_HOME"/system/versions/*-local* 2>/dev/null | tail -n +3 | while read -r old; do

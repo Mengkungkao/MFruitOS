@@ -137,6 +137,11 @@ esac
 
     def test_files_only_installer_preserves_app_rules_and_device_guide(self):
         os_home = self.tmp / "installed"
+        from helpers import make_package
+        previous = os_home / "system/versions/1.0.0-local-old"
+        make_package(str(previous), app_id="mfruit-os", version="1.0.0",
+                     extra_manifest={"type": "system"})
+        (os_home / "system/current").symlink_to(previous)
         env = dict(self.env, WHISPLAY_OS_HOME=str(os_home))
         result = subprocess.run(["bash", str(Path(ROOT) / "scripts/install.sh"), "--no-service"],
                                 env=env, text=True, capture_output=True, timeout=45)
@@ -145,6 +150,10 @@ esac
         for relative in ("docs/APP_RULES.md", "docs/DEVICE_SETUP.md"):
             self.assertEqual((current / relative).read_bytes(), (Path(ROOT) / relative).read_bytes())
         self.assertTrue((os_home / "bin/mfruitctl").is_file())
+        record = json.loads((os_home / "system/app.json").read_text())
+        self.assertEqual(record["previous_dir"], str(previous))
+        self.assertEqual(record["previous_version"], "1.0.0")
+        self.assertEqual(record["installed_dir"], str(current.resolve()))
 
 
 if __name__ == "__main__":

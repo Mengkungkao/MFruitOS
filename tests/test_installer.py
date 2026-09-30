@@ -116,12 +116,25 @@ class InstallerTests(TempHomeTestCase):
 
         def boom(manifest):
             raise OSError("daemon exploded")
+        record = self.installer.read_record(self.paths.app_root("weather"))
         self.installer.register = boom
         with self.assertRaises(InstallError) as ctx:
             self.install("1.3.0", mode="update")
+        self.assertEqual(self.installer.read_record(self.paths.app_root("weather")), record)
         self.assertEqual(ctx.exception.step, "activate")
         self.assertTrue(ctx.exception.rolled_back)
         self.assertEqual(self.current_version(), "1.0.0")
+
+    def test_failed_manual_rollback_restores_version_and_record(self):
+        self.install("1.0.0")
+        self.install("1.1.0")
+        record = self.installer.read_record(self.paths.app_root("weather"))
+        from unittest.mock import Mock
+        self.installer.register = Mock(side_effect=OSError("registration failed"))
+        with self.assertRaises(OSError):
+            self.installer.rollback_to_previous("weather")
+        self.assertEqual(self.current_version(), "1.1.0")
+        self.assertEqual(self.installer.read_record(self.paths.app_root("weather")), record)
 
     def test_failed_fresh_install_leaves_nothing(self):
         with self.assertRaises(InstallError):
@@ -305,6 +318,18 @@ class SystemUpdateTests(TempHomeTestCase):
         self.assertIn("1.1.0-", current)
         with open(os.path.join(self.paths.state_dir, "pending_system_update.env")) as fp:
             self.assertIn(f"PREVIOUS_DIR={self.old}", fp.read())
+
+    def test_system_rollback_arms_guard_for_the_version_being_left(self):
+        self.installer.run(InstallRequest(repository="", local_path=self.os_package("1.1.0"),
+                                         mode="system"))
+        before = rollback.current_target(self.paths.system_dir)
+        self.assertEqual(self.installer.rollback_to_previous("mfruit-os", system=True), "1.0.0")
+        with open(os.path.join(self.paths.state_dir, "pending_system_update.env")) as fp:
+            self.assertIn(f"PREVIOUS_DIR={before}", fp.read())
+        with open(os.path.join(self.paths.state_dir, "pending_system_update.json")) as fp:
+            pending = json.load(fp)
+        self.assertEqual(pending["previous_dir"], before)
+        self.assertEqual(pending["new_dir"], self.old)
 
     def test_broken_system_update_fails_self_test_and_keeps_current(self):
         with self.assertRaises(InstallError) as ctx:

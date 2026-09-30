@@ -12,8 +12,8 @@ STATUS_Y = 9
 LIST_TOP = 40
 LIST_BOTTOM = 248
 FOOTER_Y = 256
-ROW_H = 36
-ROW_H_SUB = 46
+ROW_H = 46
+ROW_H_SUB = ROW_H
 
 
 @dataclass

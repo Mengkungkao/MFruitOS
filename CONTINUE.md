@@ -1,6 +1,28 @@
 # CONTINUE — MFruit OS validation and app integration, 2026-09-30
 
-## Current checkpoint
+## Current Settings and updater checkpoint
+
+The Settings spacing and package-management follow-up is deployed at
+`/home/orangepi/.whisplay-os/system/versions/1.4.0-local20260930105821`.
+Backup: `/home/orangepi/.mfruit-deploy-backups/settings-updater-20260930T105808Z`. All **296 MFruit OS tests passed locally and on
+Orange Pi**; 39 screens rendered. Live native-app install → update → downgrade →
+failed-update recovery → rollback → uninstall passed, preserving the fixture's data.
+The temporary app was removed and both services are healthy with the original
+seven apps. All 118 deployed runtime/asset/script/template files match this source.
+
+Settings now uses uniform rows. Install apps through **Settings → Apps → Install
+app**, including local packages in `~/.whisplay-os/inbox/`. System update offers
+rollback to the previous saved local build. Git updates recognize nested checkouts
+and preserve rollback history; failed activation restores install metadata too.
+
+Remote distribution remains a separate condition: MFruit OS has no published
+releases/tags, ConnectWifi/Messenger are copied folders without Git metadata, and
+chatbot/WalkieTalkie contain protected local edits. Do not overwrite these edits or
+claim every companion is a native release package. No commits or pushes were made
+for this follow-up. See [the update guide](docs/UPDATES.md) and
+[validation evidence](docs/VALIDATION_SETTINGS_2026-09-30.md).
+
+## Earlier validation and Git integration checkpoint
 
 User request: continue this handoff, validate everything, and test on
 `orangepi@192.168.1.122`. The user chose automated checks now and will do

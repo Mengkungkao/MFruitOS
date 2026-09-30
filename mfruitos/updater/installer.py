@@ -120,7 +120,9 @@ class Installer:
             raise InstallError("activate", "No previous version is available to roll back to.")
         current_dir = rollback.current_target(root)
         manifest = load_manifest(previous_dir)
+        _write_entrypoint(previous_dir, manifest.entrypoint)
         rollback.switch_current(root, previous_dir)
+        old_record = dict(record)
         record.update({
             "installed_version": manifest.version,
             "installed_dir": previous_dir,
@@ -128,10 +130,20 @@ class Installer:
             "previous_dir": current_dir or "",
             "installed_at": time.strftime("%Y-%m-%d %H:%M:%S"),
         })
-        atomic_write_json(self.record_path(root), record)
-        _write_entrypoint(previous_dir, manifest.entrypoint)
-        if self.register and not system:
-            self.register(manifest)
+        try:
+            atomic_write_json(self.record_path(root), record)
+            if self.register and not system:
+                self.register(manifest)
+            if system:
+                _write_guard_file(self.paths.state_dir, current_dir or "")
+                atomic_write_json(os.path.join(self.paths.state_dir, "pending_system_update.json"),
+                                  {"version": manifest.version, "previous_dir": current_dir or "",
+                                   "new_dir": previous_dir, "at": time.time()})
+        except Exception:
+            if current_dir:
+                rollback.switch_current(root, current_dir)
+            atomic_write_json(self.record_path(root), old_record)
+            raise
         log.info("Rolled %s back to %s", app_id, manifest.version)
         return manifest.version
 
@@ -198,6 +210,7 @@ class _Job:
         self.data_snapshot: str | None = None
         self.activated = False
         self.scripts_ran = False
+        self.previous_record = None
 
     # ------------------------------------------------------------- driver
     def execute(self) -> InstallResult:
@@ -296,6 +309,7 @@ class _Job:
             manifest.repository = self.req.repository
         self.manifest = manifest
         self.root = self.i.target_root(manifest.id, self.system)
+        self.previous_record = self.i.read_record(self.root)
         self.previous_dir = rollback.current_target(self.root)
         self.fresh = self.previous_dir is None
         if self.previous_dir:
@@ -418,6 +432,7 @@ class _Job:
         try:
             if self.activated and self.previous_dir:
                 rollback.switch_current(self.root, self.previous_dir)
+                atomic_write_json(self.i.record_path(self.root), self.previous_record)
                 log.warning("Rolled back to %s", self.previous_dir)
             if self.scripts_ran and self.data_snapshot:
                 rollback.restore_data(self.root, self.data_snapshot)

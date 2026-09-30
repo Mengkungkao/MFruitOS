@@ -90,10 +90,11 @@ def _github_https(remote: str) -> str:
 
 
 def inspect(path: str) -> Checkout | None:
-    """Describe the git checkout at ``path`` (must be the work-tree root)."""
-    if not path or not os.path.isdir(os.path.join(path, ".git")):
+    """Describe the work tree containing an app's working directory."""
+    if not path or not os.path.isdir(path):
         return None
     try:
+        path = git(path, "rev-parse", "--show-toplevel")
         remote = git(path, "remote", "get-url", "origin")
         branch = git(path, "rev-parse", "--abbrev-ref", "HEAD")
         head = git(path, "rev-parse", "HEAD")
@@ -150,12 +151,12 @@ def update(checkout: Checkout, state_dir: str, app_id: str, progress=None) -> st
         raise GitError("folder is no longer a git checkout")
     if current.dirty:
         raise GitError("local changes present; commit or discard them first")
-    report("backup", f"Recording {current.short}", None)
-    record_backup(state_dir, app_id, current)
     report("download", "git fetch", None)
     git(current.path, "fetch", "--quiet", "origin", current.branch, timeout=FETCH_TIMEOUT)
     report("verify", "Checking fast-forward", None)
     target = git(current.path, "rev-parse", "FETCH_HEAD")
+    if target == current.head:
+        return target  # A repeated update must not erase the rollback target.
     if not is_ancestor(current.path, current.head, target):
         raise GitError("branch has diverged from origin; update manually")
     report("install", "Fast-forward", None)
@@ -168,6 +169,7 @@ def update(checkout: Checkout, state_dir: str, app_id: str, progress=None) -> st
         git(current.path, "reset", "--hard", "--quiet", current.head)
         raise GitError(f"{exc} (rolled back to {current.short})") from exc
     report("activate", f"Now at {target[:7]}", None)
+    record_backup(state_dir, app_id, current)
     log.info("Updated %s from %s to %s", app_id, current.short, target[:7])
     return target
 

@@ -6,7 +6,7 @@ import os as _os
 import platform
 
 from mfruitos import OS_NAME, __version__
-from mfruitos.launcher.ui.components import Item, back_item, section
+from mfruitos.launcher.ui.components import Item, back_item
 from mfruitos.launcher.ui.screens.bluetooth import BluetoothScreen
 from mfruitos.launcher.ui.screens.apps import ApplicationsScreen
 from mfruitos.launcher.ui.screens.base import ListScreen
@@ -73,20 +73,16 @@ class SettingsScreen(ListScreen):
                  subtitle=self.ssid or "Not connected", tile=(46, 140, 255)),
             Item("Bluetooth", lambda: os.push(BluetoothScreen(os)), kind="nav", icon="bluetooth",
                  subtitle=self.bluetooth, tile=(46, 140, 255)),
-            section(),
             Item("Display & Brightness", lambda: os.push(DisplayScreen(os)), kind="nav",
                  icon="display", tile=(46, 140, 255)),
             Item("Sounds", lambda: os.push(AudioScreen(os)), kind="nav", icon="audio", tile=(255, 69, 108)),
             Item("Button", lambda: os.push(ButtonScreen(os)), kind="nav", icon="button", tile=(94, 92, 230)),
             Item("Light", lambda: os.push(LedScreen(os)), kind="nav", icon="led", tile=(255, 149, 0)),
-            section(),
             Item("General", lambda: os.push(GeneralScreen(os)), kind="nav", icon="system", tile=(110, 118, 130)),
-            section(),
             Item("Apps", lambda: os.push(ApplicationsScreen(os)), kind="nav", icon="apps",
                  value=str(len(apps)), tile=(94, 92, 230)),
             Item("Developer", lambda: os.push(DeveloperScreen(os)), kind="nav", icon="developer",
                  value="On" if os.settings.get("developer.enabled") else None, tile=(110, 118, 130)),
-            section(),
             back_item(),
         ]
         return rows
@@ -275,7 +271,6 @@ class WifiScreen(ListScreen):
             Item("Network", kind="info", subtitle=self.ssid or "Not connected", icon="wifi"),
             Item("IP address", kind="info", value=self.ip or "—"),
             Item("Internet", kind="info", value=self.internet),
-            section(),
             Item("Choose a network…", self.choose_network, kind="nav", icon="wifi"),
             Item("Check internet", self.check_internet, icon="network"),
             back_item(),
@@ -292,7 +287,6 @@ class GeneralScreen(ListScreen):
             Item("About", lambda: os.push(AboutScreen(os)), kind="nav", icon="info"),
             Item("Software Update", os.open_system_update, kind="nav", icon="updater",
                  value=__version__),
-            section(),
             Item("System info", os.open_system_info, kind="nav", icon="info"),
             Item("Diagnostics", os.open_diagnostics, kind="nav", icon="diagnostics"),
         ]

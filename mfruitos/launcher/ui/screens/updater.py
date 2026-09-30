@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os as filesystem
 import time
 
 from mfruitos import OS_APP_ID, OS_NAME, __version__
@@ -37,23 +38,24 @@ class UpdaterScreen(ListScreen):
         up = os.updater
         self.subtitle = "Checking…" if up.busy else f"Checked {when(up.last_check)}"
         if up.online is False and not up.busy:
-            return [
+            rows = [
                 Item("Internet unavailable", kind="info", icon="warning", tone="warning",
                      subtitle="Installed apps remain available"),
                 Item("Last check", kind="info", value=when(up.last_check)),
                 Item("Retry", lambda: os.check_updates(), icon="refresh"),
-                back_item(),
             ]
+        else:
+            rows = []
         infos = up.infos()
-        rows = []
         system = infos.get(OS_APP_ID)
         rows.append(self._row(OS_NAME, system, __version__, os.open_system_update))
         for app in os.registry.apps():
             info = infos.get(app.id)
-            if app.kind == "os" or (info is not None and info.channel == "git"):
+            if app.kind in ("os", "daemon"):
                 rows.append(self._row(app.name, info, app.version,
                                       lambda a=app.id: os.open_app_updates(a)))
-        count = up.update_count()
+        count = sum(1 for info in infos.values() if info.channel in ("release", "git")
+                    and info.update_available and not info.error)
         if count > 1:
             rows.append(Item(f"Update all ({count})", os.update_all, icon="download", tone="accent"))
         rows += [
@@ -132,6 +134,7 @@ class AppUpdateScreen(ListScreen):
                     Item("How to enable updates", lambda: os.show_message(
                         "Updates", "Give the app a manifest.json and publish GitHub releases, "
                         "or install it from a git clone. See APP_DEVELOPMENT.md."), kind="nav"),
+                    Item("Check now", lambda: os.check_updates(), icon="refresh"),
                     back_item()]
         rows = [Item("Tracking", kind="info", value=info.installed),
                 Item("Commit updates", kind="info", tone="muted",
@@ -145,9 +148,13 @@ class AppUpdateScreen(ListScreen):
         if info.update_available and not info.error:
             rows.append(Item("Update now", lambda: os.git_update(app.id), icon="download",
                              tone="accent"))
+        from mfruitos.updater.gittrack import previous_commit
+        previous = previous_commit(os.paths.state_dir, app.id)
         rows.append(Item("Roll back", lambda: os.push(confirm(
             os, "Roll back?", "Reset to the commit before the last update.", "Roll back",
-            lambda: os.git_rollback(app.id), danger=False)), icon="rollback"))
+            lambda: os.git_rollback(app.id), danger=False)), icon="rollback",
+            enabled=bool(previous), subtitle=None if previous else "No previous update saved"))
+        rows.append(Item("Check now", lambda: os.check_updates(), icon="refresh"))
         rows.append(back_item())
         return rows
 
@@ -197,7 +204,12 @@ class VersionListScreen(ListScreen):
             return [Item("Loading releases…", kind="info", icon="refresh"), back_item()]
         if self.error:
             return [Item("Could not load versions", kind="info", icon="warning", tone="warning",
-                         subtitle=self.error), back_item()]
+                         subtitle=self.error),
+                    Item("Retry", self._retry, icon="refresh"), back_item()]
+        if not self.releases:
+            return [Item("No published versions", kind="info", icon="info",
+                         subtitle="Publish a version tag or release"),
+                    Item("Retry", self._retry, icon="refresh"), back_item()]
         installed = parse_version(self._installed())
         rows = []
         for index, release in enumerate(self.releases):
@@ -208,6 +220,12 @@ class VersionListScreen(ListScreen):
                              subtitle=(release.published_at[:10] or release.source)))
         rows.append(back_item())
         return rows
+
+    def _retry(self) -> None:
+        self.releases = None
+        self.error = ""
+        self.on_show()
+        self.redraw()
 
     def _pick(self, release) -> None:
         os = self.os
@@ -232,6 +250,8 @@ class InstallAppScreen(ListScreen):
         return [
             Item("Discover apps", lambda: os.push(DiscoverScreen(os)), kind="nav", icon="search",
                  subtitle="GitHub topic & your sources"),
+            Item("Local packages", lambda: os.push(LocalPackagesScreen(os)), kind="nav",
+                 icon="package", subtitle="Install a downloaded package"),
             Item("From a terminal", lambda: os.show_message(
                 "Install from GitHub",
                 "On the device run:\n  mfruitctl install github.com/user/repo\n"
@@ -239,6 +259,54 @@ class InstallAppScreen(ListScreen):
                 kind="nav", icon="developer"),
             back_item(),
         ]
+
+
+class LocalPackagesScreen(ListScreen):
+    title = "Packages"
+
+    def __init__(self, os):
+        super().__init__(os)
+        self.packages = None
+        self.error = ""
+
+    def on_show(self) -> None:
+        directory = filesystem.path.join(self.os.paths.home, "inbox")
+
+        def read():
+            if not filesystem.path.isdir(directory):
+                return []
+            with filesystem.scandir(directory) as entries:
+                return sorted((e.name, e.path) for e in entries if
+                              (e.is_file() and e.name.endswith((".tar.gz", ".tgz", ".tar", ".zip")))
+                              or (e.is_dir() and filesystem.path.isfile(
+                                  filesystem.path.join(e.path, "manifest.json"))))
+
+        def done(packages):
+            self.packages = packages
+            self.error = ""
+            self.redraw()
+
+        def failed(exc):
+            self.packages = []
+            self.error = str(exc)
+            self.redraw()
+        self.os.run_task("local-packages", read, done, failed)
+
+    def items(self) -> list[Item]:
+        if self.packages is None:
+            return [Item("Loading packages…", kind="info"), back_item()]
+        rows = [Item(name, lambda p=path, n=name: self.os.push(confirm(
+            self.os, "Install package?", f"{n}\nInstall this version, replacing any newer version. "
+            "Only install packages you trust.", "Install", lambda: self.os.sideload(p),
+            danger=False)), icon="package") for name, path in self.packages]
+        if not rows:
+            rows.append(Item("No local packages", kind="info", subtitle=self.error or
+                             "Add a package to the inbox"))
+        rows.append(Item("How to add packages", lambda: self.os.show_message(
+            "Package inbox", "Copy an app archive or package folder to:\n"
+            "~/.whisplay-os/\ninbox/\nThen choose Refresh."), kind="nav", icon="info"))
+        rows += [Item("Refresh", self.on_show, icon="refresh"), back_item()]
+        return rows
 
 
 class DiscoverScreen(ListScreen):
@@ -320,5 +388,11 @@ class SystemUpdateScreen(ListScreen):
         if os.settings.get("system.repository"):
             rows.append(Item("Versions", lambda: os.push(VersionListScreen(os, OS_APP_ID)),
                              kind="nav", icon="list"))
+        record = os.installer.read_record(os.paths.system_dir)
+        if record.get("previous_dir"):
+            version = record.get("previous_version") or "previous build"
+            rows.append(Item(f"Roll back to {version}", lambda: os.push(confirm(
+                os, "Roll back system?", "Restore the saved build and restart MFruit OS.",
+                "Roll back", os.rollback_system, danger=False)), icon="rollback"))
         rows += [Item("Check now", lambda: os.check_updates(), icon="refresh"), back_item()]
         return rows

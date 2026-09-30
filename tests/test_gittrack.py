@@ -55,6 +55,27 @@ class GitTrackTests(TempHomeTestCase):
         gittrack.rollback(after, self.paths.state_dir, "demo")
         self.assertEqual(gittrack.inspect(self.app).head, old)
 
+    def test_nested_app_and_worktree_are_detected(self):
+        nested = os.path.join(self.app, "nested")
+        os.makedirs(nested)
+        self.assertEqual(gittrack.inspect(nested).path, self.app)
+        linked = os.path.join(self.tmp, "linked")
+        run(self.app, "worktree", "add", "-b", "linked", linked)
+        self.assertEqual(gittrack.inspect(linked).path, linked)
+
+    def test_noop_and_failed_updates_preserve_previous_commit(self):
+        original = gittrack.inspect(self.app).head
+        self.push("main.py", "print('v2')\n", "v2")
+        gittrack.update(gittrack.inspect(self.app), self.paths.state_dir, "demo")
+        gittrack.update(gittrack.inspect(self.app), self.paths.state_dir, "demo")
+        self.assertEqual(gittrack.previous_commit(self.paths.state_dir, "demo"), original)
+        self.push("main.py", "def broken(:\n", "broken")
+        with self.assertRaises(gittrack.GitError):
+            gittrack.update(gittrack.inspect(self.app), self.paths.state_dir, "demo")
+        self.assertEqual(gittrack.previous_commit(self.paths.state_dir, "demo"), original)
+        gittrack.rollback(gittrack.inspect(self.app), self.paths.state_dir, "demo")
+        self.assertEqual(gittrack.inspect(self.app).head, original)
+
     def test_dirty_tree_refused(self):
         self.push("main.py", "print('v2')\n", "v2")
         with open(os.path.join(self.app, "main.py"), "w") as fp:

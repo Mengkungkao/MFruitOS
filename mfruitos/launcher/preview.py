@@ -144,6 +144,8 @@ def run_preview(outdir: str | None) -> int:
         shot("30-updater", updater.UpdaterScreen(rt))
         shot("31-app-update", updater.AppUpdateScreen(rt, "weather"))
         shot("32-git-update", updater.AppUpdateScreen(rt, "whisplay-lora-walkie"))
+        shot("37-install-app", updater.InstallAppScreen(rt))
+        shot("38-local-packages", updater.LocalPackagesScreen(rt))
         versions = updater.VersionListScreen(rt, "weather")
         versions.releases = [Release(v, f"v{v}", published_at=f"2026-0{i + 1}-01")
                              for i, v in enumerate(["1.3.0", "1.2.0", "1.1.0", "1.0.0"])]

@@ -84,9 +84,9 @@ class ScreenServices:
         def done(result):
             screen.finish(True, success(result), log_path)
             self.led.show("idle")
-            self.refresh_registry(query_daemon=True)
             if on_success:
                 on_success(result)
+            self.refresh_registry(query_daemon=True)
 
         def failed(exc):
             if isinstance(exc, InstallError):
@@ -206,20 +206,8 @@ class ScreenServices:
         self.push(ButtonTestScreen(self))
 
     def open_sideload(self) -> None:
-        inbox = os.path.join(self.paths.home, "inbox")
-        os.makedirs(inbox, exist_ok=True)
-        packages = sorted(n for n in os.listdir(inbox)
-                          if n.endswith((".tar.gz", ".tgz", ".zip")) or
-                          os.path.isfile(os.path.join(inbox, n, "manifest.json")))
-        if not packages:
-            self.show_message("Install local package",
-                              "Copy a package (.tar.gz, .zip or a folder with manifest.json) to:\n"
-                              "  ~/.whisplay-os/inbox/\nor run: mfruitctl sideload <path>")
-            return
-        rows = [Item(name, lambda n=name: self.sideload(os.path.join(inbox, n)), icon="package")
-                for name in packages]
-        rows.append(back_item())
-        self.push(MessageScreen(self, "Local packages", "Select a package to install:", rows))
+        from mfruitos.launcher.ui.screens.updater import LocalPackagesScreen
+        self.push(LocalPackagesScreen(self))
 
     # ------------------------------------------------------------ updater
     def updates_available_count(self) -> int:
@@ -251,8 +239,10 @@ class ScreenServices:
                 self.toast("Internet unavailable", "error")
             else:
                 count = self.updater.update_count()
+                errors = any(i.error for i in self.updater.infos().values())
                 self.toast(f"{count} update{'s' if count != 1 else ''} available" if count
-                           else "Everything is up to date", "success" if not count else "")
+                           else "Check update details" if errors else "Everything is up to date",
+                           "success" if not count and not errors else "")
         self.updater.busy = True
         self.request_render()
         self.tasks.submit("check-updates", lambda: self.updater.check(entries), done,
@@ -264,7 +254,8 @@ class ScreenServices:
         if entry is None:
             return
         if entry.running:
-            self.lifecycle.request_stop(entry)
+            self.toast("Stop the app before updating")
+            return
         self.start_job(f"{entry.name} {version}",
                        lambda progress: self.updater.install_version(entry, version, progress),
                        lambda r: f"{r.name} {r.version} installed" + (
@@ -276,20 +267,24 @@ class ScreenServices:
         self.start_job("Install app",
                        lambda progress: self.updater.install_from_repository(repository, progress),
                        lambda r: f"{r.name} {r.version} installed",
-                       on_success=lambda r: self._after_new_install(r.app_id))
+                       on_success=lambda r: self._after_new_install(r.app_id, r.version))
 
     def sideload(self, path: str) -> None:
         self.start_job("Install package", lambda progress: self.updater.sideload(path, progress),
                        lambda r: f"{r.name} {r.version} installed",
-                       on_success=lambda r: self._after_new_install(r.app_id))
+                       on_success=lambda r: self._after_new_install(r.app_id, r.version))
 
-    def _after_new_install(self, app_id: str) -> None:
+    def _after_new_install(self, app_id: str, version: str) -> None:
+        self.updater.mark_installed(app_id, version)
         self.refresh_registry(query_daemon=True)
         self.home_screen.focus_key(app_id)
 
     def update_all(self) -> None:
         targets = [(a, self.updater.info(a.id)) for a in self.registry.apps()]
         targets = [(a, i) for a, i in targets if i and i.update_available and not i.error]
+        if any(a.running for a, _ in targets):
+            self.toast("Stop running apps before updating")
+            return
         system = self.updater.info(OS_APP_ID)
 
         def work(progress):
@@ -297,7 +292,8 @@ class ScreenServices:
             for app, info in targets:
                 progress("check", f"{app.name}", None)
                 if info.channel == "release":
-                    self.updater.install_version(app, info.latest, progress)
+                    result = self.updater.install_version(app, info.latest, progress)
+                    self.updater.mark_installed(result.app_id, result.version)
                 elif info.channel == "git":
                     self.updater.git_update(app, progress)
                 done.append(app.name)
@@ -317,16 +313,24 @@ class ScreenServices:
                        on_success=on_success)
 
     def rollback_app(self, app_id: str) -> None:
-        def done(version):
-            self.updater.mark_installed(app_id, version)
-            self.refresh_registry(query_daemon=True)
-            self.toast(f"Rolled back to {version}", "success")
+        entry = self.registry.get(app_id)
+        if entry is None:
+            return
+        if entry.running:
+            self.toast("Stop the app before rolling back")
+            return
+        self.start_job("Roll back app",
+                       lambda progress: self.installer.rollback_to_previous(app_id),
+                       lambda version: f"Rolled back to {version}",
+                       on_success=lambda version: self.updater.mark_installed(app_id, version),
+                       steps=("activate",))
 
-        def failed(exc):
-            self.show_message("Rollback failed", getattr(exc, "message", str(exc)), "error",
-                              "warning")
-        self.run_task("rollback", lambda: self.installer.rollback_to_previous(app_id), done,
-                      failed, lane="jobs")
+    def rollback_system(self) -> None:
+        self.start_job("Roll back system",
+                       lambda progress: self.installer.rollback_to_previous(OS_APP_ID, system=True),
+                       lambda version: f"MFruit OS {version} restored. Restarting…",
+                       on_success=lambda _: self.loop.call_later(2.5, self.restart_launcher),
+                       steps=("activate",))
 
     def git_update(self, app_id: str) -> None:
         entry = self.registry.get(app_id)
@@ -344,10 +348,11 @@ class ScreenServices:
         entry = self.registry.get(app_id)
         if entry is None:
             return
-        self.run_task("git-rollback", lambda: self.updater.git_rollback(entry),
-                      lambda sha: self.toast(f"Rolled back to {sha}", "success"),
-                      lambda exc: self.show_message("Rollback failed", str(exc), "error", "warning"),
-                      lane="jobs")
+        if entry.running:
+            self.toast("Stop the app before rolling back")
+            return
+        self.start_job("Roll back app", lambda progress: self.updater.git_rollback(entry),
+                       lambda sha: f"Rolled back to {sha}", steps=("activate",))
 
     # ------------------------------------------------------------ hardware tests
     def test_led(self) -> None:

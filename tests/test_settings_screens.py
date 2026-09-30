@@ -22,10 +22,12 @@ class SettingsScreensTests(TempHomeTestCase):
         for _ in range(5):
             self.rt.loop.run_once(timeout=0)
 
-    def test_settings_groups_skip_headings_in_both_directions(self):
+    def test_settings_has_uniform_rows_in_both_directions(self):
         screen = SettingsScreen(self.rt)
         items = screen.items()
-        self.assertEqual([i.label for i in items if i.kind == "section"], ["", "", "", ""])
+        self.assertFalse(any(i.kind == "section" for i in items))
+        from mfruitos.launcher.ui.components import row_height
+        self.assertEqual({row_height(i) for i in items}, {46})
         self.assertEqual(items[0].label, "Wi-Fi")
         for direction in ("next", "previous"):
             for _ in range(len(items) * 2):

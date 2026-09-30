@@ -181,6 +181,8 @@ screen without hardware with `python3 -m mfruitos --preview /tmp/screens`.
 
 ## Documentation
 
+- [docs/UPDATES.md](docs/UPDATES.md) — install app packages, update, downgrade and restore saved versions
+
 - [INSTALL.md](INSTALL.md) — installation, service, updating, uninstalling, troubleshooting
 - [docs/DEVICE_SETUP.md](docs/DEVICE_SETUP.md) — step-by-step setup, SSH checks, physical tests and recovery on another device
 - [APP_DEVELOPMENT.md](APP_DEVELOPMENT.md) — app package format, lifecycle and the MFruit App SDK
