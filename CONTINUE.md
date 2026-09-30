@@ -9,7 +9,15 @@ physical hardware checks afterward.
 Latest validated build: `/home/orangepi/.whisplay-os/system/versions/1.4.0-local20260930101701`.
 Backup: `/home/orangepi/.mfruit-deploy-backups/cleanup-20260930101701/` (MFruit source, 29 companion files,
 previous version and deployment metadata). Previous build:
-`/home/orangepi/.whisplay-os/system/versions/1.4.0-local20260930093556`. No commits or pushes were made.
+`/home/orangepi/.whisplay-os/system/versions/1.4.0-local20260930093556`.
+
+Git integration follow-up: all 13 incoming origin/main commits across six repos
+are preserved in normal merge commits alongside the validated fixes. All 1,304
+local Python tests and the Orange Pi chatbot build/regression passed again;
+SSH health checks remain healthy. Runtime files match the deployed validated
+checkpoint, so no redeployment was needed. Commits are local; nothing was pushed.
+See [the integration record](docs/INTEGRATION_2026-09-30.md) for upstream commit
+inventory, resolution decisions, app merge hashes and recovery backups.
 
 Follow-up user requests: validate and remove unnecessary files; align software
 and UI with MFruit OS; create app creation/development/production rules; supply
@@ -60,7 +68,8 @@ why this working tree contains substantial changes relative to its Git base.
 The local checkout was behind the board: local MFruit OS was 1.3.0 at
 `a874398`, while the board already had 1.4.0 and later Wi-Fi, navigation and
 branding changes. Recovered and reviewed the board source instead of deploying
-the stale local checkout. No staging, commits, pushes or tags were performed.
+the stale local checkout. During that initial recovery, no staging, commits,
+pushes or tags were performed; the later local merges are described above.
 
 Original board source: `/tmp/mfruit-board-snapshot`. Companion snapshots:
 `/tmp/mfruit-app-validation/`; recovered-file inventory:
