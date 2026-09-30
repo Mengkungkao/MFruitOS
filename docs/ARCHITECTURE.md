@@ -151,15 +151,22 @@ own launcher). Tested against the real daemon code in
 whisplay-daemon reads USB and Bluetooth keyboards too, but gives keys only to
 its own pages; for an external app it acts on Esc alone (it closes the app
 unless the app registered `disable_esc_exit_key`). So MFruit OS and every
-MFruit app read keyboards themselves, with `mfruitos/sdk/keys.py`:
+MFruit apps use `mfruitos/sdk/keys.py`, with one platform-owned input path:
 
 - Only devices with letter keys count (not the Orange Pi's power button, ADC
   keys or IR receiver). `/dev/input` is watched with inotify, so a keyboard
   plugged in or paired later is found at once, and nothing polls while idle.
-- Nobody grabs a device, so **every process sees every key**. Each reader acts
-  only while its program owns the screen, and only on keys whose press it saw
-  while it did: the key-up of the Esc that closed an app, or the auto-repeat
-  of the Enter that opened one, is ignored by whoever has the screen next.
+- MFruit OS holds keyboards with EVIOCGRAB. Keys cannot reach tty1 or the
+  daemon while it owns input. `launcher/keyhub.py` listens on
+  `state/keys.sock` (0600). Clients identify themselves with
+  `{"app_id":"connectwifi"}`; the hub sends newline-delimited JSON:
+  `{"type":"keyboards","devices":[...]}` and
+  `{"type":"key","kind":"key","value":"enter","action":1,"code":28}`.
+  Each key's repeats/release go to its press's original foreground owner.
+  SDK readers still enforce focus ownership. `MFRUIT_KEYS_SOCKET` overrides
+  the socket; otherwise it resolves from MFRUIT_HOME / WHISPLAY_OS_HOME.
+  Direct evdev reading is a standalone fallback. Developer → Daemon desktop
+  releases the grab; taking focus back reacquires it.
 - MFruit OS maps ↑/← previous, ↓/→/Tab next, Enter select, Esc back, Home
   home (`Runtime._on_key`), and registers itself with `disable_esc_exit_key`.
 
@@ -171,6 +178,16 @@ into next / previous / select / back actions (plus talk on talk screens), and
 [APP_RULES.md](APP_RULES.md).
 
 ## Fallback display
+
+Settings uses cached state; blocking Wi-Fi and Bluetooth queries run on task
+workers, never in draw methods. Bluetooth has a serial worker lane so a scan
+does not block general lookups or package jobs. Its BlueZ adapter reuses one
+query bus and one GLib agent bus, closing both at shutdown. Pair runs
+asynchronously on the agent connection, so BlueZ uses this application's
+agent without changing the default agent. Confirmation replies are deferred
+with a timeout; they never block GLib event dispatch. Screens receive prompts
+on the UI loop. Wi-Fi launches through ApplicationManager and retains the
+screen stack, so closing Connect WiFi uncovers the Wi-Fi page.
 
 When the daemon's systemd unit is `inactive` or `failed` (never while it is
 starting), `launcher/direct.py` opens the official `WhisplayBoard` from the

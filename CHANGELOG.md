@@ -4,6 +4,23 @@ All notable changes to MFruit OS are documented here. Versions follow
 [Semantic Versioning](https://semver.org/). App versions are independent of
 the OS version.
 
+## [1.4.0] - 2026-09-30
+
+- Grouped Settings with coloured icon tiles, Wi-Fi and Bluetooth first, and
+  About, Software Update, diagnostics and power under General.
+- Connect WiFi opens from Settings → Wi-Fi → Choose a network and returns
+  there on exit. It stays in Apps for management and leaves the Home list.
+- Bluetooth device groups, discovery, power, connect/disconnect, confirmed
+  forgetting, passkey display and numeric confirmation. Blocking operations
+  use a separate worker; the pairing agent does not replace the daemon's agent.
+- Boot draws only the centred logo on a dark background; startup steps stay
+  in the log and configuration errors remain visible after boot.
+- SDK 1.2.0: MFruit OS exclusively grabs keyboards and routes each key to
+  the foreground owner through its key hub. This prevents keys reaching tty1's
+  autologin shell and accidentally executing a launcher restart.
+- Deploy the matching SDK to keyboard apps with this release. Daemon desktop
+  mode releases the keyboard grab; returning to MFruit OS takes it again.
+
 ## [1.3.0] - 2026-09-30
 
 ### Added

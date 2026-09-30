@@ -157,6 +157,34 @@ def apply(module, lock_path: str, log=print) -> list[str]:
             return original_release(self, app, reason)
         cls._release_focus = _release_focus
         patched.append("_release_focus")
+
+    if hasattr(cls, "handle_command"):
+        original_command = cls.handle_command
+
+        def handle_command(self, request, conn):
+            if request.get("cmd") != "mfruit.page.key":
+                return original_command(self, request, conn)
+            payload = request.get("payload") or {}
+            if not isinstance(payload, dict):
+                return {"ok": False, "error": "invalid key payload"}, False
+            with self.state_lock:
+                app_id = payload.get("app_id")
+                if (request.get("version", 1) != 1 or not mfruit_running()
+                        or self._screen_locked or self.foreground_app_id != app_id
+                        or not self.internal_apps.is_internal_app(app_id)):
+                    return {"ok": False, "error": "page does not own input"}, False
+                kind, value = payload.get("kind"), payload.get("value")
+                action = {"up": "up", "left": "up", "down": "down", "right": "down",
+                          "tab": "down", "enter": "submit", "escape": "cancel",
+                          "backspace": "backspace", "space": ("char", " ")}.get(value)
+                if kind == "char" and isinstance(value, str) and len(value) == 1:
+                    action = ("char", value)
+                if action is None:
+                    return {"ok": False, "error": "unsupported key"}, False
+                self._handle_keyboard_action(action)
+                return {"ok": True, "payload": {}}, False
+        cls.handle_command = handle_command
+        patched.append("handle_command")
     return patched
 
 

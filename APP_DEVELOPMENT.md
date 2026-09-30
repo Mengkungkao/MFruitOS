@@ -232,3 +232,11 @@ mfruitctl launch my-app
 tail -f ~/.whisplay-os/logs/my-app.log
 mfruitctl screenshot /tmp/s.png    # what MFruit OS itself is drawing
 ```
+
+## SDK 1.2.0 keyboard migration
+
+Pass the stable app id to InputController(app_id=APP_ID). The SDK uses MFruit
+OS's key hub while available and direct evdev input when running standalone.
+Do not open /dev/input yourself: the platform grabs keyboards exclusively.
+Synchronize SDK copies and deploy keyboard apps together with MFruit OS 1.4.0.
+The key hub protocol and ownership rules are in docs/ARCHITECTURE.md.

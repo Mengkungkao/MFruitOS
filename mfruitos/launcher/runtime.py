@@ -20,7 +20,7 @@ from mfruitos.launcher import sdnotify
 from mfruitos.launcher.app_manager.lifecycle import AppLifecycle
 from mfruitos.launcher.control import ControlServer
 from mfruitos.launcher.direct import DirectDisplay, daemon_unit_state, find_whisplay_root, SAFE_STATES
-from mfruitos.launcher.focus import APP, HOME, ForegroundManager
+from mfruitos.launcher.focus import APP, HOME, SYSTEM, ForegroundManager
 from mfruitos.launcher.keyhub import KeyHub
 from mfruitos.launcher.loop import EventLoop
 from mfruitos.launcher.navigation.gestures import GestureRecognizer
@@ -43,6 +43,7 @@ from mfruitos.sdk.keys import REPEAT as KEY_REPEAT
 from mfruitos.sdk.keys import UP as KEY_UP
 from mfruitos.sdk.keys import KeyEvent, KeyReader
 from mfruitos.system import hardware, system_info
+from mfruitos.system.bluetooth import Bluetooth
 from mfruitos.system.settings import GESTURE_KEYS, Settings
 from mfruitos.updater.github import GitHubClient
 from mfruitos.updater.installer import Installer
@@ -93,6 +94,7 @@ class Runtime(ScreenServices):
         self.backlight = hardware.BacklightController(self.client, self.settings)
         self.led = hardware.LedController(self.client, self.settings)
         self.tasks = TaskRunner(self.loop.post)
+        self.bluetooth = Bluetooth()
         self.router = Router(on_change=self._on_route_change)
         self.hold_armed = False
         self.gestures = GestureRecognizer(self._on_gesture, self.loop.call_later,
@@ -445,6 +447,14 @@ class Runtime(ScreenServices):
                 self._key_owners.pop(event.code, None)
         if owner == OS_APP_ID:
             self._on_key(event)
+        elif owner is not None and self._is_page(owner):
+            if event.action == KEY_UP or (event.action == KEY_REPEAT and event.value in ("enter", "escape")):
+                return
+            try:
+                self.client.request("mfruit.page.key", {"app_id": owner, "kind": event.kind,
+                                                        "value": event.value}, timeout=0.5)
+            except DaemonError as exc:
+                log.warning("Cannot forward key to %s: %s", owner, exc)
         elif owner is not None:
             if not self.keyhub.send(owner, event) and event.action == KEY_DOWN:
                 log.debug("key %s for %s: the app is not listening", event.value, owner)
@@ -453,9 +463,9 @@ class Runtime(ScreenServices):
         """Who a key pressed now belongs to."""
         if self._output() is not None:
             return OS_APP_ID
-        if self.focus.mode == APP and self.focus.target:
+        if self.focus.mode in (APP, SYSTEM) and self.focus.target:
             return self.focus.target
-        return None                           # a daemon page, the daemon desktop, a lock
+        return None                           # the daemon desktop or a lock
 
     def _on_key(self, event: KeyEvent) -> None:
         """A keyboard key: Up/Down/Tab move, Enter opens, Esc goes back.
@@ -772,6 +782,7 @@ class Runtime(ScreenServices):
         self.stream.stop()
         self.keyboard.stop()
         self.keyhub.stop()
+        self.bluetooth.close()
         self.tasks.stop()
         self.lifecycle.revoke_all_tickets()
         self.lifecycle.release_instance_lock()

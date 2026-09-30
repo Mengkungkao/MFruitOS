@@ -183,3 +183,16 @@ screen without hardware with `python3 -m mfruitos --preview /tmp/screens`.
 
 MIT — see [LICENSE](LICENSE). The bundled Inter font is under the SIL Open Font License.
 # MFruitOS
+
+## Settings and keyboard input (1.4.0)
+
+Settings groups Wi-Fi and Bluetooth first, then display, sound, button and light.
+General contains About, Software Update, diagnostics and power. Connect WiFi
+opens from Settings > Wi-Fi > Choose a network and returns there when closed.
+Bluetooth shows saved and nearby devices with pairing codes and confirmation.
+Boot displays only the logo on a dark background.
+
+Deploy SDK 1.2.0 to all keyboard apps together with MFruit OS 1.4.0. MFruit OS
+holds keyboards exclusively, preventing typed keys from reaching the console
+shell, and forwards keys to the foreground app. Daemon pages receive forwarded
+keys through the MFruit wrapper; Developer > Daemon desktop releases the grab.

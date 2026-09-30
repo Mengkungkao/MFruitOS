@@ -117,3 +117,10 @@ mfruitctl status
 mfruitctl screenshot /tmp/screen.png      # exactly what MFruit OS is drawing
 python3 -m mfruitos --self-test           # (with PYTHONPATH set) offline render test
 ```
+
+## Upgrading to 1.4.0
+
+Update all keyboard apps to SDK 1.2.0 before restarting MFruit OS. The launcher
+now grabs keyboards exclusively; older direct-input apps otherwise receive no
+keys. Install the updated daemon wrapper and restart whisplay-daemon as well
+so built-in Volume, Power and Wi-Fi pages receive forwarded keyboard input.

@@ -37,6 +37,7 @@ SYSTEM_PAGES = {
 }
 
 RUN_WRAPPER_NAME = "mfruit-run"
+SETTINGS_APPS = frozenset({"connectwifi"})
 
 
 @dataclass
@@ -317,7 +318,7 @@ class AppRegistry:
 
     def launcher_entries(self) -> list[AppEntry]:
         """What the Home screen shows: enabled, not hidden, not system pages."""
-        return [e for e in self.apps() if e.enabled and not e.hidden]
+        return [e for e in self.apps() if e.enabled and not e.hidden and e.id not in SETTINGS_APPS]
 
     def managed(self) -> list[AppEntry]:
         return [e for e in self.all() if e.kind == "os"]

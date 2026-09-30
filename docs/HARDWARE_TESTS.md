@@ -45,3 +45,16 @@ gates, and `grep launch_command ~/.whisplay-daemon/app/*.json` shows
 
 Record the date, board and result of each step in the pull request or
 CHANGELOG entry. A step that could not be run is reported as *not verified*.
+
+## 1.4.0 keyboard and Settings checks
+
+- Physical keyboard: type navigation and text in each foreground app; confirm
+  tty1 receives none of it. Not yet physically verified.
+- Hold Enter across an app transition: no repeat or release acts in the next
+  owner. Test USB hotplug and Bluetooth keyboard reconnection.
+- Developer > Daemon desktop releases the grab; returning to MFruit OS takes it.
+- Volume and Power pages accept forwarded arrows, Enter and Esc.
+- Settings > Wi-Fi opens Connect WiFi; closing it returns to Wi-Fi.
+- Bluetooth: scan, pair a keyboard using the displayed code, confirm a numeric
+  comparison, reject/cancel pairing, disconnect/reconnect and forget.
+- Boot displays only the logo; configuration errors remain visible afterward.

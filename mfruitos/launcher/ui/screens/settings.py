@@ -6,7 +6,8 @@ import os as _os
 import platform
 
 from mfruitos import OS_NAME, __version__
-from mfruitos.launcher.ui.components import Item, back_item
+from mfruitos.launcher.ui.components import Item, back_item, section
+from mfruitos.launcher.ui.screens.bluetooth import BluetoothScreen
 from mfruitos.launcher.ui.screens.apps import ApplicationsScreen
 from mfruitos.launcher.ui.screens.base import ListScreen
 from mfruitos.launcher.ui.screens.dialogs import ChoiceScreen, LogScreen, RangeScreen, confirm
@@ -35,21 +36,47 @@ def choice(os, title: str, key: str, options: list[tuple[object, str]]):
 class SettingsScreen(ListScreen):
     title = "Settings"
 
+    def __init__(self, os):
+        super().__init__(os)
+        self.ssid = ""
+        self.bluetooth = "…"
+
+    def on_show(self) -> None:
+        def read():
+            bt = self.os.bluetooth
+            available = bt.available()
+            powered = available and bt.powered()
+            connected = [d.name for d in bt.devices() if d.connected] if powered else []
+            return system_info.wifi_ssid(), (connected[0] if connected else
+                                            "On" if powered else "Off" if available else "Unavailable")
+
+        def done(result):
+            self.ssid, self.bluetooth = result
+            self.redraw()
+        self.os.run_task("settings-status", read, done, lane="bluetooth")
+
     def items(self) -> list[Item]:
         os = self.os
         apps = os.registry.apps()
         rows = [
-            Item("Applications", lambda: os.push(ApplicationsScreen(os)), kind="nav", icon="apps",
-                 value=str(len(apps))),
-            Item("Display", lambda: os.push(DisplayScreen(os)), kind="nav", icon="display"),
-            Item("Button", lambda: os.push(ButtonScreen(os)), kind="nav", icon="button"),
-            Item("LED", lambda: os.push(LedScreen(os)), kind="nav", icon="led"),
-            Item("Audio", lambda: os.push(AudioScreen(os)), kind="nav", icon="audio"),
-            Item("Network", lambda: os.push(NetworkScreen(os)), kind="nav", icon="network"),
-            Item("System", lambda: os.push(SystemScreen(os)), kind="nav", icon="system"),
+            Item("Wi-Fi", lambda: os.push(WifiScreen(os)), kind="nav", icon="wifi",
+                 subtitle=self.ssid or "Not connected", tile=(46, 140, 255)),
+            Item("Bluetooth", lambda: os.push(BluetoothScreen(os)), kind="nav", icon="bluetooth",
+                 subtitle=self.bluetooth, tile=(46, 140, 255)),
+            section(),
+            Item("Display & Brightness", lambda: os.push(DisplayScreen(os)), kind="nav",
+                 icon="display", tile=(46, 140, 255)),
+            Item("Sounds", lambda: os.push(AudioScreen(os)), kind="nav", icon="audio", tile=(255, 69, 108)),
+            Item("Button", lambda: os.push(ButtonScreen(os)), kind="nav", icon="button", tile=(94, 92, 230)),
+            Item("Light", lambda: os.push(LedScreen(os)), kind="nav", icon="led", tile=(255, 149, 0)),
+            section(),
+            Item("General", lambda: os.push(GeneralScreen(os)), kind="nav", icon="system", tile=(110, 118, 130)),
+            section(),
+            Item("Apps", lambda: os.push(ApplicationsScreen(os)), kind="nav", icon="apps",
+                 value=str(len(apps)), tile=(94, 92, 230)),
             Item("Developer", lambda: os.push(DeveloperScreen(os)), kind="nav", icon="developer",
-                 value="On" if os.settings.get("developer.enabled") else None, tone="accent"),
-            Item("About", lambda: os.push(AboutScreen(os)), kind="nav", icon="info"),
+                 value="On" if os.settings.get("developer.enabled") else None, tile=(110, 118, 130)),
+            section(),
             back_item(),
         ]
         return rows
@@ -196,42 +223,68 @@ class AudioScreen(ListScreen):
         return rows
 
 
-class NetworkScreen(ListScreen):
-    title = "Network"
+class WifiScreen(ListScreen):
+    title = "Wi-Fi"
+
+    def __init__(self, os):
+        super().__init__(os)
+        self.ip = self.ssid = ""
+        self.internet = "Not checked"
 
     def on_show(self) -> None:
-        self.ip = system_info.local_ip()
-        self.online = system_info.has_default_route()
-        self.ssid = system_info.wifi_ssid()
+        def done(result):
+            self.ip, self.ssid = result
+            self.redraw()
+        self.os.run_task("wifi-status", lambda: (system_info.local_ip(), system_info.wifi_ssid()), done)
+
+    def choose_network(self) -> None:
+        if self.os.registry.get("connectwifi") is not None:
+            self.os.launch_app("connectwifi", source="settings")
+        elif self.os.system_page_available("whisplay-wifi"):
+            self.os.open_system_page("whisplay-wifi")
+        else:
+            self.os.show_message("Wi-Fi", "Install Connect WiFi to choose a network.")
+
+    def check_internet(self) -> None:
+        from mfruitos.system.diagnostics import check_internet
+        self.internet = "Checking…"
+        self.redraw()
+
+        def done(result):
+            self.internet = "Reachable" if result.ok else "Unavailable"
+            self.redraw()
+
+        def failed(exc):
+            self.internet = "Check failed"
+            self.os.toast(str(exc)[:40], "error")
+            self.redraw()
+        self.os.run_task("internet", check_internet, done, failed)
 
     def items(self) -> list[Item]:
-        os = self.os
         rows = [
-            Item("Status", kind="info", value="Connected" if self.online else "Offline",
-                 tone="success" if self.online else "warning"),
-            Item("WiFi", kind="info", value=self.ssid or "—"),
+            Item("Network", kind="info", subtitle=self.ssid or "Not connected", icon="wifi"),
             Item("IP address", kind="info", value=self.ip or "—"),
+            Item("Internet", kind="info", value=self.internet),
+            section(),
+            Item("Choose a network…", self.choose_network, kind="nav", icon="wifi"),
+            Item("Check internet", self.check_internet, icon="network"),
+            back_item(),
         ]
-        if os.system_page_available("whisplay-wifi"):
-            rows.append(Item("WiFi settings", lambda: os.open_system_page("whisplay-wifi"),
-                             kind="nav", icon="wifi"))
-        if os.system_page_available("whisplay-bluetooth"):
-            rows.append(Item("Bluetooth", lambda: os.open_system_page("whisplay-bluetooth"),
-                             kind="nav", icon="bluetooth"))
-        rows += [Item("Check internet", os.check_internet, icon="network"), back_item()]
         return rows
 
 
-class SystemScreen(ListScreen):
-    title = "System"
+class GeneralScreen(ListScreen):
+    title = "General"
 
     def items(self) -> list[Item]:
         os = self.os
         rows = [
+            Item("About", lambda: os.push(AboutScreen(os)), kind="nav", icon="info"),
+            Item("Software Update", os.open_system_update, kind="nav", icon="updater",
+                 value=__version__),
+            section(),
             Item("System info", os.open_system_info, kind="nav", icon="info"),
             Item("Diagnostics", os.open_diagnostics, kind="nav", icon="diagnostics"),
-            Item("System update", os.open_system_update, kind="nav", icon="updater",
-                 value=__version__),
         ]
         if os.system_page_available("whisplay-system"):
             rows.append(Item("Power", lambda: os.open_system_page("whisplay-system"), kind="nav",

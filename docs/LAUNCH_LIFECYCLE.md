@@ -101,3 +101,13 @@ To find what caused a launch, look for the `LAUNCH_REQUEST` and its `source`
 (`home`, `retry`, `settings`, `autostart`, `control`); a launch MFruit OS did
 not request shows up as `DENIED` in `launch-gate.log` (apps) or `INTRUDER`
 (pages). `LAUNCH_REJECTED` lines show refused requests and why.
+
+## RC6: console keyboard leakage (1.4.0)
+
+The Orange Pi journal showed tty1's autologin shell executing a previous
+launcher restart command after Up and Enter were typed in the UI. The resulting
+service restart looked like an updater crash. MFruit OS now holds keyboards
+with EVIOCGRAB and routes each press, repeat and release to its original owner.
+SDK 1.2.0 apps use state/keys.sock. The daemon wrapper forwards keys only to
+the addressed foreground internal page. Desktop mode releases the grab.
+Physical keyboard isolation still requires the hardware checklist.

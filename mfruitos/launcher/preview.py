@@ -13,6 +13,7 @@ import os
 import shutil
 import tempfile
 import time
+from types import SimpleNamespace
 
 from mfruitos import OS_APP_ID, __version__
 from mfruitos.paths import Paths, package_root
@@ -56,8 +57,9 @@ def _setup_home(tmp: str) -> Paths:
 
 def run_preview(outdir: str | None) -> int:
     from mfruitos.launcher.runtime import Runtime
-    from mfruitos.launcher.ui.screens import (apps, diagnostics, dialogs, fallback, settings,
+    from mfruitos.launcher.ui.screens import (apps, bluetooth, diagnostics, dialogs, fallback, settings,
                                               updater)
+    from mfruitos.system.bluetooth import BtDevice, Prompt
     from mfruitos.launcher.ui.screens.boot import DONE, RUNNING
     from mfruitos.system.diagnostics import CheckResult
     from mfruitos.updater.github import Release
@@ -67,6 +69,13 @@ def run_preview(outdir: str | None) -> int:
     try:
         paths = _setup_home(tmp)
         rt = Runtime(paths, package_root(), socket_path=os.path.join(tmp, "no-daemon.sock"))
+        # Previews must not scan or alter the host's Bluetooth hardware.
+        keyboard = BtDevice("00:11:22:33:44:55", "My Keyboard", paired=True,
+                            connected=True, icon="input-keyboard")
+        speaker = BtDevice("00:11:22:33:44:66", "Living Room", icon="audio-card")
+        rt.bluetooth = SimpleNamespace(available=lambda: True, powered=lambda: True,
+                                       devices=lambda: [keyboard, speaker], search=lambda: None,
+                                       cancel_pairing=lambda: None, answer=lambda accept: None)
         rt.status.time_text, rt.status.wifi_level, rt.status.battery = "17:42", 3, 82
         live = [{"app_id": a, "display_name": n, "icon": i, "priority": p, "running": r}
                 for a, n, i, p, r in SAMPLE_DAEMON_APPS]
@@ -122,11 +131,15 @@ def run_preview(outdir: str | None) -> int:
         shot("12-app-detail", detail)
         for name, cls in (("13-display", settings.DisplayScreen), ("14-button", settings.ButtonScreen),
                           ("15-led", settings.LedScreen), ("16-audio", settings.AudioScreen),
-                          ("17-network", settings.NetworkScreen), ("18-system", settings.SystemScreen),
+                          ("17-wifi", settings.WifiScreen), ("18-general", settings.GeneralScreen),
                           ("19-developer", settings.DeveloperScreen), ("20-about", settings.AboutScreen)):
             shot(name, cls(rt))
         shot("21-brightness", dialogs.RangeScreen(rt, "Brightness", 60, 10, 100, 10, "%",
                                                   lambda v: None, lambda v: None))
+        shot("22-bluetooth", bluetooth.BluetoothScreen(rt))
+        shot("23-bt-device", bluetooth.BtDeviceScreen(rt, keyboard))
+        shot("24-bt-passkey", bluetooth.PairingScreen(rt, Prompt("passkey", "123456")))
+        shot("25-bt-confirm", bluetooth.PairingScreen(rt, Prompt("confirm", "123456")))
 
         shot("30-updater", updater.UpdaterScreen(rt))
         shot("31-app-update", updater.AppUpdateScreen(rt, "weather"))

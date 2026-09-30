@@ -165,16 +165,14 @@ def draw_list(p: Painter, items: list[Item], selected: int, top: int = LIST_TOP,
                anchor="mm")
         return
     heights = [row_height(item) for item in items]
-    # Scroll so the selected row is visible, keeping one row of context above.
+    # Scroll in whole rows so text is never sliced under the status bar.
     offset = 0
-    y_sel = sum(heights[:selected])
     visible = bottom - top
-    if y_sel + heights[selected] > visible - (heights[selected + 1] // 2 if selected + 1 < len(items) else 0):
-        offset = y_sel + heights[selected] - visible + (
-            heights[selected + 1] // 2 if selected + 1 < len(items) else 0)
-    if selected > 0 and y_sel - offset < heights[selected - 1] // 2:
-        offset = max(0, y_sel - heights[selected - 1] // 2)
-    offset = max(0, min(offset, max(0, sum(heights) - visible)))
+    first = 0
+    selected_bottom = sum(heights[:selected + 1])
+    while first < selected and selected_bottom - offset > visible:
+        offset += heights[first]
+        first += 1
 
     # Rows are drawn on their own layer so scrolled content is clipped to
     # the list area and can never paint over the header or message text.
@@ -182,10 +180,10 @@ def draw_list(p: Painter, items: list[Item], selected: int, top: int = LIST_TOP,
     y = -offset
     left, right = MARGIN - 4, SCREEN_W - MARGIN + 4
     for index, (item, height) in enumerate(zip(items, heights)):
-        if y + height < 0:
+        if y < 0:
             y += height
             continue
-        if y > visible:
+        if y + height > visible:
             break
         is_sel = index == selected and selectable(item)
         if is_sel:
