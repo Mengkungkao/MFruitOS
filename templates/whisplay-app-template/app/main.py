@@ -1,8 +1,25 @@
-"""Hello Whisplay — a template app: tap to count, hold to reset, 4 taps to exit.
+"""Hello Whisplay -- the MFruit OS app template: a counter.
 
-The exit gesture (four quick clicks) is handled by whisplay-daemon, which
-sends app_exit_requested; the app then releases the screen and quits, and
-MFruit OS takes over again.
+    button            keyboard            action
+    tap               Down, Right, Tab    +1
+    2 clicks          Up, Left            -1
+    hold, release     Enter               reset to 0
+    4 clicks          Esc                 leave the app, back to MFruit OS
+
+It shows how an MFruit OS app is put together (docs/APP_RULES.md in the
+MFruit OS repository):
+
+* All input goes through mfruit_sdk.input.InputController -- the button and
+  any USB or Bluetooth keyboard -- so the controls are MFruit OS's own. It
+  acts only while this app has the screen.
+* The screen uses MFruit OS's status bar (page name, WiFi, battery) and
+  footer hints, from mfruit_sdk.ui.
+* The manifest sets exit_gesture "none" and disable_esc_exit_key, and the
+  app claims Esc at start-up: 4 clicks and Esc are the app's "back", and
+  back from here leaves.
+
+mfruit_sdk/ is a copy of MFruit OS's mfruitos/sdk; refresh it with
+MFruitOS/scripts/sdk-sync.sh <this app>/app.
 """
 
 from __future__ import annotations
@@ -10,31 +27,41 @@ from __future__ import annotations
 import os
 import sys
 import threading
-import time
 
-from PIL import Image, ImageDraw, ImageFont
+from mfruit_sdk.daemon import own_escape_key
+from mfruit_sdk.input import BACK, NEXT, PREVIOUS, SELECT, InputController
+from mfruit_sdk.status import StatusMonitor
+from mfruit_sdk.ui import Canvas, footer, status_bar
+from mfruit_sdk.ui.theme import CONTENT_BOTTOM, CONTENT_TOP, SCREEN_W
 
-from whisplay_app import HEIGHT, WIDTH, WhisplayApp
+from whisplay_app import WhisplayApp
 
-HOLD_SEC = 0.7
 DATA_DIR = os.environ.get("WHISPLAY_OS_APP_DATA", os.path.dirname(os.path.abspath(__file__)))
 COUNT_FILE = os.path.join(DATA_DIR, "count.txt")
+HINTS = [("tap", "+1"), ("hold", "reset"), ("4×", "exit")]
 
 
-def font(size: int):
-    for path in ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",):
-        if os.path.exists(path):
-            return ImageFont.truetype(path, size)
-    return ImageFont.load_default()
+def render(count: int, status=None, armed: bool = False):
+    """The whole screen, from state: a pure function, easy to test."""
+    c = Canvas()
+    status_bar(c, "Counter", status)
+    middle = (CONTENT_TOP + CONTENT_BOTTOM) // 2
+    c.text(SCREEN_W // 2, middle, str(count), 64, "bold", anchor="mm")
+    c.text(SCREEN_W // 2, middle + 48, "Hello Whisplay", 14, "medium", c.theme.text_muted,
+           anchor="mm")
+    footer(c, [("release", "to reset")] if armed else HINTS)
+    return c.image
 
 
 class Counter:
-    def __init__(self):
-        self.app = WhisplayApp()
+    def __init__(self, app: WhisplayApp | None = None):
+        self.app = app or WhisplayApp()
         self.count = self._load()
-        self.pressed_at = 0.0
+        self.armed = False
         self.done = threading.Event()
-        self.big, self.small, self.hint = font(64), font(16), font(12)
+        self.status = StatusMonitor(on_change=lambda _s: self.draw())
+        self.input = InputController(self.on_action, active=lambda: self.app.has_focus,
+                                     on_armed=self.on_armed)
 
     def _load(self) -> int:
         try:
@@ -49,36 +76,52 @@ class Counter:
             fp.write(str(self.count))
 
     def draw(self) -> None:
-        image = Image.new("RGB", (WIDTH, HEIGHT), (10, 12, 16))
-        d = ImageDraw.Draw(image)
-        d.text((WIDTH // 2, 60), "Hello Whisplay", font=self.small, fill=(150, 158, 170), anchor="mm")
-        d.text((WIDTH // 2, HEIGHT // 2), str(self.count), font=self.big, fill=(255, 255, 255),
-               anchor="mm")
-        d.text((WIDTH // 2, HEIGHT - 50), "tap +1 · hold reset · 4× exit", font=self.hint,
-               fill=(46, 140, 255), anchor="mm")
-        self.app.show(image)
+        self.app.show(render(self.count, self.status.sample(), self.armed))
 
-    def on_press(self) -> None:
-        self.pressed_at = time.monotonic()
+    def on_armed(self, armed: bool) -> None:
+        self.armed = armed
+        self.draw()
 
-    def on_release(self) -> None:
-        held = time.monotonic() - self.pressed_at
-        self.count = 0 if held >= HOLD_SEC else self.count + 1
+    def on_action(self, action) -> None:
+        if action.name == BACK:
+            self.done.set()             # back from the only screen: leave
+            return
+        if action.name == NEXT:
+            self.count += 1
+        elif action.name == PREVIOUS:
+            self.count -= 1
+        elif action.name == SELECT:
+            self.count = 0
+        else:
+            return
         self._save()
         self.draw()
 
+    def on_focus_changed(self, has_focus: bool) -> None:
+        self.input.reset()              # keys pressed elsewhere are not ours
+        if has_focus:
+            self.draw()
+
     def run(self) -> int:
-        self.app.on_press = self.on_press
-        self.app.on_release = self.on_release
+        self.app.on_press = self.input.press
+        self.app.on_release = self.input.release
         self.app.on_exit_request = self.done.set
-        self.app.on_focus_changed = lambda has_focus: has_focus and self.draw()
+        self.app.on_focus_changed = self.on_focus_changed
+        # Before taking the screen: a registration makes the daemon redraw
+        # its desktop. (MFruit OS registers the package with the manifest's
+        # disable_esc_exit_key too; this covers a copy started by hand.)
+        own_escape_key(self.app.app_id)
         try:
             self.app.start()
         except (OSError, RuntimeError) as exc:
             print(f"hello-whisplay: whisplay-daemon unavailable: {exc}", file=sys.stderr)
             return 1
+        self.status.start()
+        self.input.start()
         self.draw()
         self.done.wait()
+        self.input.stop()
+        self.status.stop()
         self.app.stop()
         return 0
 

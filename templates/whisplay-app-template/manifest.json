@@ -1,15 +1,16 @@
 {
   "id": "hello-whisplay",
   "name": "Hello Whisplay",
-  "version": "1.0.0",
-  "description": "Template app: a button counter",
+  "version": "1.1.0",
+  "description": "Template app: a counter with MFruit OS controls",
   "entrypoint": "run.sh",
   "icon": "assets/icon.png",
   "min_os_version": "1.0.0",
   "repository": "https://github.com/your-name/whisplay-app-template",
-  "exit_gesture": "quad_click",
+  "exit_gesture": "none",
   "priority": 10,
   "test": "test.sh",
   "persist": [],
-  "env": {}
+  "env": {},
+  "disable_esc_exit_key": true
 }

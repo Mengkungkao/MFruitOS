@@ -10,8 +10,8 @@ from mfruitos.launcher.ui.theme import SCREEN_H, SCREEN_W
 from mfruitos.launcher.navigation.gestures import gesture_label
 from mfruitos.system import diagnostics, system_info
 
-CHECK_ORDER = ("Whisplay Daemon", "Whisplay UI", "Display", "Button", "RGB LED", "Audio", "Network", "Storage",
-               "Internet", "GitHub")
+CHECK_ORDER = ("Whisplay Daemon", "Whisplay UI", "Display", "Button", "Keyboard", "RGB LED",
+               "Audio", "Network", "Storage", "Internet", "GitHub")
 
 
 class DiagnosticsScreen(ListScreen):
@@ -38,6 +38,7 @@ class DiagnosticsScreen(ListScreen):
                 diagnostics.check_daemon_ui(),
                 diagnostics.check_display(os.focus.has_focus),
                 diagnostics.check_button(client),
+                diagnostics.check_keyboard(os.keyboard.devices),
                 diagnostics.check_led(client, os.led.current),
                 diagnostics.check_audio(),
                 diagnostics.check_network(),

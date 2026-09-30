@@ -560,6 +560,26 @@ Applications must not independently read the physical button or input hardware u
 
 The platform owns global navigation input.
 
+## Keyboards and apps (1.3.0)
+
+* whisplay-daemon hands keys only to its own pages (and closes an external app
+  on Esc unless it registers `disable_esc_exit_key`). So MFruit OS and every
+  MFruit app read USB / Bluetooth keyboards themselves, through
+  `mfruitos/sdk/keys.py`. Nobody grabs the device: **every process sees every
+  key**. The guard is ownership: a reader acts only while its program owns the
+  screen, and only on keys whose press it saw while it did (the key-up of the
+  Esc that closed an app, or the repeat of the Enter that opened one, must not
+  act in the next owner — the keyboard form of RC1).
+* Apps get the platform's controls through the MFruit App SDK
+  (`mfruitos/sdk/`, vendored as `mfruit_sdk` by `scripts/sdk-sync.sh`):
+  `InputController` is the one interpreter of the button and keyboard in an
+  app. The contract apps follow is `docs/APP_RULES.md` (also each app's
+  `.claude/rules/mfruit-os-app.md`). Change the SDK only here, with
+  `tests/test_sdk.py`, then re-sync every app (`--check` finds stale copies).
+* SDK modules use relative imports only (tested), run on Python 3.9 and need
+  only Pillow (UI). Nothing in the SDK may poll while idle: the button worker
+  sleeps until an edge, the keyboard reader waits on inotify.
+
 ---
 
 # 16. Input Events
@@ -860,6 +880,10 @@ may know about Whisplay-specific implementation details.
   launch slot; `desktop_entered` / `screen_locked` go only to global
   subscribers; daemon pages open synchronously without a launch command; its
   monitor loop can turn a hold into a tap. See `docs/ARCHITECTURE.md`.
+* **Ending an app remotely:** `mfruitctl summon` does nothing while an app
+  session is active (it only takes the screen back from the daemon desktop).
+  Send the daemon `app.exit.request` for the app instead — the same path as
+  Settings → *Stop app*.
 
 ---
 

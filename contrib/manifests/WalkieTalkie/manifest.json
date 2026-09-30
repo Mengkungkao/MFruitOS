@@ -7,5 +7,9 @@
   "repository": "https://github.com/Mengkungkao/WalkieTalkie",
   "exit_gesture": "none",
   "priority": 45,
-  "persist": [".venv", "config.yaml"]
+  "persist": [
+    ".venv",
+    "config.yaml"
+  ],
+  "disable_esc_exit_key": true
 }

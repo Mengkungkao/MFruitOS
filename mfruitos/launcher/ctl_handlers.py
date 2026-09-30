@@ -10,6 +10,10 @@ from mfruitos import __version__
 
 GESTURES = ("single_click", "double_click", "triple_click", "long_press", "quad_click")
 ACTIONS = ("next", "previous", "select", "back", "home")
+# Keyboard key -> its Linux key code, for "key": a press and release through
+# the same path a real keyboard takes (Runtime._on_key).
+KEY_CODES = {"up": 103, "down": 108, "left": 105, "right": 106, "tab": 15, "enter": 28,
+             "escape": 1, "home": 102}
 
 
 def handle(rt, cmd: str, args: dict) -> dict:
@@ -26,7 +30,7 @@ def _status(rt, args):
             "backlight": rt.backlight.state, "apps": len(rt.registry.apps()),
             "updates": rt.updater.update_count(), "direct_display": rt.direct is not None,
             "stats": dict(rt.stats, loop_wakeups=rt.loop.wakeups),
-            "session": rt.apps.describe()}
+            "session": rt.apps.describe(), "keyboards": rt.keyboard.devices}
 
 
 def _summon(rt, args):
@@ -54,6 +58,18 @@ def _action(rt, args):
 def _button(rt, args):
     """Raw press/release, exercising the real gesture recognizer."""
     rt._on_raw_button(bool(args.get("pressed")))
+    return {"ok": True}
+
+
+def _key(rt, args):
+    """A key press and release, as if typed on a keyboard on the board."""
+    from mfruitos.sdk.keys import DOWN, UP, KeyEvent
+    name = args.get("name", "")
+    code = KEY_CODES.get(name)
+    if code is None:
+        return {"ok": False, "error": f"key must be one of {sorted(KEY_CODES)}"}
+    rt._on_key(KeyEvent("key", name, DOWN, code))
+    rt._on_key(KeyEvent("key", name, UP, code))
     return {"ok": True}
 
 
@@ -125,7 +141,8 @@ def _restart(rt, args):
 
 COMMANDS = {
     "status": _status, "ping": _status, "summon": _summon, "gesture": _gesture,
-    "action": _action, "button": _button, "screenshot": _screenshot, "apps": _apps,
+    "action": _action, "button": _button, "key": _key, "screenshot": _screenshot,
+    "apps": _apps,
     "launch": _launch, "reload": _reload, "check-updates": _check, "install": _install,
     "sideload": _sideload, "jobs": _jobs, "restart": _restart,
 }

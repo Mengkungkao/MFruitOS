@@ -109,6 +109,13 @@ class RuntimeEndToEndTests(TempHomeTestCase):
         self.key("escape")
         self.wait(lambda: self.status().get("screens") == ["HomeScreen"], "back home")
 
+    def test_key_command_types_through_the_keyboard_path(self):
+        start = self.rt.home_screen.selected
+        self.assertTrue(send(self.paths.control_socket, "key", {"name": "down"})["ok"])
+        self.wait(lambda: self.rt.home_screen.selected == start + 1, "next item")
+        self.assertFalse(send(self.paths.control_socket, "key", {"name": "f13"})["ok"])
+        self.assertIn("keyboards", self.status())
+
     def test_keys_that_went_down_elsewhere_do_nothing(self):
         self.rt.loop.post(self.rt.home_screen.focus_key, "os.settings")
         # e.g. the Enter that opened an app, released after MFruit OS is back

@@ -4,6 +4,37 @@ All notable changes to MFruit OS are documented here. Versions follow
 [Semantic Versioning](https://semver.org/). App versions are independent of
 the OS version.
 
+## [1.3.0] - 2026-09-30
+
+### Added
+- **The MFruit App SDK 1.1.0** (`mfruitos/sdk/`, copied into apps as `mfruit_sdk`
+  with `scripts/sdk-sync.sh`): one input controller for the button and USB or
+  Bluetooth keyboards, and MFruit OS's look — status bar (page name, WiFi,
+  battery), footer hints, lists, toast, text field, theme, fonts, RGB565.
+  Keys count only while the app has the screen, and only keys pressed while
+  it did. Talk screens talk on a hold or Space.
+- **Keyboard control in MFruit OS**: arrows move, Enter opens, Esc goes back.
+  MFruit OS registers with `disable_esc_exit_key`, so Esc is its "back" rather
+  than the daemon's close.
+- `docs/APP_RULES.md`: the rules every MFruit OS app follows (controls,
+  registration, screen layout, tests), also used as a Claude rule in each app.
+- The app template is an MFruit app: SDK controls and look, Esc and four
+  clicks as its own "back".
+- `mfruit-run` exports `MFRUIT_HOME` and `MFRUIT_SESSION` to apps.
+- Diagnostics lists the keyboards being read; `mfruitctl status` shows them
+  too, and `mfruitctl key <name>` types a key through the keyboard path.
+
+### Changed
+- A keyboard plugged in or paired later is found at once (inotify); nothing
+  polls while idle, in the keyboard reader or the button worker.
+
+### Apps converted (their own repositories)
+- Crypto dashboard, WalkieTalkie, Messenger: MFruit OS controls (menus and
+  lists: tap next · 2× previous · hold open · 4× back; hold or Space talks on
+  talk screens), keyboard support, MFruit OS status bar and footer.
+- AI chatbot: typed questions from a keyboard (Enter asks, Space held talks,
+  Esc clears or leaves), MFruit OS status bar and footer hints.
+
 ## [1.2.0] - 2026-09-29
 
 ### Added

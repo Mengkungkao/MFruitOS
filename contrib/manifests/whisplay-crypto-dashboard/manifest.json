@@ -7,5 +7,10 @@
   "repository": "https://github.com/Mengkungkao/whisplay-crypto-dashboard",
   "exit_gesture": "none",
   "priority": 40,
-  "persist": [".venv", "config.yaml", ".env"]
+  "persist": [
+    ".venv",
+    "config.yaml",
+    ".env"
+  ],
+  "disable_esc_exit_key": true
 }

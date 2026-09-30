@@ -116,6 +116,54 @@ class KeyReaderTests(unittest.TestCase):
             self.assertLess(time.monotonic() - started, 0.5)
 
 
+    def test_a_keyboard_plugged_in_later_is_picked_up_at_once(self):
+        """inotify, not polling: found well inside the (here 60 s) rescan period."""
+        import threading
+        import time
+        from mfruitos.sdk.keys import DeviceWatch
+        with tempfile.TemporaryDirectory() as tmp:
+            sysdir, devdir = os.path.join(tmp, "sys"), os.path.join(tmp, "dev")
+            os.makedirs(sysdir)
+            os.makedirs(devdir)
+            if DeviceWatch.open(devdir) is None:
+                self.skipTest("no inotify here")
+            seen, got = [], threading.Event()
+
+            def on_event(event):
+                seen.append((event.value, event.action))
+                got.set()
+
+            reader = KeyReader(on_event, input_dir=devdir, sys_dir=sysdir, rescan_seconds=60)
+            reader.start()
+            writer = None
+            try:
+                time.sleep(0.1)
+                caps = os.path.join(sysdir, "event7", "device", "capabilities")
+                os.makedirs(caps)
+                with open(os.path.join(caps, "key"), "w") as handle:
+                    handle.write(bitmap(*range(1, 120)))
+                fifo = os.path.join(devdir, "event7")
+                os.mkfifo(fifo)                      # the device node appears
+                writer = os.open(fifo, os.O_RDWR | os.O_NONBLOCK)
+                deadline = time.monotonic() + 2.0
+                while not reader.connected and time.monotonic() < deadline:
+                    time.sleep(0.02)
+                self.assertTrue(reader.connected)
+                os.write(writer, raw(KEY_SPACE, 1))
+                self.assertTrue(got.wait(2.0))
+                got.clear()
+                import shutil
+                shutil.rmtree(os.path.join(sysdir, "event7"))
+                os.remove(fifo)                      # unplugged while Space is down
+                self.assertTrue(got.wait(2.0))
+                self.assertEqual(seen, [("space", DOWN), ("space", UP)])
+                self.assertFalse(reader.connected)
+            finally:
+                reader.stop()
+                if writer is not None:
+                    os.close(writer)
+
+
 class GestureTests(unittest.TestCase):
     def setUp(self):
         self.clock = FakeClock()
@@ -207,6 +255,33 @@ class ThreadedGestureTests(unittest.TestCase):
             g.stop()
 
 
+class IdleTests(unittest.TestCase):
+    def test_an_idle_button_worker_makes_no_wakeups(self):
+        """On a device meant to sit idle all day, nothing pending means no polling."""
+        import time
+        polls = []
+
+        class Counting(ButtonGestures):
+            def poll(self):
+                polls.append(1)
+                super().poll()
+
+        g = Counting(lambda name, held: None)
+        g.start()
+        try:
+            time.sleep(1.3)
+            self.assertEqual(len(polls), 1)          # the first look, then asleep
+            g.press()
+            time.sleep(0.05)
+            g.release()
+            time.sleep(0.6)                          # resolves the tap, then sleeps
+            settled = len(polls)
+            time.sleep(1.2)
+            self.assertEqual(len(polls), settled)
+        finally:
+            g.stop()
+
+
 class ControllerTests(unittest.TestCase):
     def setUp(self):
         self.clock = FakeClock()
@@ -266,6 +341,27 @@ class ControllerTests(unittest.TestCase):
         self.c.release()
         self.assertEqual(self.names(), [SELECT])
         self.assertEqual(self.armed, [True, False])
+
+    def test_talk_starts_sooner_than_a_menu_hold_arms(self):
+        """talk_press_ms: the mic opens promptly; opening stays a deliberate hold."""
+        self.c = InputController(self.actions.append, talk=lambda: self.talk,
+                                 on_armed=self.armed.append, long_press_ms=700,
+                                 talk_press_ms=350, keyboard=False, clock=self.clock,
+                                 threaded=False)
+        self.talk = True
+        self.c.press()
+        self.step(0.36)
+        self.assertEqual(self.names(), [TALK_START])
+        self.c.release()
+        self.step(0.5)
+        self.talk = False
+        self.c.press()
+        self.step(0.4)
+        self.assertEqual(self.armed, [])             # 400 ms is not yet a menu hold
+        self.step(0.35)
+        self.assertEqual(self.armed, [True])
+        self.c.release()
+        self.assertEqual(self.names(), [TALK_START, TALK_END, SELECT])
 
     def test_hold_talks_on_talk_screens(self):
         self.talk = True
@@ -396,6 +492,19 @@ class ChromeTests(unittest.TestCase):
         box = c.image.crop((slot, 0, slot + 20, 35))
         self.assertEqual(box.getcolors(), [(20 * 35, c.theme.bg)])
 
+    def test_a_long_title_shrinks_before_it_is_cut(self):
+        from mfruitos.sdk.status import Status
+        from mfruitos.sdk.ui import Canvas, status_bar
+        drawn = []
+        c = Canvas()
+        real = c.text
+        c.text = lambda *a, **k: drawn.append((a, k)) or real(*a, **k)
+        status_bar(c, "orangepizero2w", Status(3, 100, True), title_sizes=(17, 15, 13))
+        (x, y, text, size, *_), kwargs = drawn[-1]
+        self.assertEqual(text, "orangepizero2w")
+        self.assertLess(size, 17)
+        self.assertEqual(c.fit(text, size, "bold", kwargs["max_width"]), text)   # not cut
+
     def test_status_bar_without_hardware_draws_only_the_title(self):
         from mfruitos.sdk.status import Status
         from mfruitos.sdk.ui import Canvas, status_bar
@@ -431,6 +540,20 @@ class DaemonTests(unittest.TestCase):
             daemon.stop()
         with self.assertLogs("mfruit_sdk.daemon", "WARNING"):
             self.assertFalse(own_escape_key("demo", "/nonexistent.sock"))
+
+
+class KeyboardDiagnosticsTests(unittest.TestCase):
+    def test_the_diagnostics_row_names_the_keyboards_or_says_none(self):
+        from mfruitos.system.diagnostics import check_keyboard
+        self.assertEqual((check_keyboard(["event3"]).ok, check_keyboard(["event3"]).detail),
+                         (True, "event3"))
+        self.assertIsNone(check_keyboard([]).ok)             # no keyboard is not a fault
+
+    def test_reader_lists_its_devices(self):
+        reader = KeyReader(lambda e: None)
+        self.assertEqual(reader.devices, [])
+        reader._open = {7: ("event5", None), 4: ("event2", None)}
+        self.assertEqual(reader.devices, ["event2", "event5"])
 
 
 class ModuleTests(unittest.TestCase):

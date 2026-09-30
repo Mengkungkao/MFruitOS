@@ -1,4 +1,4 @@
-"""Small, dependency-free client for whisplay-daemon foreground apps.
+"""Small client for whisplay-daemon foreground apps (Pillow and mfruit_sdk only).
 
 Copy this file into your app. It follows the Whisplay APP_INTEGRATION.md
 contract: subscribe to events, acquire focus, map the shared RGB565
@@ -14,23 +14,11 @@ import socket
 import threading
 import time
 
-from PIL import Image, ImageChops
+from mfruit_sdk.ui.rgb565 import to_rgb565
+from PIL import Image
 
 SOCKET_PATH = os.environ.get("WHISPLAY_DAEMON_SOCKET", "/tmp/whisplay-daemon.sock")
 WIDTH, HEIGHT = 240, 280
-
-_R_HIGH = [v & 0xF8 for v in range(256)]
-_G_HIGH = [v >> 5 for v in range(256)]
-_G_LOW = [(v & 0x1C) << 3 for v in range(256)]
-_B_LOW = [v >> 3 for v in range(256)]
-
-
-def to_rgb565(image: Image.Image) -> bytes:
-    red, green, blue = image.convert("RGB").split()
-    high = ImageChops.add(red.point(_R_HIGH), green.point(_G_HIGH))
-    low = ImageChops.add(green.point(_G_LOW), blue.point(_B_LOW))
-    return Image.merge("LA", (high, low)).tobytes()
-
 
 def request(cmd: str, payload: dict | None = None, timeout: float = 3.0) -> dict:
     body = {"version": 1, "cmd": cmd, "payload": payload or {}}

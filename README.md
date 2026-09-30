@@ -54,6 +54,8 @@ framebuffer. Every existing Whisplay app keeps working unchanged.
 - **System** — system info, diagnostics with hardware tests (display, button,
   LED, speaker), display/LED/button/audio settings, daemon WiFi / Bluetooth /
   Volume / Power pages.
+- **Keyboard** — plug in a USB keyboard or pair a Bluetooth one: arrows move,
+  Enter opens, Esc goes back, in MFruit OS and in its apps.
 - **One user interface** — whisplay-daemon keeps running the hardware in the
   background; MFruit OS is all you see, including its own "Opening <App>"
   screen while an app starts.
@@ -85,16 +87,19 @@ See [INSTALL.md](INSTALL.md) for details, updating and uninstalling.
 
 ## Using it
 
-| Gesture (default) | Action |
-|---|---|
-| tap | next item |
-| double-click | previous item |
-| hold 0.7 s, then release | open / select (the screen shows "Release to open" once armed) |
-| four quick clicks | back (inside apps: the daemon's exit gesture) |
+| Gesture (default) | Keyboard | Action |
+|---|---|---|
+| tap | Down, Right, Tab | next item |
+| double-click | Up, Left | previous item |
+| hold 0.7 s, then release | Enter | open / select (the screen shows "Release to open" once armed) |
+| four quick clicks | Esc | back |
 
 Every screen shows its gestures in the footer and ends with a **Back** row.
-Inside an app, four quick clicks ask the app to exit (the daemon's standard
-behaviour); MFruit OS then takes the screen back.
+Apps built with the MFruit App SDK use the same controls, button and
+keyboard: four quick clicks (or Esc) go back a screen, and from an app's
+first screen they leave it; MFruit OS then takes the screen back. A
+keyboard, USB or Bluetooth, is picked up as soon as it is plugged in or
+paired, and only the app on screen reads it.
 
 From a shell (`ssh` to the device):
 
@@ -112,7 +117,9 @@ mfruitctl help
 Any Whisplay daemon app works. To make it installable and updatable through
 MFruit OS, add a `manifest.json` and publish GitHub releases. Start from
 [`templates/whisplay-app-template`](templates/whisplay-app-template) and read
-[APP_DEVELOPMENT.md](APP_DEVELOPMENT.md).
+[APP_DEVELOPMENT.md](APP_DEVELOPMENT.md): its MFruit App SDK section gives your
+app MFruit OS's controls (button and keyboard) and look, and
+[docs/APP_RULES.md](docs/APP_RULES.md) lists the rules MFruit apps follow.
 
 ```json
 {
@@ -151,11 +158,13 @@ mfruitos/
 ├── launcher/     runtime, focus state machine, event loop, gestures, UI, screens
 ├── apps/         manifest validation, registry
 ├── updater/      github.py, version.py, verifier.py, installer.py, rollback.py, gittrack.py
-└── system/       settings.py, hardware.py, diagnostics.py, system_info.py
-scripts/          install.sh, uninstall.sh, update.sh, deploy.sh, mfruit-run, boot-guard.sh
-templates/        whisplay-app-template
+├── system/       settings.py, hardware.py, diagnostics.py, system_info.py
+└── sdk/          the MFruit App SDK: input controller, keyboard, status bar, lists, fonts
+scripts/          install.sh, uninstall.sh, update.sh, deploy.sh, mfruit-run, boot-guard.sh,
+                  sdk-sync.sh (copy the SDK into an app)
+templates/        whisplay-app-template (an MFruit app built on the SDK)
 tests/            unit + integration tests (fake daemon, end-to-end runtime)
-docs/             ARCHITECTURE.md, screenshots
+docs/             ARCHITECTURE.md, APP_RULES.md, LAUNCH_LIFECYCLE.md, HARDWARE_TESTS.md, screenshots
 ```
 
 Run the tests with `python3 -m unittest discover -s tests` and preview every
@@ -164,7 +173,8 @@ screen without hardware with `python3 -m mfruitos --preview /tmp/screens`.
 ## Documentation
 
 - [INSTALL.md](INSTALL.md) — installation, service, updating, uninstalling, troubleshooting
-- [APP_DEVELOPMENT.md](APP_DEVELOPMENT.md) — app package format and lifecycle
+- [APP_DEVELOPMENT.md](APP_DEVELOPMENT.md) — app package format, lifecycle and the MFruit App SDK
+- [docs/APP_RULES.md](docs/APP_RULES.md) — the rules every MFruit OS app follows
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — how MFruit OS works with the daemon
 - [CONTRIBUTING.md](CONTRIBUTING.md) — development workflow
 - [CHANGELOG.md](CHANGELOG.md)

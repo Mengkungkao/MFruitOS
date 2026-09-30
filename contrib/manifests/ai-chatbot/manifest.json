@@ -7,5 +7,9 @@
   "repository": "https://github.com/Mengkungkao/ai-chatbot",
   "exit_gesture": "quad_click",
   "priority": 0,
-  "persist": ["whisplay-ai-chatbot/.env", "whisplay-ai-chatbot/node_modules"]
+  "persist": [
+    "whisplay-ai-chatbot/.env",
+    "whisplay-ai-chatbot/node_modules"
+  ],
+  "disable_esc_exit_key": true
 }

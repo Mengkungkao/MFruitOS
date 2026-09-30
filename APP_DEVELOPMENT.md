@@ -61,7 +61,7 @@ my-app/
 | `env` | no | extra environment variables (string values) |
 | `test` | no | script run after installation, before activation; non-zero = rollback |
 | `persist` | no | paths copied from the previous version into the new one on update (the user's copy replaces the packaged file) — for a venv or user-edited config |
-| `disable_esc_exit_key` | no | `true` to stop an external keyboard's Esc key from closing the app |
+| `disable_esc_exit_key` | no | `true` to stop an external keyboard's Esc key from closing the app. MFruit apps set it: Esc is their "back" (see [The MFruit App SDK](#the-mfruit-app-sdk)) |
 | `background` | no | `true` if the app must keep running after the user leaves it (e.g. it receives messages). Default `false`: leaving an app closes it completely. Users can change it per app (*Keep running*). |
 
 A manifest that fails validation is rejected as a whole; nothing is installed.
@@ -97,8 +97,8 @@ Registering without one is harmless.
 Apps must not start other apps through the daemon (`app.launch`): while MFruit
 OS runs, every app start needs a one-shot ticket that only MFruit OS issues,
 so such a start is denied and logged in `~/.whisplay-os/logs/launch-gate.log`.
-`templates/whisplay-app-template/app/whisplay_app.py` is a small
-dependency-free client that does all of this; copy it.
+`templates/whisplay-app-template/app/whisplay_app.py` is a small client
+that does all of this; copy it.
 
 When the user leaves your app (four quick clicks by default), MFruit OS takes
 the screen back automatically, and — unless your app is marked `background` —
@@ -108,6 +108,65 @@ then SIGKILL. Exit promptly on `app_exit_requested`.
 Draw your first frame as soon as you can: until then the user sees MFruit OS's
 "Opening <your app>" screen. Apps that set `exit_gesture: "none"` must
 release focus themselves when the user asks to leave.
+
+## The MFruit App SDK
+
+Every MFruit OS app should handle and look like MFruit OS itself. The MFruit
+App SDK makes that the easy path: the source is `mfruitos/sdk/` in this
+repository, and an app carries a copy named `mfruit_sdk` beside its code:
+
+```bash
+~/MFruitOS/scripts/sdk-sync.sh <dir where "import mfruit_sdk" must work>
+~/MFruitOS/scripts/sdk-sync.sh <that dir> --check    # exit 1 if the copy is stale
+```
+
+Never edit the copy; change `mfruitos/sdk/` (with its tests in
+`tests/test_sdk.py`) and sync again. It needs Python 3.9+ and Pillow (UI
+only).
+
+| Module | What it gives you |
+|---|---|
+| `mfruit_sdk.input` | `InputController`: the button and any USB or Bluetooth keyboard, as MFruit OS actions |
+| `mfruit_sdk.keys` | the keyboard reader underneath (found on plug-in via inotify, no polling) |
+| `mfruit_sdk.ui` | `Canvas`, `status_bar`, `footer`, `draw_list` / `Row`, `toast`, `message`, `text_field`, the MFruit theme and fonts (Inter from MFruit OS, DejaVu elsewhere), `to_rgb565` |
+| `mfruit_sdk.status` | WiFi level and battery for the status bar (`StatusMonitor`) |
+| `mfruit_sdk.daemon` | `own_escape_key(app_id)`: make Esc the app's key — call it after registering and before taking the screen (a registration makes the daemon redraw its desktop) |
+
+The controls, the same in every app and in the launcher:
+
+| Action | Button | Keyboard |
+|---|---|---|
+| next | tap | Down, Right, Tab |
+| previous | 2× | Up, Left |
+| select | hold (0.7 s), then **release** | Enter |
+| back | 4× | Esc |
+| extra | 3× | a letter |
+| talk (talk screens) | hold — talks while held | Space — talks while held |
+
+```python
+from mfruit_sdk.input import BACK, NEXT, SELECT, InputController
+
+controller = InputController(on_action, active=lambda: board.foreground_ready,
+                             on_armed=show_release_hint)
+controller.attach(board)          # the daemon's button_pressed / button_released
+controller.start()                # and every keyboard on the board
+...
+def on_action(action):
+    if action.name == NEXT: ...
+    elif action.name == SELECT: ...
+    elif action.name == BACK: ...   # from the first screen: leave the app
+```
+
+Keys only count while the app has the screen (`active`), and only keys that
+went down while it did: every process on the board reads the same keyboards.
+Call `controller.reset()` when focus is revoked. Talk screens pass
+`talk=lambda: True` (and `talk_press_ms=350` so the first word is kept);
+screens that take text pass `typing=`, which turns Space into a space.
+
+The rules MFruit apps follow — controls, registration, screen layout,
+tests — are in [docs/APP_RULES.md](docs/APP_RULES.md); copy them into your
+app as `.claude/rules/mfruit-os-app.md`. The template app uses all of the
+above.
 
 ## Lifecycle scripts
 

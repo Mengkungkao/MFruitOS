@@ -9,6 +9,8 @@
     mfruitctl reload                  rescan apps
     mfruitctl tap|double|hold|quad    simulate a gesture
     mfruitctl next|prev|select|back   simulate a navigation action
+    mfruitctl key up|down|enter|...   simulate a key on a keyboard (up down left right
+                                      tab enter escape home)
     mfruitctl screenshot <file.png>   save the current screen
     mfruitctl restart                 restart the launcher
     mfruitctl summon                  bring MFruit OS to the front (daemon desktop entry)
@@ -61,6 +63,8 @@ def main(argv=None) -> int:
         cmd, args = "gesture", {"name": GESTURE_ALIASES[command]}
     elif command in ACTION_ALIASES:
         cmd, args = "action", {"name": ACTION_ALIASES[command]}
+    elif command == "key" and rest:
+        cmd, args = "key", {"name": rest[0]}
     elif command == "press":
         cmd, args = "button", {"pressed": True}
     elif command == "unpress":

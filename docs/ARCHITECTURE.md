@@ -95,6 +95,7 @@ arrive *after* it has already re-acquired focus (a real bug caught by
 | `task-quick` | system info, diagnostics, release lists |
 | `task-jobs` | update checks, installs, uninstalls (one at a time) |
 | `control` | `mfruitctl` socket; handlers run on the loop thread |
+| `mfruit-keys` | USB / Bluetooth keyboards; blocks on the devices and inotify, posts keys to the loop |
 
 ## Rendering
 
@@ -144,6 +145,30 @@ So during an app's start-up the LCD shows MFruit OS's "Opening <App>" screen,
 and a press in that window does nothing at all (it used to reach the daemon's
 own launcher). Tested against the real daemon code in
 `tests/test_background_ui.py`, including a negative control without the wrapper.
+
+## Keyboards and the MFruit App SDK
+
+whisplay-daemon reads USB and Bluetooth keyboards too, but gives keys only to
+its own pages; for an external app it acts on Esc alone (it closes the app
+unless the app registered `disable_esc_exit_key`). So MFruit OS and every
+MFruit app read keyboards themselves, with `mfruitos/sdk/keys.py`:
+
+- Only devices with letter keys count (not the Orange Pi's power button, ADC
+  keys or IR receiver). `/dev/input` is watched with inotify, so a keyboard
+  plugged in or paired later is found at once, and nothing polls while idle.
+- Nobody grabs a device, so **every process sees every key**. Each reader acts
+  only while its program owns the screen, and only on keys whose press it saw
+  while it did: the key-up of the Esc that closed an app, or the auto-repeat
+  of the Enter that opened one, is ignored by whoever has the screen next.
+- MFruit OS maps ↑/← previous, ↓/→/Tab next, Enter select, Esc back, Home
+  home (`Runtime._on_key`), and registers itself with `disable_esc_exit_key`.
+
+Apps get the same controls and MFruit OS's look from the MFruit App SDK
+(`mfruitos/sdk/`, copied into each app as `mfruit_sdk` by
+`scripts/sdk-sync.sh`): `InputController` turns the button and the keyboard
+into next / previous / select / back actions (plus talk on talk screens), and
+`mfruit_sdk.ui` draws the status bar, lists and footer hints. The contract is
+[APP_RULES.md](APP_RULES.md).
 
 ## Fallback display
 

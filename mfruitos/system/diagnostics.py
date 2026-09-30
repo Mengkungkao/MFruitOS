@@ -58,6 +58,13 @@ def check_daemon_ui() -> CheckResult:
     return CheckResult("Whisplay UI", None, "visible (run install.sh)")
 
 
+def check_keyboard(devices: list) -> CheckResult:
+    """USB / Bluetooth keyboards MFruit OS is reading (none is fine)."""
+    if devices:
+        return CheckResult("Keyboard", True, ", ".join(devices))
+    return CheckResult("Keyboard", None, "none plugged in")
+
+
 def check_display(has_focus: bool) -> CheckResult:
     return CheckResult("Display", has_focus, "OK" if has_focus else "no framebuffer")
 

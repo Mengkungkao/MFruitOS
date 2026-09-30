@@ -25,6 +25,20 @@ tail -f ~/.whisplay-os/logs/launcher.log ~/.whisplay-os/logs/launch-gate.log \
 | 10 | Leave an app, then check `pgrep -af <app>` over SSH | the app's process is gone within ~5 s | `APP_CLOSED app=… result=exited` (or `terminated`) |
 | 11 | Set the app to *Keep running* (Settings → Applications → app), open and leave it | it keeps running; Home shows *Running* | no `APP_CLOSED` line |
 
+With a keyboard (USB, then Bluetooth), plugged in while MFruit OS runs.
+(`mfruitctl key down|up|enter|escape` exercises MFruit OS's own key handling
+without a keyboard, but not the reading of one.)
+
+| # | Do | Expect | Log shows |
+|---|---|---|---|
+| 12 | Plug the keyboard in; press ↓ ↓ ↑ on Home | the selection moves at once (no restart needed); Settings → System → Diagnostics lists it under *Keyboard* | `keyboard connected: eventN`, `EVENT KEY down …` |
+| 13 | Enter on an app | exactly that app opens, once | one `LAUNCH_REQUEST … source=home` |
+| 14 | Inside an MFruit app (dashboard, WalkieTalkie, Messenger, chatbot): arrows / Enter / Esc | the app's own list moves / opens / goes back; Esc on its first screen leaves it, back to Home with nothing else opening | `SESSION_END … outcome=exited` |
+| 15 | WalkieTalkie or Messenger on a talk screen: hold Space, speak, let go | it records while Space is held and sends on release | the app's log: listening / sent |
+| 16 | Chatbot: type a question, Enter | the question is asked; the answer appears | chatbot log: `text_input` |
+| 17 | Set Messenger to *Keep running*, leave it, type on Home | Home moves; nothing is typed or sent in Messenger | no Messenger log lines for the keys |
+| 18 | Unplug the keyboard while holding Space in a talk screen | recording stops and sends (the held key is released) | `keyboard gone` |
+
 Also check once: `ls ~/.whisplay-os/adopted/` lists the daemon apps MFruit OS
 gates, and `grep launch_command ~/.whisplay-daemon/app/*.json` shows
 `mfruit-run` for each.
