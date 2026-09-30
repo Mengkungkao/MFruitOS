@@ -1,13 +1,26 @@
 # Install, update and downgrade
 
-Open **Settings → Apps → Install app**. The same installer is available from
-**Home → Updater → Install app**.
+Open **Home → App installer**. Manage installed apps under **Settings → Apps**,
+or open **App installer → Updates** to check their update channels.
+
+## Curated catalogue and saved apps
+
+Select a catalogue app and confirm **Install** to download its pinned source
+archive. MFruit OS verifies the SHA-256 checksum, prepares its package-local
+Python environment and current SDK, and adds it to Apps after installation.
+The catalogue describes hardware requirements; installing a package does not
+configure or validate radio hardware or Codec2. These snapshots are separate
+from the native release workflow below.
+
+An app marked **On device** can be restored with **Add**. Its files and data
+are kept, and restoration does not enable autostart. **Installed** opens app
+management. More repositories are available through **More sources**.
 
 ## Local app packages
 
 1. Copy a native MFruit OS app archive (`.tar.gz`, `.tgz`, `.tar`, `.zip`) or
    package folder containing `manifest.json` into `~/.whisplay-os/inbox/`.
-2. Open **Install app → Local packages**, select the package and confirm.
+2. Open **App installer → Local packages**, select the package and confirm.
 3. Wait for the progress screen to finish. The installed app appears in Apps.
 
 Installing an older package downgrades the app; installing the same version
@@ -21,7 +34,7 @@ CLI equivalent: `mfruitctl sideload /absolute/path/to/package.tar.gz`.
 
 ## GitHub releases
 
-Use **Discover apps** for the configured sources/topic, or run
+Use **App installer → More sources** for the configured sources/topic, or run
 `mfruitctl install github.com/owner/repository`. A native app repository needs a
 root manifest and a compatible semantic version release or tag. The manifest
 version must match the selected release. Publishing a Git commit alone does not

@@ -23,7 +23,8 @@ if systemctl list-unit-files "$SERVICE" >/dev/null 2>&1; then
   sudo rm -f "/etc/systemd/system/$SERVICE"
   sudo systemctl daemon-reload
 fi
-sudo rm -f /etc/sudoers.d/whisplay-os /usr/local/bin/mfruitctl
+sudo rm -f /etc/sudoers.d/whisplay-os /usr/local/bin/mfruitctl \
+  /etc/polkit-1/rules.d/49-mfruit-wifi.rules
 if [ -f /etc/systemd/system/whisplay-daemon.service.d/mfruit-os.conf ]; then
   say "Giving whisplay-daemon its own user interface back"
   sudo rm -f /etc/systemd/system/whisplay-daemon.service.d/mfruit-os.conf

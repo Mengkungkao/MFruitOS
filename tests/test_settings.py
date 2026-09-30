@@ -82,10 +82,33 @@ class SettingsTests(TempHomeTestCase):
         settings = self.new()
         settings.set_app_flag("a", "hidden", True)
         settings.set("apps.order", ["a", "b"])
+        settings.set("apps.installed_ids", ["a", "b"])
         settings.set("apps.default_app", "a")
         settings.forget_app("a")
         self.assertEqual(settings.get("apps.order"), ["b"])
         self.assertEqual(settings.get("apps.default_app"), "")
+        self.assertEqual(settings.get("apps.installed_ids"), ["b"])
+
+    def test_forget_app_removes_allowlist_only_entry_and_persists(self):
+        settings = self.new()
+        settings.set("apps.clean_menu", True)
+        settings.set("apps.installed_ids", ["a", "b"])
+        settings.save()
+        settings.forget_app("a")
+        self.assertTrue(settings.dirty)
+        self.assertTrue(settings.save())
+        self.assertEqual(self.new().get("apps.installed_ids"), ["b"])
+
+    def test_clean_menu_settings_validate_and_survive_reload(self):
+        settings = self.new()
+        settings.set("apps.clean_menu", True)
+        settings.set("apps.installed_ids", ["a", "b", "a"])
+        with self.assertRaises(Invalid):
+            settings.set("apps.installed_ids", ["../bad"])
+        settings.save()
+        again = self.new()
+        self.assertTrue(again.get("apps.clean_menu"))
+        self.assertEqual(again.get("apps.installed_ids"), ["a", "b"])
 
     def test_autosave_hook_called(self):
         calls = []

@@ -1,10 +1,194 @@
-# CONTINUE — MFruit OS validation and app integration, 2026-09-30
+# CONTINUE — MFruit OS installer validation, 2026-10-01
 
-## Current uncommitted work — app installer and first-install setup, 2026-10-01
+## Latest checkpoint — Raspberry Pi validation, 2026-10-01
 
-The working tree now contains a new app-installation flow, first-install
-provisioning, and a daemon startup handoff adjustment. No commits or pushes have
-been made for these changes.
+The user supplied a working SSH target:
+
+```powershell
+ssh -i "$HOME\.ssh\id_ed25519_github" jarvis@192.168.0.33
+```
+
+This is `raspberrypi`, Linux aarch64, Python 3.13.5 / Pillow 11.1.0, with a
+clean `~/MFruitOS` checkout at `2cc3ef5`. Its existing active build is
+`/home/jarvis/.whisplay-os/system/versions/1.4.0-local20260930171222`.
+Both services were active with zero restarts (launcher PID 884, daemon 873),
+Home/IDLE and eight registered apps. This target is separate from the older
+Orange Pi checkpoint below.
+
+Current changes were tested in an isolated copy, **not deployed**:
+`/home/jarvis/.mfruit-validation/installer-20261001T031928/source`.
+All 205 initially transferred source files matched the recorded SHA-256
+manifest. Two test files were subsequently refreshed for the follow-up below.
+The first full run, including the real-daemon harness using `~/Whisplay`, ran
+347 tests in 273 seconds with one failure and one error (`../full-tests.log`).
+
+- **Fixed and passed:** `test_disable_app_persists_and_hides` incorrectly used
+  the settings file's existence as its save-completion signal; boot had already
+  created that file. It now waits for the queued save to finish.
+- **Added and passed:**
+  `test_files_only_first_install_and_rerun_preserve_provisioned_apps` runs the
+  complete `install.sh --no-service` twice, using real bundled Wi-Fi/SDK files
+  and isolated command doubles. It verifies initial starter selection and
+  preservation of settings, Wi-Fi version/data, registrations, marker, backup
+  and launch policy on rerun. These two tests passed in 21.165 seconds;
+  evidence: `../followup-tests.log`.
+- **Still unresolved:**
+  `test_press_during_launch_window_page_is_closed` did not capture the expected
+  INTRUDER event in the full run, although the requested slow app won. One
+  targeted rerun passed. Its trace shows the second hold can start while the
+  daemon still reports MFruit OS in front: the existing 0.2-second sleep is not
+  a reliable handoff barrier. This is an investigation finding, not a completed
+  fix. No launch-lifecycle source or test change has been made. Trace:
+  `../page-intruder-original-daemon.log`.
+
+Do not claim a full-suite pass yet. Only one real-daemon suite may run at a time.
+Local evidence: `C:\Users\mengs\AppData\Local\Temp\mfruit-pi-validation-20261001T031928`.
+Full/follow-up logs, the daemon trace and preview log were copied there.
+The Pi rendered all 39 preview screens; both contact sheets were visually
+inspected. At handoff both live services still have their original PIDs and
+zero restarts. No live services were restarted; no test process was found
+running at the final check. Preserve the Pi's active installation and app data.
+
+Live downloads of all three catalogue archives passed SHA-256 and entry-target
+checks: BTC Dashboard 88,515 bytes; WalkieTalkie 269,487 bytes; Messenger 151,550
+bytes. No downloaded code was executed. Evidence:
+`C:\Users\mengs\AppData\Local\Temp\mfruitos-catalog-live-rk5i10a2\report.json`.
+WalkieTalkie still needs system Codec2/ALSA; Messenger voice features need their
+optional ASR/model or speech tools. Verified source pins do not certify hardware.
+
+### Next actions
+
+1. Reproduce and resolve the remaining daemon-page test using observed daemon
+   state to synchronize the handoff. Preserve its assertion that an intruding
+   page is closed and the requested app wins; do not mask it with longer sleeps.
+2. Run the complete suite again from the isolated source. The four previously
+   skipped catalogue tests ran successfully on Linux in the first full run.
+3. A real catalogue-install smoke script and the verified archives were copied
+   to the evidence directory but **not executed**. If continuing that check,
+   `python3 ../catalogue-install-smoke.py ..` creates package-local environments
+   under `../catalogue-home`, installs Python dependencies, and runs generated
+   package self-tests without launching apps or registering with the live daemon.
+4. Before any deployment, inspect/back up the Pi's current build, registrations,
+   settings and app data; compare runtime files and preserve local edits. The
+   older Orange Pi deployment instructions are historical, not Pi backup paths.
+
+Commands on the Pi (run the full suite only when no other daemon test is active):
+
+```bash
+cd ~/.mfruit-validation/installer-20261001T031928/source
+PYTHONDONTWRITEBYTECODE=1 WHISPLAY_SRC=/home/jarvis/Whisplay python3 -m unittest discover -s tests -v
+PYTHONDONTWRITEBYTECODE=1 python3 -m mfruitos --preview ../preview-final
+```
+
+### Commit messages for the current working tree
+
+No commits, pushes or deployments were performed. Keep the user's untracked
+`MFruitOS.code-workspace` separate. For one combined commit:
+
+```text
+fix: preserve app setup state and harden installer validation
+
+Preserve existing apps and preferences during repeat provisioning, validate
+catalogue entry targets, and improve installer and daemon startup recovery.
+Add provisioning, catalogue, navigation and settings-save regression coverage.
+
+Record Raspberry Pi validation: catalogue pins and 39 previews passed; the
+first-install/reinstall and settings-save follow-ups passed. The daemon-page
+launch-window test still needs investigation before a full-suite pass.
+```
+
+For separate commits, group the corresponding code/tests and split installer
+hunks where necessary:
+
+```text
+fix: preserve existing apps and preferences during provisioning
+fix: validate catalogue entrypoints and generated package scripts
+fix: harden installer prerequisites and daemon startup recovery
+test: cover installer navigation and synchronize settings saves
+docs: record Raspberry Pi validation and remaining launch test
+```
+
+## Earlier checkpoint — installer validation on Windows, 2026-10-01
+
+The Windows-only limitations and pending checks below describe the earlier
+checkpoint. The Raspberry Pi results and next actions above supersede them.
+
+The previous installer work is committed at `1f9798e`, despite the older
+handoff calling it uncommitted. This session continues its validation. The
+fixes below are working-tree changes; no commits, pushes or deployments have
+been made by this session. Keep the user's untracked `MFruitOS.code-workspace`.
+
+- First-install provisioning now has an explicit `--first-install` mode and a
+  completion marker. Repeated setup preserves existing apps, Wi-Fi packages,
+  settings, app order, autostart preferences and launch policy. Only available,
+  valid starter game definitions enter the initial menu.
+- Clean-menu filtering keeps daemon system pages launchable. Forgetting an
+  app removes its curated-menu ID as well as its other settings.
+- Catalogue preparation checks the actual Python entry target before changing
+  the package, reports unknown IDs clearly, uses guarded SDK removal, and
+  writes UTF-8/LF launch scripts.
+- Installer prerequisite/polkit checks and startup-grace regressions pass in
+  isolated tests. The startup grace ends after the launcher lock is seen;
+  uninstall removes the MFruit NetworkManager polkit rule. Missing venv support
+  fails before files are installed, including in `--no-service` mode.
+- Seven standalone installer navigation tests pass, covering confirmation,
+  saved-app restoration, failure guards and ConnectWifi routing. Existing
+  navigation tests are updated for the Home App installer and ConnectWifi-only
+  Wi-Fi flow. Eight synthetic UI frames were rendered in dark/light themes and
+  visually inspected; this is not a device or full-launcher preview check.
+
+Validation environment: Windows Python 3.12.14 is available at
+`C:\Users\mengs\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe`.
+Use `PYTHONDONTWRITEBYTECODE=1`. WSL is not installed. Full discovery was
+attempted, but Linux imports (`fcntl`), POSIX permissions, shell paths and
+symlink privileges prevent a meaningful full-suite pass on this host. Keep
+Linux-only tests pending; do not remove these checks or stub the platform to
+claim a pass. The final focused run completed **66 tests: 62 passed, 4 skipped**
+(catalogue POSIX shell/symlink/activation/rollback tests). This covers catalogue
+validation, provisioning with mocked package execution, settings, clean-menu
+registry behavior, screen services, navigation, startup probes and installer
+command doubles. The polkit checks exercise rule generation; they do not test a
+live polkit service. Log: `focused-final.log`. Temporary evidence is in
+`C:\Users\mengs\AppData\Local\Temp\mfruit-validation-20261001\`.
+Python 3.9 grammar checks passed for 127 source/test files; `bash -n` passed
+for the changed install/uninstall scripts, and `git diff --check` passed.
+
+SSH to `orangepi@192.168.1.122` timed out with an 8-second connection timeout.
+The board's current address/availability is awaiting the user. No live-device
+state was changed. Once reachable, run the complete suite including the real
+daemon, provisioning/package activation and rollback checks, and preview on
+Linux before deploying. Preserve board settings, protected app edits and data;
+follow the earlier backup/checksum instructions below. Physical checks remain
+with the user. The last deployed build recorded below has not been refreshed
+or verified by this session.
+
+Remaining checks include downloading all three pinned catalogue archives and
+confirming their SHA-256 hashes against `config/catalog.json`; fixture checksum
+tests passed, but live source downloads were not completed. Run the bundled
+ConnectWifi install on Linux and confirm first-install/reinstall behavior
+through the complete shell installer. Full Linux command:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests
+python3 -m mfruitos --preview /tmp/mfruit-installer-preview
+```
+
+Suggested commit message for this validation follow-up:
+
+```text
+fix: preserve app setup state and validate installer handoffs
+
+Keep repeat provisioning from resetting apps and preferences, preserve system
+page access, validate catalogue entry targets, and end startup grace after
+launcher handoff. Add installer, catalogue, menu and provisioning regressions
+and document the remaining Linux/device validation.
+```
+
+## Previous checkpoint — app installer and first-install setup, 2026-10-01
+
+This work added an app-installation flow, first-install provisioning, and a
+daemon startup handoff adjustment. It was subsequently committed at `1f9798e`.
+The notes below describe its original handoff, before the validation above.
 
 - Home now opens **App installer**; its curated catalogue installs
   checksum-pinned app snapshots, prepares package-local venv scripts and the

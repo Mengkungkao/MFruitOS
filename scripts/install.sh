@@ -9,8 +9,8 @@
 #                                        keep whisplay-daemon's own user interface
 #
 # Run as your normal user (the one whisplay-daemon runs as). sudo is only
-# used for the systemd unit, an optional narrow sudoers rule and the
-# /usr/local/bin/mfruitctl link.
+# used for missing Python dependencies, NetworkManager, narrowly scoped
+# polkit/sudoers rules, the systemd unit and /usr/local/bin/mfruitctl link.
 set -euo pipefail
 
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -43,6 +43,9 @@ ok()   { printf '    \033[0;32mok\033[0m  %s\n' "$*"; }
 warn() { printf '    \033[0;33m!!\033[0m  %s\n' "$*"; }
 fail() { printf '    \033[0;31mxx\033[0m  %s\n' "$*"; exit 1; }
 as_user() { if [ "$(id -un)" = "$TARGET_USER" ]; then "$@"; else sudo -u "$TARGET_USER" "$@"; fi; }
+TMP_FILES=()
+cleanup() { if [ "${#TMP_FILES[@]}" -gt 0 ]; then rm -f -- "${TMP_FILES[@]}"; fi; }
+trap cleanup EXIT
 
 if [ "$TARGET_USER" = "root" ]; then
   fail "run this as your normal user (the whisplay-daemon user), not root"
@@ -71,6 +74,11 @@ if ! "$PYTHON" -c "import PIL" 2>/dev/null; then
   sudo apt-get install -y python3-pil || fail "could not install Pillow"
 fi
 ok "Pillow $("$PYTHON" -c 'import PIL; print(PIL.__version__)')"
+if ! "$PYTHON" -c "import venv, ensurepip" 2>/dev/null; then
+  warn "Python venv support missing; installing python3-venv"
+  sudo apt-get install -y python3-venv || fail "python3-venv is required for App installer"
+  "$PYTHON" -c "import venv, ensurepip" 2>/dev/null || fail "venv support is still unavailable in $PYTHON"
+fi
 command -v git >/dev/null && ok "git (updates for git-installed apps)" || warn "git not found: git-tracked app updates disabled"
 command -v aplay >/dev/null && ok "aplay (speaker test)" || warn "aplay not found: speaker test disabled"
 
@@ -88,6 +96,12 @@ else warn "Whisplay runtime not found (daemon-down fallback display disabled)"; 
 if [ -S "$SOCKET" ]; then ok "daemon socket $SOCKET"; else warn "daemon socket not present yet"; fi
 
 # ------------------------------------------------------------------ files
+# Capture first-install status before defaults and the current symlink exist.
+FIRST_INSTALL=0
+if [ ! -e "$OS_HOME/config/settings.json" ] && [ ! -e "$OS_HOME/system/current" ] \
+    && [ ! -L "$OS_HOME/system/current" ]; then
+  FIRST_INSTALL=1
+fi
 say "Installing files to $OS_HOME"
 as_user mkdir -p "$OS_HOME"/{config,apps,cache,logs,system/versions,bin,inbox}
 as_user mkdir -p -m 700 "$OS_HOME/state" "$OS_HOME/state/runs"
@@ -161,8 +175,10 @@ atomic_write_json(os.path.join(home, "system", "app.json"), {
 PY
 
 # Wi-Fi is an offline OS component; do not depend on a second manual clone.
+PROVISION_ARGS=()
+if [ "$FIRST_INSTALL" = 1 ]; then PROVISION_ARGS+=(--first-install); fi
 as_user env PYTHONPATH="$CODE_DIR" "$PYTHON" -m mfruitos.provision \
-  --home "$OS_HOME" --daemon-home "$TARGET_HOME/.whisplay-daemon" --whisplay "$WHISPLAY_ROOT"
+  --home "$OS_HOME" --daemon-home "$TARGET_HOME/.whisplay-daemon" --whisplay "$WHISPLAY_ROOT" "${PROVISION_ARGS[@]}"
 
 # Keep the two most recent local installs (the updater manages its own).
 if [ "$DEV" = 0 ]; then
@@ -187,12 +203,11 @@ sudo ln -sfn "$OS_HOME/bin/mfruitctl" /usr/local/bin/mfruitctl && ok "/usr/local
 # Permit only NetworkManager Wi-Fi actions for this installation's user.
 if ! command -v nmcli >/dev/null; then
   sudo apt-get install -y network-manager || fail "NetworkManager is required for Settings > Wi-Fi"
-fi
-if ! "$PYTHON" -c "import ensurepip" 2>/dev/null; then
-  sudo apt-get install -y python3-venv || fail "python3-venv is required for App installer"
+  command -v nmcli >/dev/null || fail "nmcli is still unavailable after installing NetworkManager"
 fi
 sudo mkdir -p /etc/polkit-1/rules.d
 POLKIT_TMP="$(mktemp)"
+TMP_FILES+=("$POLKIT_TMP")
 "$PYTHON" - "$TARGET_USER" > "$POLKIT_TMP" <<'PYRULE'
 import json, sys
 user = json.dumps(sys.argv[1])
@@ -210,7 +225,7 @@ GROUPS_LIST=""
 for g in audio video gpio spi input; do getent group "$g" >/dev/null && GROUPS_LIST="$GROUPS_LIST $g"; done
 
 SUDOERS_TMP="$(mktemp)"
-trap 'rm -f "$SUDOERS_TMP"' EXIT
+TMP_FILES+=("$SUDOERS_TMP")
 SYSTEMCTL="$(command -v systemctl)"
 printf '%s ALL=(root) NOPASSWD: %s restart %s, %s restart %s\n' \
   "$TARGET_USER" "$SYSTEMCTL" "$DAEMON_SERVICE" "$SYSTEMCTL" "$SERVICE" > "$SUDOERS_TMP"
@@ -258,6 +273,7 @@ if [ "$BACKGROUND_DAEMON" = 1 ] && [ -f "$WHISPLAY_ROOT/daemon/whisplay_daemon.p
   say "Running whisplay-daemon's user interface in the background"
   sudo mkdir -p "$DROPIN_DIR"
   DROPIN_TMP="$(mktemp)"
+  TMP_FILES+=("$DROPIN_TMP")
   cat > "$DROPIN_TMP" <<DROPIN
 # Installed by MFruit OS. While MFruit OS runs, whisplay-daemon does not draw
 # its own desktop and ignores the button when no app owns the screen; the

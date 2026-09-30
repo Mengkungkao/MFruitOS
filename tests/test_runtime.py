@@ -218,8 +218,16 @@ class RuntimeEndToEndTests(TempHomeTestCase):
     def test_disable_app_persists_and_hides(self):
         self.rt.loop.post(self.rt.settings.set_app_flag, "demo", "enabled", False)
         self.wait(lambda: "demo" not in [e.key for e in self.rt.home_screen.entries()], "hidden")
-        self.rt.loop.post(self.rt.flush_settings)
-        self.wait(lambda: os.path.exists(self.paths.settings_file), "settings saved")
+        saved = threading.Event()
+
+        def flush():
+            self.rt.flush_settings()
+            saved.set()
+
+        self.rt.loop.post(flush)
+        # Boot has already created settings.json. Its existence cannot prove
+        # that this queued save has completed on the UI thread.
+        self.assertTrue(saved.wait(5), "queued settings save did not complete")
         with open(self.paths.settings_file) as fp:
             self.assertFalse(json.load(fp)["applications"]["demo"]["enabled"])
 

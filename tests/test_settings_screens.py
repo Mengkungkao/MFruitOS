@@ -34,16 +34,19 @@ class SettingsScreensTests(TempHomeTestCase):
                 screen.handle(direction)
                 self.assertTrue(selectable(screen.current_items()[screen.selected]))
 
-    def test_wifi_uses_launch_authority_and_falls_back_only_when_missing(self):
+    def test_wifi_uses_connectwifi_and_explains_when_missing(self):
         wifi = WifiScreen(self.rt)
         self.rt.launch_app = Mock()
         self.rt.open_system_page = Mock()
+        self.rt.show_message = Mock()
         with patch.object(self.rt.registry, "get", return_value=object()):
             wifi.choose_network()
         self.rt.launch_app.assert_called_once_with("connectwifi", source="settings")
         with patch.object(self.rt, "system_page_available", return_value=True):
             wifi.choose_network()
-        self.rt.open_system_page.assert_called_once_with("whisplay-wifi")
+        self.rt.open_system_page.assert_not_called()
+        self.rt.show_message.assert_called_once_with(
+            "Wi-Fi", "Install Connect WiFi to choose a network.")
 
     def test_wifi_does_not_call_a_default_route_internet_access(self):
         wifi = WifiScreen(self.rt)

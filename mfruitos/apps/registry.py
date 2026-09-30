@@ -156,12 +156,13 @@ class AppRegistry:
                 continue
             entries[app_id] = self._daemon_entry(app_id, info, config, app_id in live)
 
+        allowed = set(self.settings.get("apps.installed_ids")) if self.settings.get("apps.clean_menu") else None
         for entry in entries.values():
             flags = self.settings.app_flags(entry.id)
             entry.enabled = flags["enabled"]
             entry.hidden = flags["hidden"]
             entry.autostart = flags["autostart"]
-            if self.settings.get("apps.clean_menu") and entry.id not in self.settings.get("apps.installed_ids"):
+            if allowed is not None and entry.kind != "system" and entry.id not in allowed:
                 entry.enabled = False
                 entry.autostart = False
             explicit = self.settings.app_flag_explicit(entry.id, "background")

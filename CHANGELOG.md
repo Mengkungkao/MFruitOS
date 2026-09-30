@@ -4,6 +4,20 @@ All notable changes to MFruit OS are documented here. Versions follow
 [Semantic Versioning](https://semver.org/). App versions are independent of
 the OS version.
 
+## Unreleased
+
+- Home App installer with checksum-pinned source packages, package-local
+  dependency environments and restoration of saved apps to the menu.
+- Bundled ConnectWifi and an initial menu with available starter games.
+  Repeated installation preserves existing Wi-Fi packages, apps, settings
+  and launch policy; daemon system pages remain accessible in clean-menu mode.
+- Validate catalogue Python entry targets and generate UTF-8/LF scripts.
+  Remove stale curated-menu IDs when forgetting an app.
+- Check Python venv support before installing files, clean up the Wi-Fi
+  polkit rule on uninstall, and end daemon startup grace after launcher handoff.
+- Add focused installer, catalogue, provisioning, navigation and startup tests.
+  Full Linux and live-device validation for this follow-up remains pending.
+
 ## [1.4.0] - 2026-09-30
 
 - Canonical app creation/development/production rules, native package preflight,

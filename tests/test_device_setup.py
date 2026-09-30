@@ -155,6 +155,110 @@ esac
         self.assertEqual(record["previous_version"], "1.0.0")
         self.assertEqual(record["installed_dir"], str(current.resolve()))
 
+    def test_files_only_first_install_and_rerun_preserve_provisioned_apps(self):
+        from mfruitos.paths import Paths
+        from mfruitos.system.settings import Settings
+
+        os_home = self.tmp / "installed"
+        paths = Paths(str(os_home), str(self.tmp / ".whisplay-daemon"))
+        starter = "whisplay-jump"
+        templates = self.driver / "daemon/default_apps"
+        templates.mkdir()
+        example = self.driver / "example"
+        example.mkdir()
+        (example / "game.py").write_text(
+            'raise AssertionError("installer must not launch starter apps")\n', encoding="utf-8")
+        (templates / (starter + ".json")).write_text(json.dumps({
+            "app_id": starter, "display_name": "Jump",
+            "cwd": "__EXAMPLE_DIR__",
+            "launch_command": 'python3 "__EXAMPLE_DIR__/game.py"',
+        }), encoding="utf-8")
+        env = dict(self.env, WHISPLAY_OS_HOME=str(os_home))
+
+        def install(stamp):
+            # Distinct release directories without waiting for the wall clock.
+            self.command("date", "printf '%s\\n' '" + stamp + "'\n")
+            result = subprocess.run(
+                ["bash", str(Path(ROOT) / "scripts/install.sh"), "--no-service"],
+                cwd=self.tmp, env=env, text=True, capture_output=True, timeout=40)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            return result
+
+        first = install("20261001010000")
+        self.assertIn("Initial Apps menu configured; available starter games: 1", first.stdout)
+        settings_file = Path(paths.settings_file)
+        settings = Settings(str(settings_file))
+        settings.load()
+        self.assertEqual(settings.load_errors, [])
+        self.assertTrue(settings.get("apps.clean_menu"))
+        self.assertEqual(settings.get("apps.installed_ids"), [starter, "connectwifi"])
+        self.assertEqual(settings.get("apps.order"), [starter])
+        self.assertEqual(settings.get("apps.default_app"), "")
+        for app_id in (starter, "connectwifi"):
+            self.assertTrue(settings.app_flags(app_id)["enabled"])
+            self.assertFalse(settings.app_flags(app_id)["autostart"])
+        self.assertTrue(settings.app_flags("connectwifi")["hidden"])
+        daemon_apps = Path(paths.daemon_apps_dir)
+        registration = daemon_apps / (starter + ".json")
+        raw = json.loads(registration.read_text(encoding="utf-8"))
+        self.assertEqual(raw["cwd"], str(self.driver / "example"))
+        self.assertEqual(raw["launch_command"],
+                         'python3 "' + str(self.driver / "example/game.py") + '"')
+        self.assertFalse((daemon_apps / "whisplay-flappy-bird.json").exists())
+
+        wifi_root = Path(paths.app_root("connectwifi"))
+        wifi_current = wifi_root / "current"
+        self.assertTrue(wifi_current.is_symlink())
+        wifi_directory = wifi_current.resolve()
+        for source, installed in ((Path(ROOT) / "bundled/connectwifi", wifi_current),
+                                  (Path(ROOT) / "mfruitos/sdk", wifi_current / "mfruit_sdk")):
+            for path in source.rglob("*"):
+                if path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc":
+                    self.assertEqual((installed / path.relative_to(source)).read_bytes(),
+                                     path.read_bytes())
+        marker = os_home / "state/provisioned.json"
+        self.assertEqual(json.loads(marker.read_text(encoding="utf-8")), {"schema": 1})
+        marker_before = (marker.read_bytes(), marker.stat().st_mtime_ns)
+        policy = os_home / "state/launch-policy"
+        self.assertEqual(policy.read_text(encoding="utf-8"), "gate\n")
+        backups = list((os_home / "backups").glob("first-install-*/settings.json"))
+        self.assertEqual(len(backups), 1)
+        self.assertEqual(backups[0].read_bytes(), (Path(ROOT) / "config/default.json").read_bytes())
+
+        settings.set("display.brightness", 47)
+        settings.set("apps.installed_ids", ["weather", starter, "connectwifi"])
+        settings.set("apps.order", ["weather", starter])
+        settings.set("apps.default_app", "weather")
+        settings.set("system.show_system_pages_on_home", True)
+        settings.set_app_flag("weather", "autostart", True)
+        settings.set_app_flag("connectwifi", "enabled", False)
+        settings.set_app_flag("connectwifi", "hidden", False)
+        self.assertTrue(settings.save())
+        settings_before = settings_file.read_bytes()
+        wifi_data = wifi_root / "data/networks.json"
+        wifi_data.write_text('{"fixture": "keep user data"}\n', encoding="utf-8")
+        wifi_local = wifi_current / "local-preferences.json"
+        wifi_local.write_text('{"fixture": "keep installed directory"}\n', encoding="utf-8")
+        wifi_record_before = (wifi_root / "app.json").read_bytes()
+        raw["launch_command"] = "custom-game-command"
+        registration.write_text(json.dumps(raw), encoding="utf-8")
+        registration_before = registration.read_bytes()
+        policy.write_text("open\n", encoding="utf-8")
+
+        second = install("20261001010001")
+        self.assertNotIn("Initial Apps menu configured", second.stdout)
+        self.assertEqual(settings_file.read_bytes(), settings_before)
+        self.assertEqual(wifi_current.resolve(), wifi_directory)
+        self.assertEqual(list((wifi_root / "versions").iterdir()), [wifi_directory])
+        self.assertEqual((wifi_root / "app.json").read_bytes(), wifi_record_before)
+        self.assertEqual(wifi_data.read_text(encoding="utf-8"), '{"fixture": "keep user data"}\n')
+        self.assertEqual(wifi_local.read_text(encoding="utf-8"),
+                         '{"fixture": "keep installed directory"}\n')
+        self.assertEqual(registration.read_bytes(), registration_before)
+        self.assertEqual((marker.read_bytes(), marker.stat().st_mtime_ns), marker_before)
+        self.assertEqual(policy.read_text(encoding="utf-8"), "open\n")
+        self.assertEqual(list((os_home / "backups").glob("first-install-*/settings.json")), backups)
+
 
 if __name__ == "__main__":
     unittest.main()

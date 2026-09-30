@@ -8,7 +8,6 @@ from unittest.mock import Mock
 from helpers import ROOT, TempHomeTestCase, make_package
 from mfruitos.apps.registry import AppRegistry, AppEntry
 from mfruitos.launcher.runtime import Runtime
-from mfruitos.launcher.ui.screens.apps import ApplicationsScreen
 from mfruitos.launcher.ui.screens.updater import (InstallAppScreen, LocalPackagesScreen,
                                                  UpdaterScreen, VersionListScreen)
 from mfruitos.system.settings import Settings
@@ -75,9 +74,9 @@ class UpdateScreenTests(TempHomeTestCase):
         self.rt = Runtime(self.paths, ROOT, socket_path=self.tmp + "/none.sock")
         self.rt.router.set_root(self.rt.home_screen)
 
-    def test_apps_exposes_install_and_offline_updater_keeps_management(self):
-        screen = ApplicationsScreen(self.rt)
-        screen.items()[0].action()
+    def test_home_exposes_install_and_offline_updater_keeps_management(self):
+        entry = next(e for e in self.rt.home_screen.entries() if e.key == "os.installer")
+        self.rt.open_home_entry(entry)
         self.assertIsInstance(self.rt.router.top, InstallAppScreen)
         self.rt.updater.online = False
         self.rt.registry.apps = Mock(return_value=[AppEntry("demo", "Demo", "os")])

@@ -1,0 +1,22 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../WalkieTalkie"
+		},
+		{
+			"path": "../whisplay-crypto-dashboard"
+		},
+		{
+			"path": "../ai-chatbot"
+		},
+		{
+			"path": "../Messenger"
+		},
+		{
+			"path": "../ConnectWifi"
+		}
+	]
+}

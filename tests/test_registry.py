@@ -68,6 +68,37 @@ class RegistryTests(TempHomeTestCase):
         self.assertEqual(self.registry.get("a").status(), "disabled")
         self.assertEqual(len(self.registry.apps()), 3)  # still installed
 
+    def test_clean_menu_suppresses_unselected_apps_without_forgetting_them(self):
+        for app_id in ("kept", "unselected", "connectwifi"):
+            self.daemon_app(app_id)
+        self.settings.set("apps.clean_menu", True)
+        self.settings.set("apps.installed_ids", ["kept", "connectwifi"])
+        self.settings.set_app_flag("unselected", "autostart", True)
+        self.registry.refresh(None)
+        self.assertEqual({e.id for e in self.registry.apps()}, {"kept", "connectwifi"})
+        self.assertEqual([e.id for e in self.registry.launcher_entries()], ["kept"])
+        self.assertFalse(self.registry.get("unselected").launchable)
+        self.assertFalse(self.registry.get("unselected").autostart)
+        self.assertTrue(self.settings.app_flags("unselected")["autostart"])
+        self.assertIn("unselected", {e.id for e in self.registry.all()})
+
+    def test_clean_menu_keeps_system_pages_available(self):
+        self.settings.set("apps.clean_menu", True)
+        self.registry.refresh([{"app_id": "whisplay-volume"}, {"app_id": "whisplay-system"}])
+        self.assertTrue(self.registry.get("whisplay-volume").launchable)
+        self.assertTrue(self.registry.get("whisplay-system").launchable)
+        self.assertEqual(self.registry.launcher_entries(), [])
+
+    def test_clean_menu_restores_existing_app_only_after_explicit_add(self):
+        self.daemon_app("existing")
+        self.settings.set("apps.clean_menu", True)
+        self.registry.refresh(None)
+        self.assertFalse(self.registry.get("existing").launchable)
+        self.settings.set("apps.installed_ids", ["existing"])
+        self.registry.refresh(None)
+        self.assertTrue(self.registry.get("existing").launchable)
+        self.assertEqual([e.id for e in self.registry.launcher_entries()], ["existing"])
+
     def test_broken_manifest_does_not_block_others(self):
         self.install_os_app("good")
         root = self.install_os_app("bad")

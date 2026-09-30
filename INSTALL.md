@@ -14,9 +14,10 @@ another board, follow [docs/DEVICE_SETUP.md](docs/DEVICE_SETUP.md). Run
 | OS | Raspberry Pi OS / Debian 12+, Ubuntu 22.04+ (systemd) |
 | Python | 3.9 or newer |
 | Whisplay | [PiSugar/Whisplay](https://github.com/PiSugar/Whisplay) with `whisplay-daemon.service` installed and running |
-| Packages | Pillow (`python3-pil`, already required by the daemon). Optional: `git` (updates for git-installed apps), `alsa-utils` (speaker test) |
+| Packages | Pillow (`python3-pil`), Python venv support (`python3-venv`), NetworkManager for Wi-Fi. Optional: `git` (updates for git-installed apps), `alsa-utils` (speaker test) |
 
-MFruit OS has no other dependencies: no numpy, no web server, no desktop stack.
+Catalogue apps install their own dependencies into package-local environments.
+The launcher needs no numpy, web server or desktop stack.
 
 ## Install
 
@@ -48,7 +49,16 @@ The installer:
    fallback screen);
 7. creates, enables and starts `whisplay-os.service`.
 
-`sudo` is used only for steps 4–7. Options:
+The installer also provisions bundled ConnectWifi when no existing Wi-Fi app
+is present. A first installation seeds the Apps menu with available starter
+games, App installer and Settings. Rerunning setup preserves existing apps and
+preferences. Missing Pillow/venv packages are installed before copying files.
+Service installation checks NetworkManager and writes
+`/etc/polkit-1/rules.d/49-mfruit-wifi.rules`, granting the target user the listed
+Wi-Fi scan/control/settings actions. Uninstall removes this rule.
+
+`sudo` is used for missing system packages, service setup, permission rules and
+the command link. Options:
 
 | Option | Effect |
 |---|---|
@@ -85,7 +95,7 @@ tail -f ~/.whisplay-os/logs/launcher.log
 
 ## Updating
 
-- **On the device:** *Settings → System → System update* (or *Updater →
+- **On the device:** *Settings → General → Software Update* (or *App installer → Updates →
   MFruit OS*) installs a newer GitHub release of MFruit OS and restarts.
 - **From a checkout:** `bash scripts/update.sh` (fast-forward `git pull`, then
   re-install).

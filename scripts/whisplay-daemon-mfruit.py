@@ -41,20 +41,27 @@ class MfruitProbe:
 
     True while some process holds an flock on ``lock_path`` (MFruit OS running)
     and MFruit OS has not handed the screen to the daemon's desktop on purpose
-    (``launch-policy`` = ``open``, its "Daemon desktop" developer option)."""
+    (``launch-policy`` = ``open``, its "Daemon desktop" developer option).
+    A bounded startup grace covers the first handoff and ends as soon as the
+    launcher lock is observed, so an early launcher exit restores the desktop.
+    """
 
     def __init__(self, lock_path: str, startup_grace: float = 0):
         self.lock_path = lock_path
-        self._checked_at = 0.0
+        self._checked_at = float("-inf")
         self._value = False
         self._startup_until = time.monotonic() + startup_grace
 
     def __call__(self) -> bool:
         now = time.monotonic()
-        if now - self._checked_at < CACHE_SEC:
+        if (now - self._checked_at < CACHE_SEC
+                and not self._checked_at < self._startup_until <= now):
             return self._value
         self._checked_at = now
-        self._value = (self._held() or now < self._startup_until) and not self._desktop_mode()
+        held = self._held()
+        if held:
+            self._startup_until = 0.0
+        self._value = (held or now < self._startup_until) and not self._desktop_mode()
         return self._value
 
     def _desktop_mode(self) -> bool:

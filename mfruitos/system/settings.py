@@ -324,6 +324,10 @@ class Settings:
             if app_id in order:
                 order.remove(app_id)
                 removed = True
+            installed_ids = self._data["apps"]["installed_ids"]
+            if app_id in installed_ids:
+                installed_ids.remove(app_id)
+                removed = True
             if self._data["apps"]["default_app"] == app_id:
                 self._data["apps"]["default_app"] = ""
                 removed = True
