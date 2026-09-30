@@ -106,4 +106,8 @@ original/checkpoint commit IDs are saved under:
 Every merge preserves both the validated checkpoint and fetched origin/main as
 ancestors. Final merge hashes and ancestry/clean-tree results are recorded in
 `merge-results.json` and `final-verification.json` in that backup directory.
-Commits are local; nothing was pushed.
+This integration session issued no push commands. During final verification,
+WalkieTalkie, Messenger, chatbot and dashboard origin/main tracking refs advanced
+to their new merge commits with `update by push` reflog entries from concurrent
+activity. MFruitOS and ConnectWifi were still two commits ahead at the merge
+checkpoint. A subsequent MFruitOS documentation commit records this observation.

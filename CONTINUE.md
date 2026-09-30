@@ -15,7 +15,10 @@ Git integration follow-up: all 13 incoming origin/main commits across six repos
 are preserved in normal merge commits alongside the validated fixes. All 1,304
 local Python tests and the Orange Pi chatbot build/regression passed again;
 SSH health checks remain healthy. Runtime files match the deployed validated
-checkpoint, so no redeployment was needed. Commits are local; nothing was pushed.
+checkpoint, so no redeployment was needed. This integration session issued no
+push commands. Concurrent push activity updated the WalkieTalkie, Messenger,
+chatbot and dashboard tracking refs to their merge commits; MFruitOS and
+ConnectWifi remain two commits ahead of the fetched origin/main at this checkpoint.
 See [the integration record](docs/INTEGRATION_2026-09-30.md) for upstream commit
 inventory, resolution decisions, app merge hashes and recovery backups.
 
