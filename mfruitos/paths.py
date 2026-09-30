@@ -107,6 +107,11 @@ class Paths:
         return os.path.join(self.state_dir, "control.sock")
 
     @property
+    def keys_socket(self) -> str:
+        """The key hub apps take their keyboard keys from (launcher/keyhub.py)."""
+        return os.path.join(self.state_dir, "keys.sock")
+
+    @property
     def daemon_apps_dir(self) -> str:
         return os.path.join(self.daemon_home, "app")
 

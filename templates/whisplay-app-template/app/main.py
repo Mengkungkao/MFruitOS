@@ -61,7 +61,7 @@ class Counter:
         self.done = threading.Event()
         self.status = StatusMonitor(on_change=lambda _s: self.draw())
         self.input = InputController(self.on_action, active=lambda: self.app.has_focus,
-                                     on_armed=self.on_armed)
+                                     on_armed=self.on_armed, app_id=self.app.app_id)
 
     def _load(self) -> int:
         try:

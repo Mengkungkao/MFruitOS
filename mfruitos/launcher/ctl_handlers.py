@@ -62,14 +62,15 @@ def _button(rt, args):
 
 
 def _key(rt, args):
-    """A key press and release, as if typed on a keyboard on the board."""
+    """A key press and release, as if typed on a keyboard on the board: routed
+    to whoever owns the screen, MFruit OS or the foreground app."""
     from mfruitos.sdk.keys import DOWN, UP, KeyEvent
     name = args.get("name", "")
     code = KEY_CODES.get(name)
     if code is None:
         return {"ok": False, "error": f"key must be one of {sorted(KEY_CODES)}"}
-    rt._on_key(KeyEvent("key", name, DOWN, code))
-    rt._on_key(KeyEvent("key", name, UP, code))
+    rt._on_hardware_key(KeyEvent("key", name, DOWN, code))
+    rt._on_hardware_key(KeyEvent("key", name, UP, code))
     return {"ok": True}
 
 

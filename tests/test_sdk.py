@@ -571,3 +571,96 @@ class ModuleTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class KeyHubTests(unittest.TestCase):
+    """MFruit OS holds the keyboards and hands keys to the app on screen."""
+
+    def setUp(self):
+        from mfruitos.launcher.keyhub import KeyHub
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.path = os.path.join(self.tmp.name, "state", "keys.sock")
+        self.hub = KeyHub(self.path)
+        self.hub.start()
+        self.addCleanup(self.hub.stop)
+
+    def wait(self, condition, timeout=3.0):
+        import time
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if condition():
+                return True
+            time.sleep(0.02)
+        return False
+
+    def reader(self, app_id="demo"):
+        seen = []
+        reader = KeyReader(seen.append, app_id=app_id, hub=self.path,
+                           input_dir=self.tmp.name, sys_dir=self.tmp.name)
+        reader.start()
+        self.addCleanup(reader.stop)
+        self.assertTrue(self.wait(lambda: self.hub.connected(app_id)), "never connected")
+        return reader, seen
+
+    def test_keys_reach_the_app_they_are_sent_to(self):
+        reader, seen = self.reader()
+        other, other_seen = self.reader("other")
+        self.hub.set_devices(["event3"])
+        self.assertTrue(self.wait(lambda: reader.connected))
+        self.assertEqual(reader.devices, ["event3"])
+        self.assertTrue(self.hub.send("demo", KeyEvent("key", "enter", DOWN, KEY_ENTER)))
+        self.assertTrue(self.wait(lambda: seen))
+        self.assertEqual(seen, [KeyEvent("key", "enter", DOWN, KEY_ENTER)])
+        self.assertEqual(other_seen, [])
+        self.assertFalse(self.hub.send("nobody", KeyEvent("key", "enter", DOWN, KEY_ENTER)))
+
+    def test_a_held_key_is_released_when_mfruit_os_goes_away(self):
+        reader, seen = self.reader()
+        self.hub.send("demo", KeyEvent("key", "space", DOWN, KEY_SPACE))
+        self.assertTrue(self.wait(lambda: seen))
+        self.hub.stop()
+        self.assertTrue(self.wait(lambda: len(seen) == 2))
+        self.assertEqual(seen[-1], KeyEvent("key", "space", UP, KEY_SPACE))
+        self.assertTrue(self.wait(lambda: not reader.via_hub))
+
+    def test_an_app_that_leaves_is_forgotten(self):
+        reader, _ = self.reader()
+        reader.stop()
+        self.assertTrue(self.wait(lambda: not self.hub.connected("demo")))
+
+    def test_the_socket_is_private(self):
+        import stat
+        self.assertEqual(stat.S_IMODE(os.stat(self.path).st_mode), 0o600)
+
+
+class GrabTests(unittest.TestCase):
+    def test_a_grabbing_reader_holds_each_keyboard_exclusively(self):
+        from unittest import mock
+        from mfruitos.sdk import keys
+        calls = []
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(keys.fcntl, "ioctl", lambda fd, req, arg: calls.append((req, arg))):
+            caps = os.path.join(tmp, "sys", "event4", "device", "capabilities")
+            os.makedirs(caps)
+            with open(os.path.join(caps, "key"), "w") as handle:
+                handle.write(bitmap(*range(1, 120)))
+            os.makedirs(os.path.join(tmp, "dev"))
+            fifo = os.path.join(tmp, "dev", "event4")
+            os.mkfifo(fifo)
+            writer = os.open(fifo, os.O_RDWR | os.O_NONBLOCK)
+            try:
+                reader = KeyReader(lambda e: None, input_dir=os.path.join(tmp, "dev"),
+                                   sys_dir=os.path.join(tmp, "sys"), grab=True)
+                reader._scan()
+                self.assertEqual(calls, [(keys.EVIOCGRAB, 1)])
+                reader.set_grab(False)              # the daemon desktop: let others read
+                self.assertEqual(calls[-1], (keys.EVIOCGRAB, 0))
+                for fd in list(reader._open):
+                    reader._close(fd)
+            finally:
+                os.close(writer)
+
+    def test_a_grabbing_reader_never_uses_the_hub(self):
+        reader = KeyReader(lambda e: None, app_id="mfruit-os", hub="/tmp/whatever", grab=True)
+        self.assertIsNone(reader._hub_path())

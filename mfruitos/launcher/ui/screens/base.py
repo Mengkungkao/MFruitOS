@@ -7,7 +7,7 @@ happens when I press (footer hints) and how do I go back (footer + a Back row).
 
 from __future__ import annotations
 
-from mfruitos.launcher.ui.components import Item, draw_footer, draw_list
+from mfruitos.launcher.ui.components import Item, draw_footer, draw_list, selectable
 from mfruitos.launcher.ui.painter import Painter
 
 
@@ -53,14 +53,24 @@ class ListScreen(Screen):
         items = self.items()
         if items:
             self.selected = max(0, min(self.selected, len(items) - 1))
+            if not selectable(items[self.selected]):
+                self.selected = self._step(items, self.selected, 1)
         return items
+
+    @staticmethod
+    def _step(items: list[Item], index: int, step: int) -> int:
+        """The next selectable row from ``index`` (group headings are skipped)."""
+        for _ in range(len(items)):
+            index = (index + step) % len(items)
+            if selectable(items[index]):
+                return index
+        return index
 
     def handle(self, action: str) -> bool:
         items = self.current_items()
         if action in ("next", "previous"):
             if items:
-                step = 1 if action == "next" else -1
-                self.selected = (self.selected + step) % len(items)
+                self.selected = self._step(items, self.selected, 1 if action == "next" else -1)
                 self.redraw()
             return True
         if action == "select" and items:

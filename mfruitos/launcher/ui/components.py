@@ -111,13 +111,17 @@ class Item:
     """One row in a list screen. Callables are evaluated at draw time."""
     label: Any
     action: Callable[[], Any] | None = None
-    kind: str = "action"          # action | nav | toggle | choice | info | back | danger
+    # action | nav | toggle | choice | info | back | danger | section.
+    # A "section" starts a group, iPhone style: a gap, with an optional small
+    # heading ("MY DEVICES"); it is never selected.
+    kind: str = "action"
     value: Any = None             # right-hand text, or bool for toggles
     subtitle: Any = None
     icon: str | None = None
     tone: str | None = None       # success | warning | error | accent | muted
     enabled: bool = True
     data: dict = field(default_factory=dict)
+    tile: tuple | None = None     # draw the icon white on a rounded tile of this colour
 
     def resolve(self, attr: str):
         value = getattr(self, attr)
@@ -134,7 +138,22 @@ def _tone_color(p: Painter, tone: str | None, default):
             "accent": t.accent, "muted": t.text_faint}.get(tone or "", default)
 
 
+SECTION_GAP = 10
+SECTION_TITLE_H = 24
+
+
+def section(title: str = "") -> Item:
+    """A group break in a list (with an optional heading); never selected."""
+    return Item(title, kind="section")
+
+
+def selectable(item: Item) -> bool:
+    return item.kind != "section"
+
+
 def row_height(item: Item) -> int:
+    if item.kind == "section":
+        return SECTION_TITLE_H if item.resolve("label") else SECTION_GAP
     return ROW_H_SUB if item.resolve("subtitle") else ROW_H
 
 
@@ -168,11 +187,12 @@ def draw_list(p: Painter, items: list[Item], selected: int, top: int = LIST_TOP,
             continue
         if y > visible:
             break
-        is_sel = index == selected
+        is_sel = index == selected and selectable(item)
         if is_sel:
             layer.rounded((left, y + 1, right, y + height - 1), 12, fill=t.accent_dim)
-        elif index > 0 and index - 1 != selected:
-            layer.hline(left + 12, right - 12, y, t.separator)
+        elif (index > 0 and index - 1 != selected and selectable(item)
+              and selectable(items[index - 1])):
+            layer.hline(left + (40 if item.tile else 12), right - 12, y, t.separator)
         _draw_row(layer, item, y, height, left, right, is_sel)
         y += height
     p.image.paste(layer.image, (0, top))
@@ -188,6 +208,12 @@ def draw_list(p: Painter, items: list[Item], selected: int, top: int = LIST_TOP,
 def _draw_row(p: Painter, item: Item, y: int, height: int, left: int, right: int,
               selected: bool) -> None:
     t = p.theme
+    if item.kind == "section":
+        title = str(item.resolve("label") or "")
+        if title:
+            p.text(left + 10, y + height - 7, title.upper(), 11, "semibold", t.text_faint,
+                   anchor="ls")
+        return
     label = str(item.resolve("label"))
     subtitle = item.resolve("subtitle")
     value = item.resolve("value")
@@ -198,7 +224,13 @@ def _draw_row(p: Painter, item: Item, y: int, height: int, left: int, right: int
     if item.kind == "back":
         base = t.text_muted if not selected else t.text
     x = left + 10
-    if item.icon:
+    if item.tile and item.icon:
+        size = 24
+        tile_y = y + (height - size) // 2
+        p.rounded((x, tile_y, x + size, tile_y + size), 7, fill=item.tile)
+        p.icon(item.icon, x + 5, tile_y + 5, 14, (255, 255, 255))
+        x += size + 10
+    elif item.icon:
         icon_color = t.accent if selected and item.kind != "danger" else (
             t.error if item.kind == "danger" else t.text_muted)
         p.icon(item.icon, x, y + (height - 16) // 2, 16, icon_color)

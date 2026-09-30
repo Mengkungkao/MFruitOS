@@ -20,7 +20,8 @@ from mfruitos.launcher import sdnotify
 from mfruitos.launcher.app_manager.lifecycle import AppLifecycle
 from mfruitos.launcher.control import ControlServer
 from mfruitos.launcher.direct import DirectDisplay, daemon_unit_state, find_whisplay_root, SAFE_STATES
-from mfruitos.launcher.focus import HOME, ForegroundManager
+from mfruitos.launcher.focus import APP, HOME, ForegroundManager
+from mfruitos.launcher.keyhub import KeyHub
 from mfruitos.launcher.loop import EventLoop
 from mfruitos.launcher.navigation.gestures import GestureRecognizer
 from mfruitos.launcher.navigation.router import Router
@@ -97,10 +98,17 @@ class Runtime(ScreenServices):
         self.gestures = GestureRecognizer(self._on_gesture, self.loop.call_later,
                                           on_armed=self._on_hold_armed)
         self._configure_gestures()
-        # USB / Bluetooth keyboards: every process reads them (nobody grabs
-        # the device), so keys only count while MFruit OS owns the screen.
-        self.keyboard = KeyReader(lambda event: self.loop.post(self._on_key, event))
+        # USB / Bluetooth keyboards, held exclusively (EVIOCGRAB): no key
+        # reaches the Linux console -- whose auto-login shell ran whatever
+        # was typed for MFruit OS -- or any other reader. Each key goes to
+        # whoever owns the screen: MFruit OS, or the foreground app through
+        # the key hub (launcher/keyhub.py).
+        self.keyhub = KeyHub(paths.keys_socket)
+        self.keyboard = KeyReader(lambda event: self.loop.post(self._on_hardware_key, event),
+                                  grab=True,
+                                  on_devices=lambda devices: self.keyhub.set_devices(devices))
         self._keys_owned: set[int] = set()
+        self._key_owners: dict[int, str | None] = {}
         self.fonts = Fonts(os.path.join(package_dir, "assets", "fonts"))
         self.status = StatusInfo()
         self.stream = EventStream(self.client.socket_path,
@@ -145,6 +153,10 @@ class Runtime(ScreenServices):
         self.tasks.start()
         self.control.start()
         self.stream.start()
+        try:
+            self.keyhub.start()
+        except OSError as exc:
+            log.error("Key hub unavailable, apps will not get keyboard keys: %s", exc)
         self.keyboard.start()
         self._tick_clock()
         self._refresh_status()
@@ -285,6 +297,7 @@ class Runtime(ScreenServices):
         self.request_render()
 
     def on_focus_gained(self) -> None:
+        self.keyboard.set_grab(True)          # back from the daemon desktop, if there
         self._last_frame = None
         self.backlight.forget()
         self.backlight.wake()
@@ -417,6 +430,32 @@ class Runtime(ScreenServices):
                 hook(False)
             self.gestures.release()
         self._arm_idle_timers()
+
+    def _on_hardware_key(self, event: KeyEvent) -> None:
+        """Every keyboard key comes here first (the keyboards are held
+        exclusively). A key goes to whoever owned the screen when it went
+        down -- MFruit OS or the foreground app -- and so do its repeats and
+        its release, even if the screen has changed hands in between."""
+        if event.action == KEY_DOWN:
+            owner = self._key_route()
+            self._key_owners[event.code] = owner
+        else:
+            owner = self._key_owners.get(event.code)
+            if event.action == KEY_UP:
+                self._key_owners.pop(event.code, None)
+        if owner == OS_APP_ID:
+            self._on_key(event)
+        elif owner is not None:
+            if not self.keyhub.send(owner, event) and event.action == KEY_DOWN:
+                log.debug("key %s for %s: the app is not listening", event.value, owner)
+
+    def _key_route(self) -> str | None:
+        """Who a key pressed now belongs to."""
+        if self._output() is not None:
+            return OS_APP_ID
+        if self.focus.mode == APP and self.focus.target:
+            return self.focus.target
+        return None                           # a daemon page, the daemon desktop, a lock
 
     def _on_key(self, event: KeyEvent) -> None:
         """A keyboard key: Up/Down/Tab move, Enter opens, Esc goes back.
@@ -710,6 +749,7 @@ class Runtime(ScreenServices):
     def yield_to_desktop(self) -> None:
         self.router.home()
         self.lifecycle.set_gate("open")  # the user drives the daemon desktop directly
+        self.keyboard.set_grab(False)    # ... and its keyboard handling too
         self.focus.yield_to_desktop()
 
     def restart_launcher(self) -> None:
@@ -731,6 +771,7 @@ class Runtime(ScreenServices):
         self.control.stop()
         self.stream.stop()
         self.keyboard.stop()
+        self.keyhub.stop()
         self.tasks.stop()
         self.lifecycle.revoke_all_tickets()
         self.lifecycle.release_instance_lock()

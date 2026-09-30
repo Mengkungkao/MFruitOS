@@ -135,6 +135,62 @@ class RuntimeEndToEndTests(TempHomeTestCase):
         self.assertEqual(self.status().get("screens"), ["HomeScreen"])
         self.assertEqual(self.daemon.foreground, "mfruit-os")
 
+    def hub_client(self, app_id):
+        """An app listening on MFruit OS's key hub, as the SDK connects."""
+        import socket as socket_module
+        sock = socket_module.socket(socket_module.AF_UNIX, socket_module.SOCK_STREAM)
+        sock.connect(self.paths.keys_socket)
+        sock.sendall(json.dumps({"app_id": app_id}).encode() + b"\n")
+        self.addCleanup(sock.close)
+        self.wait(lambda: self.rt.keyhub.connected(app_id), "app on the key hub")
+        sock.settimeout(0.3)
+        return sock
+
+    def received(self, sock):
+        data = b""
+        try:
+            while True:
+                chunk = sock.recv(4096)
+                if not chunk:
+                    break
+                data += chunk
+        except OSError:
+            pass
+        return [json.loads(line) for line in data.splitlines() if line.strip()]
+
+    def hardware_key(self, name, action=DOWN):
+        codes = {"down": 108, "up": 103, "enter": 28, "escape": 1, "space": 57}
+        self.rt.loop.post(self.rt._on_hardware_key, KeyEvent("key", name, action, codes[name]))
+
+    def test_keys_go_to_whoever_owns_the_screen(self):
+        app = self.hub_client("demo")
+        start = self.rt.home_screen.selected
+        self.hardware_key("down")                     # Home: MFruit OS moves
+        self.hardware_key("down", UP)
+        self.wait(lambda: self.rt.home_screen.selected == start + 1, "next item")
+        self.assertEqual([m for m in self.received(app) if m["type"] == "key"], [])
+        self.assertTrue(send(self.paths.control_socket, "launch", {"app_id": "demo"})["ok"])
+        self.wait(lambda: self.daemon.foreground == "demo", "demo foreground")
+        self.hardware_key("space")                    # the app's, not MFruit OS's
+        time.sleep(0.2)
+        keys = [m for m in self.received(app) if m["type"] == "key"]
+        self.assertEqual([(k["value"], k["action"]) for k in keys], [("space", 1)])
+        self.daemon.app_exits("demo")
+        self.wait(lambda: self.status()["focus"]["has_focus"], "back home")
+        self.hardware_key("space", UP)                # its release follows its press
+        self.hardware_key("down")                     # a new press is MFruit OS's again
+        self.wait(lambda: self.rt.home_screen.selected == start + 2, "next item")
+        keys = [m for m in self.received(app) if m["type"] == "key"]
+        self.assertEqual([(k["value"], k["action"]) for k in keys], [("space", 0)])
+
+    def test_the_keyboards_are_held_exclusively(self):
+        self.assertTrue(self.rt.keyboard.grab)
+        self.rt.loop.post(self.rt.yield_to_desktop)   # Developer -> Daemon desktop
+        self.wait(lambda: not self.rt.keyboard.grab, "grab released for the daemon")
+        send(self.paths.control_socket, "summon")
+        self.wait(lambda: self.rt.keyboard.grab and self.status()["focus"]["has_focus"],
+                  "grab back with the screen")
+
     def test_launch_and_return(self):
         self.assertTrue(send(self.paths.control_socket, "launch", {"app_id": "demo"})["ok"])
         self.wait(lambda: self.daemon.foreground == "demo", "demo foreground")
