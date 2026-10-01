@@ -67,6 +67,22 @@ refused — never queued — requests while busy, session ids on everything, and
 a structured log (`mfruitos.lifecycle`). The UI only calls
 `request_launch(app, source)`; the Whisplay host below carries it out.
 
+### Lifecycle invariants
+
+- Selection is UI state, not a launch request. User-initiated launches require
+  explicit confirmation; configured startup launches use the same
+  ApplicationManager authority.
+- The selected app and the running app are independent; moving the selection
+  never starts or stops a process.
+- At most one app session is active. Events and process results are matched to
+  that session so stale events cannot affect a later launch.
+- Rendering reads state and draws it. It does not launch or stop apps, mutate
+   the registry, install packages, or change system configuration.
+
+These invariants are covered by the launch-lifecycle and application-manager
+regression tests; see [CONTRIBUTING.md](../CONTRIBUTING.md) for the test
+workflow.
+
 ## Foreground state machine (`launcher/focus.py`)
 
 ```

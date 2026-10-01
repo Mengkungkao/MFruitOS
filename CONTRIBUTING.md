@@ -2,8 +2,10 @@
 
 Thanks for helping. MFruit OS targets a 512 MB Raspberry Pi Zero 2 W with one
 button, so every change is judged by: does it stay light, robust and usable
-with a single button? The detailed engineering rules are in
-[CLAUDE.md](CLAUDE.md); the short version is below.
+with a single button? Platform behavior and ownership are documented in
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). App requirements are in
+[docs/APP_RULES.md](docs/APP_RULES.md), with package details in
+[APP_DEVELOPMENT.md](APP_DEVELOPMENT.md).
 
 ## Ground rules
 
@@ -15,14 +17,19 @@ with a single button? The detailed engineering rules are in
 - **No blocking work on the UI thread.** Network, disk-heavy and subprocess
   work goes through `run_task` / `start_job`.
 - **Never destroy user state.** Deletions go through `updater/rollback.safe_rmtree`;
-  settings writes are atomic; installs never overwrite the running version.
+- **Preserve user state by default.** Destructive actions require explicit
+  confirmation; deletions go through `updater/rollback.safe_rmtree`, settings
+  writes are atomic, and installs never overwrite the running version.
 - **Every screen answers:** where am I, what is selected, what happens when I
   press, how do I go back.
+- **Keep lifecycle authority centralized.** Selection does not launch; only an
+  explicit action reaches the ApplicationManager, and rendering stays free of
+  lifecycle and storage side effects.
 
 ## Development setup
 
 ```bash
-python3 -m unittest discover -s tests          # ~140 tests, no hardware needed
+python3 -m unittest discover -s tests          # full unit suite, no hardware needed
 python3 -m mfruitos --preview /tmp/screens     # render every screen to PNG
 python3 -m mfruitos --self-test                # what system updates run
 ```
@@ -42,12 +49,24 @@ integration tests run anywhere.
 
 1. Inspect the relevant code first; reuse what exists.
 2. Keep changes small and focused; do not mix refactoring with features.
-3. Add or update tests — every fixed bug gets a regression test.
-4. Test on hardware when the change touches the display, button, LED, audio
+3. Reproduce bugs with evidence; do not mask timing or state defects with
+    arbitrary sleeps.
+4. Add or update tests — every fixed bug gets a regression test. Changes that
+    depend on whisplay-daemon behavior need real-daemon coverage and a negative
+    control; do not run real-daemon suites concurrently because they share
+    cleanup state.
+5. Test on hardware when the change touches the display, button, LED, audio
    or the daemon, and say in the PR what was and was not verified on hardware.
-5. Update the docs and `CHANGELOG.md` when behaviour changes.
+6. Update the docs and `CHANGELOG.md` when behaviour changes.
 
 Commit messages: `feat: …`, `fix: …`, `test: …`, `docs: …`.
+
+## Validation
+
+The no-hardware unit and preview checks above are the baseline. Run the
+relevant regression tests for the changed behavior, then the full suite when
+practical. Report hardware checks as verified or not verified; automated tests
+do not certify physical behavior.
 
 ## Code style
 

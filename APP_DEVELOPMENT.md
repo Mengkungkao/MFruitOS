@@ -10,6 +10,10 @@ The fastest start is the template: copy
 the `id`, `name` and `repository`, and install it with
 `mfruitctl sideload <folder>`.
 
+This guide covers app packages and their managed runtime. The app behavior
+contract is in [docs/APP_RULES.md](docs/APP_RULES.md); MFruit OS platform
+architecture is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 ## Package layout
 
 ```
@@ -185,6 +189,11 @@ folder, with these variables: `WHISPLAY_APP_ID`, `WHISPLAY_OS_VERSION`,
 | `update.sh` | after `install.sh`, only when a previous version exists | same as above |
 | `test` script | after installation, before activation (timeout 2 min) | same as above |
 | `uninstall.sh` | before the app folder is deleted (timeout 2 min) | logged, removal continues |
+
+Uninstall removes the managed app directory, including its `data/` directory.
+Back up any user data that must survive removal before uninstalling. The
+`uninstall.sh` hook runs before deletion and is for cleaning up resources the
+app created outside its managed directory.
 
 Scripts must not need `sudo` interactively. If your app needs system packages,
 check for them in `install.sh` and fail with a clear message.
