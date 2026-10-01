@@ -2,8 +2,10 @@
 
 Thanks for helping. MFruit OS targets a 512 MB Raspberry Pi Zero 2 W with one
 button, so every change is judged by: does it stay light, robust and usable
-with a single button? The detailed engineering rules are in
-[CLAUDE.md](CLAUDE.md); the short version is below.
+with a single button? The documentation map is [docs/README.md](docs/README.md).
+The operational engineering workflow is [docs/os/DEVELOPMENT.md](docs/os/DEVELOPMENT.md),
+and detailed project principles are in [CLAUDE.md](CLAUDE.md); the short version
+is below.
 
 ## Ground rules
 

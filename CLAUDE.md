@@ -1,5 +1,10 @@
 # MFruit OS — Development, Testing, Debugging & Architecture Rules
 
+Current contributor and app-facing guides are indexed in [`docs/README.md`](docs/README.md).
+Use `docs/os/DEVELOPMENT.md` for the operational workflow and `docs/apps/README.md`
+for app integration. This file records project principles; implementation status,
+supported commands and validation evidence are maintained in the current guides.
+
 ## 1. Project Mission
 
 You are developing **MFruit OS**, a lightweight, modular, hardware-independent application platform designed primarily for small Linux-based devices.
