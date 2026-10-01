@@ -15,6 +15,7 @@ RC3  the daemon's single pending-launch slot
 RC4  no single-flight launch rule in MFruit OS
 """
 
+import contextlib
 import logging
 import os
 import random
@@ -25,11 +26,15 @@ import unittest
 
 import helpers  # noqa: F401
 from real_daemon import RealDaemon, find_whisplay_src, new_home
+from mfruitos.daemon.client import WhisplayDaemonClient
 from mfruitos.launcher.runtime import Runtime
 from mfruitos.paths import Paths
 
 WHISPLAY_SRC = find_whisplay_src()
 STARTUP = "1.5"   # seconds a real Python app needs before asking for the screen
+# whisplay-daemon's internal pages in its desktop order (priority 200..170);
+# a daemon build may lack some of them.
+DAEMON_PAGES = ("whisplay-bluetooth", "whisplay-wifi", "whisplay-volume", "whisplay-system")
 
 
 @unittest.skipIf(WHISPLAY_SRC is None, "Whisplay source not found (set WHISPLAY_SRC)")
@@ -238,13 +243,17 @@ class RealDaemonLaunchTests(unittest.TestCase):
         with open(os.path.join(self.rt.paths.logs_dir, "launch-gate.log")) as fp:
             self.assertIn("DENIED beta", fp.read())
 
-    def test_press_during_launch_window_page_is_closed(self):
-        # RC2 for daemon pages: the daemon opens them without any launch command,
-        # so they cannot be gated; MFruit OS closes the intruder and alpha wins.
-        page = "whisplay-volume"
-        self.put_daemon_selection_on(page)
-        self.launch_by_hold("slow")               # 3 s start-up: the window is surely open
-        time.sleep(0.2)
+    def wait_for_launch_window(self, app_id):
+        """Wait until the daemon desktop owns the button: MFruit OS has released
+        the screen and ``app_id`` is the daemon's pending launch. Synchronize on
+        this observed state, never on a fixed delay after the launching hold."""
+        def window_open():
+            state = self.daemon.state()
+            return state["foreground"] is None and state["pending"] == app_id
+        self.wait(window_open, f"launch window of {app_id}")
+
+    @contextlib.contextmanager
+    def lifecycle_messages(self):
         messages = []
         capture = logging.Handler()
         capture.emit = lambda record: messages.append(record.getMessage())
@@ -252,11 +261,51 @@ class RealDaemonLaunchTests(unittest.TestCase):
         lifecycle.addHandler(capture)
         logging.getLogger("mfruitos").setLevel(logging.INFO)
         try:
-            self.hold()                            # the daemon desktop opens its page
-            self.wait(lambda: "acquired" in self.daemon.records("slow"), "slow app on screen", 12)
-            time.sleep(1.0)
+            yield messages
         finally:
             lifecycle.removeHandler(capture)
+
+    def test_press_during_launch_window_page_is_closed(self):
+        # RC2 for daemon pages: the daemon opens them without any launch command,
+        # so they cannot be gated; MFruit OS closes the intruder and the app wins.
+        # While a launch is pending, whisplay-daemon can turn a hold into a tap
+        # (docs/platform/HOST_API.md, daemon fact 8): its monitor loop resets the
+        # press start before the release callback runs, and the tap only moves the
+        # desktop selection. Daemon pages are consecutive in the desktop order, so
+        # start on the first one and hold again while the selection is a page.
+        available = {app["app_id"] for app in self.rt.client.list_apps()}
+        pages = [page for page in DAEMON_PAGES if page in available]
+        self.put_daemon_selection_on(pages[0])
+        with self.lifecycle_messages() as messages:
+            self.launch_by_hold("slower")         # 6 s start-up: room for another hold
+            opened = []
+            for _ in pages:
+                self.wait_for_launch_window("slower")
+                if self.daemon.state()["selected"] not in pages:
+                    break
+                self.hold()                        # the daemon desktop opens its page
+                opened = [app for app in self.launches() if app in pages]
+                if opened:
+                    break
+            if not opened:
+                self.skipTest("whisplay-daemon turned every hold into a tap; eviction is covered by "
+                              "test_page_opened_by_another_client_during_launch_window_is_closed")
+            self.wait(lambda: "acquired" in self.daemon.records("slower"), "slower app on screen", 15)
+            time.sleep(1.0)
+        self.assertEqual(self.daemon.state()["foreground"], "slower")
+        self.assertTrue(any(f"INTRUDER app={opened[0]}" in m for m in messages), messages)
+
+    def test_page_opened_by_another_client_during_launch_window_is_closed(self):
+        # The same guarantee without the daemon desktop's button timing: a page
+        # that takes the screen while a launch is pending is an intruder. The
+        # daemon's app.launch runs the same _launch_app as a desktop hold.
+        page = "whisplay-volume"
+        with self.lifecycle_messages() as messages:
+            self.launch_by_hold("slow")
+            self.wait_for_launch_window("slow")
+            WhisplayDaemonClient(self.daemon.socket_path).launch_app(page)
+            self.wait(lambda: "acquired" in self.daemon.records("slow"), "slow app on screen", 12)
+            time.sleep(1.0)
         self.assertEqual(self.daemon.state()["foreground"], "slow")
         self.assertTrue(any(f"INTRUDER app={page}" in m for m in messages), messages)
 

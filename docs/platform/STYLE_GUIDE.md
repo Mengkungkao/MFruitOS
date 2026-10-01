@@ -1,8 +1,10 @@
-# UI and code style
+# Style guide
 
-Use the existing components and conventions before introducing a new pattern.
-This guide describes the current implementation; shared SDK details for apps
-belong with the [app integration contract](../apps/README.md).
+Launcher UI and code conventions for MFruit OS itself. Use the existing
+components before introducing a new pattern. Apps follow the
+[UI guidelines](../apps/UI_GUIDELINES.md), which use the SDK's own geometry;
+the four screen questions come from
+[Part I §7](DEVELOPMENT_RULES.md#7-user-experience-rules).
 
 ## Screen layout
 
@@ -16,8 +18,7 @@ SDK modules rather than importing launcher internals.
 | Status bar | Page label left, Wi-Fi strength and battery right; status text starts near y=9. No product-name or clock title. |
 | Content | Begins at y=40 and ends at y=248, above the footer. |
 | Footer | Hint text at y=256, with a separator 5 px above; prioritize hints that fit. |
-| Launcher lists | 46 px rows; section headings are not selectable. Scroll in whole rows. |
-| SDK lists | 36 px plain rows and 46 px rows with subtitles. This differs from the launcher; use the SDK's own helpers. |
+| Launcher lists | 46 px rows; section headings are not selectable. Scroll in whole rows. (SDK lists differ; see the [UI guidelines](../apps/UI_GUIDELINES.md).) |
 | Typography | Bundled Inter, DejaVu fallback; use the shared font cache and text-fitting methods. |
 | Color | Semantic dark/light theme tokens for backgrounds, surfaces, text, accent, success, warning and error. |
 
@@ -67,7 +68,7 @@ the physical LCD; record those separately.
   literals. Do not add a formatter/linter dependency solely for a small change.
 - Keep modules focused. Navigation owns screen state, the application manager
   owns sessions, the host owns handoff, package services own installation, and
-  drawing code owns presentation. Follow [Architecture](../ARCHITECTURE.md).
+  drawing code owns presentation. Follow [Architecture](ARCHITECTURE.md).
 - Use module loggers for runtime events and errors. Include app/session IDs,
   transitions and relevant state for lifecycle debugging. Explain ignored or
   invalid events rather than silently swallowing them. CLI output may use print.
@@ -88,4 +89,4 @@ required environment. Use placeholders for device addresses and dated quality
 records for historical devices/results. Distinguish **implemented**, **planned**
 and **verified**; do not advertise example APIs or commands as supported.
 
-[OS development](README.md) · [Engineering rules](DEVELOPMENT.md)
+[Platform docs](README.md) · [Development rules](DEVELOPMENT_RULES.md)

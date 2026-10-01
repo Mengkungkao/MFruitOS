@@ -1,9 +1,14 @@
 # Installing MFruit OS
 
-For step-by-step setup, SSH deployment, testing, debugging and recovery on
-another board, follow [docs/DEVICE_SETUP.md](docs/DEVICE_SETUP.md). Run
-`bash scripts/setup-device.sh --check` for a read-only prerequisite check;
-`--install` checks first, then invokes the installer below.
+This is the canonical guide for preparing a board, installing, verifying,
+updating, rolling back and removing MFruit OS. Failures are diagnosed with
+[Troubleshooting](../quality/TROUBLESHOOTING.md); physical checks are in
+[Validation](../quality/VALIDATION.md).
+
+The installer follows **check → install → verify → start → health check**
+([Part I §14](DEVELOPMENT_RULES.md#14-installation-architecture)). It does not
+configure GPIO pin mappings, SPI overlays, audio codecs or board drivers;
+MFruit OS sits on top of a working hardware service.
 
 ## Requirements
 
@@ -13,79 +18,152 @@ another board, follow [docs/DEVICE_SETUP.md](docs/DEVICE_SETUP.md). Run
 | HAT | PiSugar Whisplay |
 | OS | Raspberry Pi OS / Debian 12+, Ubuntu 22.04+ (systemd) |
 | Python | 3.9 or newer |
-| Whisplay | [PiSugar/Whisplay](https://github.com/PiSugar/Whisplay) with `whisplay-daemon.service` installed and running |
+| Hardware service | [PiSugar/Whisplay](https://github.com/PiSugar/Whisplay) with `whisplay-daemon.service` installed and running as your normal user |
 | Packages | Pillow (`python3-pil`), Python venv support (`python3-venv`), NetworkManager for Wi-Fi. Optional: `git` (updates for git-installed apps), `alsa-utils` (speaker test) |
 
-Catalogue apps install their own dependencies into package-local environments.
-The launcher needs no numpy, web server or desktop stack.
+Catalogue apps install their own dependencies into package-local
+environments. The launcher needs no NumPy, web server or desktop stack.
 
-## Install
+## 1. Prepare the board and hardware service
 
-Log in as the user that runs `whisplay-daemon` (not root) and run:
+1. Install a systemd-based image, enable SSH and use a normal user with sudo.
+2. Follow the Whisplay driver instructions for that exact board and image; do
+   not copy kernel modules or overlays from a different board. Confirm the
+   LCD, button, LED and audio with the driver's own tests first.
+3. Install and start `whisplay-daemon.service` as your normal user and confirm
+   its `WorkingDirectory` points to the Whisplay checkout. Stop standalone app
+   services that would compete for the display.
+4. Log in as the daemon's user and check:
+
+   ```bash
+   whoami
+   python3 --version
+   systemctl show whisplay-daemon.service -p User -p WorkingDirectory
+   systemctl status whisplay-daemon.service --no-pager
+   ```
+
+Do not run the MFruit OS installer as root.
+
+## 2. Get the source onto the device
+
+For a published version:
 
 ```bash
-git clone https://github.com/Mengkungkao/MFruitOS.git
-cd MFruitOS
-bash scripts/install.sh
+git clone https://github.com/Mengkungkao/MFruitOS.git ~/MFruitOS
+cd ~/MFruitOS
+git log -1 --oneline
 ```
 
-The installer:
+To test an unpublished development checkout, copy it into a separate
+candidate directory (this deletes nothing on the device):
 
-1. checks the OS, Python, Pillow, the Whisplay runtime and `whisplay-daemon`;
-2. copies the code to `~/.whisplay-os/system/versions/<version>-local<date>`
-   and points `~/.whisplay-os/system/current` at it (the previous version stays
-   and is restored if the new one fails its self-test);
-3. creates `~/.whisplay-os/{config,apps,cache,logs,state,…}` and a default
-   `config/settings.json` (an existing one is kept);
-4. installs the helpers `mfruit-run`, `mfruitctl` and `boot-guard.sh` into
-   `~/.whisplay-os/bin` and links `/usr/local/bin/mfruitctl`;
-5. adds a systemd drop-in, `/etc/systemd/system/whisplay-daemon.service.d/mfruit-os.conf`,
-   that starts whisplay-daemon through `~/.whisplay-os/bin/whisplay-daemon-mfruit.py`
-   so the daemon's own user interface stays in the background while MFruit OS
-   runs (the daemon is restarted once, which closes running apps);
-6. adds `/etc/sudoers.d/whisplay-os`, which allows exactly two commands without
-   a password: `systemctl restart whisplay-daemon.service` and
-   `systemctl restart whisplay-os.service` (used by *Restart daemon* on the
-   fallback screen);
-7. creates, enables and starts `whisplay-os.service`.
+```bash
+cd ~/MFruitOS
+device_host=your-user@your-device-address
+rsync -a --exclude=.git --exclude=__pycache__ --exclude='*.pyc' \
+  --exclude=.pytest_cache ./ "$device_host:~/MFruitOS-candidate/"
+```
 
-The installer also provisions bundled ConnectWifi when no existing Wi-Fi app
-is present. A first installation seeds the Apps menu with available starter
-games, App installer and Settings. Rerunning setup preserves existing apps and
-preferences. Missing Pillow/venv packages are installed before copying files.
-Service installation checks NetworkManager and writes
-`/etc/polkit-1/rules.d/49-mfruit-wifi.rules`, granting the target user the listed
-Wi-Fi scan/control/settings actions. Uninstall removes this rule.
+`scripts/deploy.sh user@host` combines copy, install and restart for
+development. Record the source commit and local changes with your results.
 
-`sudo` is used for missing system packages, service setup, permission rules and
-the command link. Options:
+## 3. Preserve an existing installation
+
+On a configured device, finish active updates and return to Home, then save
+the current state:
+
+```bash
+backup_path="$HOME/mfruit-backups/$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$backup_path" && chmod 700 "$backup_path"
+[ -d "$HOME/.whisplay-os" ] && tar -C "$HOME" -czf "$backup_path/whisplay-os.tar.gz" .whisplay-os
+systemctl cat whisplay-daemon.service > "$backup_path/daemon-service.txt"
+readlink -f "$HOME/.whisplay-os/system/current"
+```
+
+The archive covers managed apps, settings, logs and data under the default
+MFruit OS home. Data in companion app checkouts and a custom
+`WHISPLAY_OS_HOME` must be preserved separately. Stop an app before backing up
+data it is actively changing.
+
+## 4. Check
+
+```bash
+bash scripts/setup-device.sh --check
+```
+
+Read-only: verifies Linux, a normal user, Python/Pillow, the source and
+manifest version, systemd, the daemon service's user and source directory,
+and a `health.ping` through `/tmp/whisplay-daemon.sock`. It exits non-zero
+naming the failed prerequisite and installs nothing.
+
+## 5. Install
+
+```bash
+bash scripts/install.sh            # or: bash scripts/setup-device.sh --install
+```
 
 | Option | Effect |
 |---|---|
 | `--no-service` | install files only; start manually with `PYTHONPATH=~/.whisplay-os/system/current python3 -m mfruitos` |
 | `--no-background-daemon` | keep whisplay-daemon's own desktop visible between apps |
-| `--dev` | run directly from the checkout (for development) |
-| `--yes` | non-interactive |
+| `--dev` | run directly from the checkout (development; keep the directory in place) |
+| `--yes` | non-interactive; does not bypass sudo authorization |
 
-From a development machine you can push a checkout to a device and install it:
+What the installer does, in order:
+
+1. Checks the OS, Python, Pillow, venv support, the Whisplay runtime and
+   `whisplay-daemon`; missing Pillow/venv packages are installed with `apt-get`
+   before any file is copied.
+2. Copies the code to `~/.whisplay-os/system/versions/<version>-local<date>`
+   and points `system/current` at it; the previous version is recorded for
+   rollback.
+3. Creates `~/.whisplay-os/{config,apps,cache,logs,state,bin,inbox,…}` and a
+   default `config/settings.json`; an existing settings file is kept.
+4. Installs `mfruit-run`, `mfruitctl` and `boot-guard.sh` into
+   `~/.whisplay-os/bin` and runs the offline self-test.
+5. Provisions bundled ConnectWifi when no Wi-Fi app exists; a first install
+   seeds the Apps menu with available starter games, App installer and
+   Settings. Reruns preserve existing apps, settings, order and launch policy.
+6. With the service: the system changes listed below, then enables and starts
+   `whisplay-os.service`.
+
+### System changes and why they are needed
+
+| Change | Why | Removed by `uninstall.sh` |
+|---|---|---|
+| `apt-get install python3-pil python3-venv network-manager` when missing | launcher rendering, package-local app environments, Wi-Fi settings | no (shared system packages) |
+| `/etc/systemd/system/whisplay-os.service` | runs the launcher as your user after the daemon, with `Restart=always`, a 60 s watchdog, `ExecStartPre=boot-guard.sh`, `ExecStopPost=mfruitctl release` | yes |
+| `/etc/systemd/system/whisplay-daemon.service.d/mfruit-os.conf` (skipped with `--no-background-daemon`) | starts the daemon through `whisplay-daemon-mfruit.py` so its own UI stays in the background ([Host API](HOST_API.md#whisplay-user-interface-in-the-background)); the daemon restarts once, closing running apps | yes |
+| `/etc/sudoers.d/whisplay-os` | allows exactly `systemctl restart whisplay-daemon.service` and `systemctl restart whisplay-os.service` without a password (*Restart daemon* on the fallback screen), validated with `visudo -c` | yes |
+| `/etc/polkit-1/rules.d/49-mfruit-wifi.rules` | grants the target user the listed NetworkManager scan/control/settings actions, because the service has no interactive polkit session | yes |
+| `/usr/local/bin/mfruitctl` symlink | `mfruitctl` on the PATH | yes |
+
+No other system files are changed. Adopted daemon app registrations are
+changed only through the daemon's `app.register` API and are restored on
+uninstall ([Lifecycle](LIFECYCLE.md#launch-gate-and-intruder-eviction)).
+
+## 6. Verify and health check
 
 ```bash
-scripts/deploy.sh pi@192.168.0.33
+systemctl is-active whisplay-daemon.service whisplay-os.service
+mfruitctl status
+mfruitctl apps
+PYTHONDONTWRITEBYTECODE=1 python3 -m mfruitos --self-test
+mfruitctl screenshot /tmp/mfruit-home.png
+journalctl -u whisplay-os.service -n 80 --no-pager
 ```
+
+Expect both services active, the launcher at Home and the self-test passing.
+Screenshots and previews show MFruit OS's rendering; they do not verify the
+physical LCD ([Validation](../quality/VALIDATION.md)). At Home, `mfruitctl key
+down`, `mfruitctl key enter` and `mfruitctl back` exercise navigation over SSH;
+they do not validate physical input.
 
 ## The service
 
-```
+```text
 whisplay-daemon.service  →  whisplay-os.service  →  MFruit OS  →  apps
 ```
-
-- `After=`/`Wants=whisplay-daemon.service`; runs as your user, never root.
-- `Restart=always` (3 s) and a 60 s systemd watchdog: a hung launcher is restarted.
-- `ExecStartPre` runs `boot-guard.sh`: after a system update, if the new version
-  fails to start three times, the previous version is re-activated.
-- `ExecStopPost` runs `mfruitctl release`: if the launcher died while showing
-  its screen, the daemon is asked to take the screen back, so the device never
-  stays frozen.
 
 ```bash
 systemctl status whisplay-os
@@ -93,49 +171,58 @@ journalctl -u whisplay-os -f
 tail -f ~/.whisplay-os/logs/launcher.log
 ```
 
-## Updating
-
-- **On the device:** *Settings → General → Software Update* (or *App installer → Updates →
-  MFruit OS*) installs a newer GitHub release of MFruit OS and restarts.
-- **From a checkout:** `bash scripts/update.sh` (fast-forward `git pull`, then
-  re-install).
-
-Either way the previous version is kept for rollback.
-
-## Uninstalling
+To run the launcher interactively, stop the service first, keep the daemon
+running, and restore the service afterwards:
 
 ```bash
-bash scripts/uninstall.sh          # remove the service and code, keep apps and settings
+sudo systemctl stop whisplay-os.service
+PYTHONDONTWRITEBYTECODE=1 python3 -m mfruitos --debug   # Ctrl-C to stop
+sudo systemctl start whisplay-os.service
+```
+
+## Updating MFruit OS
+
+- **On the device:** *Settings → General → Software Update* (or *App installer →
+  Updates → MFruit OS*) installs a published GitHub release and restarts.
+  **Versions** selects a release; **Roll back** restores the saved local build.
+- **From a checkout:** `bash scripts/update.sh` (fast-forward `git pull`, then
+  reinstall). For a copied checkout, transfer the candidate again and repeat
+  steps 4–6.
+
+A system update runs the new version's self-test before activation, keeps the
+previous version, and arms the boot guard: if the new version fails to start
+three times, `boot-guard.sh` (plain `sh`) switches `system/current` back and
+the launcher reports the rollback. A healthy start is confirmed after 15 s.
+Update the OS and all keyboard apps together so their SDK and key-hub
+contract match ([SDK](../apps/SDK.md)). MFruit OS has no published releases at
+the time of writing, so on-device version selection has nothing to offer yet.
+
+### Manual rollback of a checkout installation
+
+```bash
+readlink -f ~/.whisplay-os/system/current
+ls -1 ~/.whisplay-os/system/versions
+```
+
+Choose a retained directory recorded as good in your validation notes (not
+merely the oldest) and run its `scripts/install.sh` as the same user; this
+reinstalls its helpers and service wrapper with its code.
+
+## Uninstalling and recovery
+
+```bash
+bash scripts/uninstall.sh          # remove service and code; keep apps, settings, logs
 bash scripts/uninstall.sh --purge  # also delete ~/.whisplay-os (apps, data, logs)
 ```
 
-`whisplay-daemon` and apps registered directly with it are never touched; its
-own desktop is available again after uninstalling.
+The uninstaller removes the files listed above, restores adopted app
+registrations and the daemon desktop. `whisplay-daemon` and apps registered
+directly with it are never removed. Use `--purge` only when managed apps and
+their data are intentionally being discarded.
 
-## Troubleshooting
+## Upgrade notes
 
-| Symptom | What to check |
-|---|---|
-| The daemon's "Opening app…" / desktop still appears | Run `install.sh` again (adds the drop-in); Settings → System → Diagnostics shows *Hardware desktop: background* when active. |
-| Screen shows the hardware desktop, not MFruit OS | `systemctl status whisplay-os`; pick **MFruit OS** on the hardware desktop to bring it back (Developer → *Daemon desktop* switches there on purpose). |
-| "Hardware service unavailable" | The daemon service is stopped or failed: `journalctl -u whisplay-daemon -n 50`. *Retry* waits for it, *Restart daemon* restarts it. |
-| An app shows "Application failed to start" | *Logs* on that screen, or `~/.whisplay-os/logs/<app>.log` (MFruit OS apps) / `~/.whisplay-daemon/daemon-app.log` (daemon apps). |
-| Updater says "Internet unavailable" | Check the network; the check is retried automatically after 10 minutes. |
-| "GitHub rate limit reached" | Anonymous API access allows 60 requests per hour per IP address. An update check costs one request per app with a repository; release lists are reused for 5 minutes. Add a token as `updater.github_token` in `settings.json` for 5000/hour. |
-| Settings reset to defaults | A corrupt `settings.json` is kept as `settings.json.broken-<date>` and logged; fix or delete it. |
-| Button feels slow | Single clicks wait for the double-click window (300 ms). Lower *Settings → Button → Click speed*, or set *Double click* and *Triple click* to *Nothing*: single clicks then act immediately. |
-
-Useful commands:
-
-```bash
-mfruitctl status
-mfruitctl screenshot /tmp/screen.png      # exactly what MFruit OS is drawing
-python3 -m mfruitos --self-test           # (with PYTHONPATH set) offline render test
-```
-
-## Upgrading to 1.4.0
-
-Update all keyboard apps to SDK 1.2.0 before restarting MFruit OS. The launcher
-now grabs keyboards exclusively; older direct-input apps otherwise receive no
-keys. Install the updated daemon wrapper and restart whisplay-daemon as well
-so built-in Volume, Power and Wi-Fi pages receive forwarded keyboard input.
+**1.4.0:** update all keyboard apps to SDK 1.2.0 before restarting MFruit OS.
+The launcher grabs keyboards exclusively; older direct-input apps otherwise
+receive no keys. Reinstall so the updated daemon wrapper is used, which
+forwards keyboard input to the daemon's Volume, Power and Wi-Fi pages.
