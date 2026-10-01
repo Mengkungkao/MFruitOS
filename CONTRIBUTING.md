@@ -2,10 +2,8 @@
 
 Thanks for helping. MFruit OS targets a 512 MB Raspberry Pi Zero 2 W with one
 button, so every change is judged by: does it stay light, robust and usable
-with a single button? Platform behavior and ownership are documented in
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). App requirements are in
-[docs/APP_RULES.md](docs/APP_RULES.md), with package details in
-[APP_DEVELOPMENT.md](APP_DEVELOPMENT.md).
+with a single button? The detailed engineering rules are in
+[CLAUDE.md](CLAUDE.md); the short version is below.
 
 ## Ground rules
 

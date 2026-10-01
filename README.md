@@ -181,6 +181,11 @@ screen without hardware with `python3 -m mfruitos --preview /tmp/screens`.
 
 ## Documentation
 
+- [Documentation home](docs/README.md) — routes OS development, app integration and quality work
+- [Project direction](docs/os/DIRECTION.md) — goals, current boundaries and roadmap
+- [OS development](docs/os/README.md) — architecture, workflow, style and device setup
+- [App integration](docs/apps/README.md) — create, adopt, package, test and publish apps
+- [Quality and troubleshooting](docs/quality/README.md) — test procedures, open issues and dated evidence
 - [docs/UPDATES.md](docs/UPDATES.md) — install app packages, update, downgrade and restore saved versions
 
 - [INSTALL.md](INSTALL.md) — installation, service, updating, uninstalling, troubleshooting

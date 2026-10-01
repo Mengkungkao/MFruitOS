@@ -5,7 +5,8 @@ A MFruit OS app is a normal **whisplay-daemon foreground app** plus a
 daemon's shared framebuffer and reacts to button events. MFruit OS installs,
 launches, updates and removes it.
 
-The fastest start is the template: copy
+The [app integration index](docs/apps/README.md) routes app developers through
+creation, adoption, packaging and validation. The fastest start is the template: copy
 [`templates/whisplay-app-template`](templates/whisplay-app-template), change
 the `id`, `name` and `repository`, and install it with
 `mfruitctl sideload <folder>`.
