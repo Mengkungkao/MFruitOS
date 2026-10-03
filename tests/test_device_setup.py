@@ -147,7 +147,7 @@ esac
                                 env=env, text=True, capture_output=True, timeout=45)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         current = os_home / "system/current"
-        for relative in ("docs/APP_RULES.md", "docs/DEVICE_SETUP.md"):
+        for relative in ("docs/apps/APP_CONTRACT.md", "docs/platform/INSTALLATION.md"):
             self.assertEqual((current / relative).read_bytes(), (Path(ROOT) / relative).read_bytes())
         self.assertTrue((os_home / "bin/mfruitctl").is_file())
         record = json.loads((os_home / "system/app.json").read_text())

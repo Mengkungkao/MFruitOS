@@ -67,7 +67,7 @@ and storage paths remain stable for compatibility with existing installations.
 - **Deterministic launches** — exactly the selected app opens, once: one
   launch session at a time, and a launch gate stops whisplay-daemon's own
   desktop from starting other apps while one is starting up
-  ([docs/LAUNCH_LIFECYCLE.md](docs/LAUNCH_LIFECYCLE.md)).
+  ([lifecycle](docs/platform/LIFECYCLE.md)).
 - **Robust** — a crashing app never takes the launcher down; the launcher
   re-takes the screen after apps exit, survives daemon restarts, has a
   systemd watchdog, and a failed OS update is rolled back at the next boot.
@@ -75,7 +75,7 @@ and storage paths remain stable for compatibility with existing installations.
 - **Light** — Python standard library + Pillow (already required by the
   daemon), no web server, no numpy. Measured on an Orange Pi Zero 2W: 35 MB RSS,
   0.01 % CPU while an app is in front; at Home it only redraws when something
-  changes (about once a minute for the clock).
+  changes (status refreshes are checked every 30 s).
 
 ## Quick start
 
@@ -88,9 +88,9 @@ bash scripts/install.sh
 systemctl status whisplay-os
 ```
 
-See [INSTALL.md](INSTALL.md) for details, updating and uninstalling. For
-another board, use the read-only check `bash scripts/setup-device.sh --check`
-and follow [the device setup, testing and debugging guide](docs/DEVICE_SETUP.md).
+See [the installation guide](docs/platform/INSTALLATION.md) for board
+preparation, the read-only `bash scripts/setup-device.sh --check`, the system
+changes the installer makes, updating, rollback and uninstalling.
 
 ## Using it
 
@@ -124,9 +124,9 @@ mfruitctl help
 Any compatible daemon app works. To make it installable and updatable through
 MFruit OS, add a `manifest.json` and publish GitHub releases. Start from
 [`templates/whisplay-app-template`](templates/whisplay-app-template) and read
-[APP_DEVELOPMENT.md](APP_DEVELOPMENT.md): its MFruit App SDK section gives your
-app MFruit OS's controls (button and keyboard) and look, and
-[docs/APP_RULES.md](docs/APP_RULES.md) lists the rules MFruit apps follow.
+[Getting started](docs/apps/GETTING_STARTED.md): the [MFruit App SDK](docs/apps/SDK.md)
+gives your app MFruit OS's controls (button and keyboard) and look, and the
+[app contract](docs/apps/APP_CONTRACT.md) lists the rules MFruit apps follow.
 
 ```json
 {
@@ -163,37 +163,30 @@ changes daemon registrations through the daemon's own `app.register` API.
 
 ```
 mfruitos/
-├── daemon/       client.py (the only socket code), events.py, framebuffer.py
-├── launcher/     runtime, focus state machine, event loop, gestures, UI, screens
+├── core/         ApplicationManager: the single launch authority
 ├── apps/         manifest validation, registry
-├── updater/      github.py, version.py, verifier.py, installer.py, rollback.py, gittrack.py
-├── system/       settings.py, hardware.py, diagnostics.py, system_info.py
-└── sdk/          the MFruit App SDK: input controller, keyboard, status bar, lists, fonts
-scripts/          install.sh, uninstall.sh, update.sh, deploy.sh, mfruit-run, boot-guard.sh,
-                  sdk-sync.sh (copy the SDK into an app)
+├── updater/      installer, verifier, rollback, GitHub, commit tracking, catalogue
+├── system/       settings, diagnostics, Bluetooth, hardware policy
+├── daemon/       whisplay-daemon client, event stream, framebuffer (the only socket code)
+├── launcher/     runtime, focus/host, event loop, gestures, UI and screens
+└── sdk/          the MFruit App SDK (vendored into apps as mfruit_sdk)
+scripts/          install.sh, uninstall.sh, mfruit-run, mfruitctl, check.sh, check-app.py, sdk-sync.sh …
 templates/        whisplay-app-template (an MFruit app built on the SDK)
-tests/            unit + integration tests (fake daemon, end-to-end runtime)
-docs/             ARCHITECTURE.md, APP_RULES.md, LAUNCH_LIFECYCLE.md, HARDWARE_TESTS.md, screenshots
+tests/            unit, integration, real-daemon and package-lifecycle tests
+docs/             platform/, apps/, quality/
 ```
 
-Run the tests with `python3 -m unittest discover -s tests` and preview every
-screen without hardware with `python3 -m mfruitos --preview /tmp/screens`.
+Details: [directory structure](docs/platform/DIRECTORY_STRUCTURE.md). Run all
+checks with `bash scripts/check.sh` and preview every screen without hardware
+with `python3 -m mfruitos --preview /tmp/screens`.
 
 ## Documentation
 
-- [Documentation home](docs/README.md) — routes OS development, app integration and quality work
-- [Project direction](docs/os/DIRECTION.md) — goals, current boundaries and roadmap
-- [OS development](docs/os/README.md) — architecture, workflow, style and device setup
-- [App integration](docs/apps/README.md) — create, adopt, package, test and publish apps
-- [Quality and troubleshooting](docs/quality/README.md) — test procedures, open issues and dated evidence
-- [docs/UPDATES.md](docs/UPDATES.md) — install app packages, update, downgrade and restore saved versions
-
-- [INSTALL.md](INSTALL.md) — installation, service, updating, uninstalling, troubleshooting
-- [docs/DEVICE_SETUP.md](docs/DEVICE_SETUP.md) — step-by-step setup, SSH checks, physical tests and recovery on another device
-- [APP_DEVELOPMENT.md](APP_DEVELOPMENT.md) — app package format, lifecycle and the MFruit App SDK
-- [docs/APP_RULES.md](docs/APP_RULES.md) — the rules every MFruit OS app follows
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — how MFruit OS works with the daemon
-- [CONTRIBUTING.md](CONTRIBUTING.md) — development workflow
+- [Documentation home](docs/README.md) — three domains, one canonical document per topic
+- [Platform / OS development](docs/platform/README.md) — [development rules](docs/platform/DEVELOPMENT_RULES.md) (the project constitution), architecture, lifecycle, host API, installation, configuration, security, roadmap, ADRs
+- [App development](docs/apps/README.md) — getting started, app contract, manifest, SDK, UI, packaging, install/update/rollback, testing, publishing, migration
+- [Quality](docs/quality/README.md) — testing, validation, known issues, troubleshooting, records
+- [CONTRIBUTING.md](CONTRIBUTING.md) — from clone to submitted change
 - [CHANGELOG.md](CHANGELOG.md)
 
 ## License

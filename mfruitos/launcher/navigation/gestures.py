@@ -14,7 +14,7 @@ Gestures: single_click, double_click, triple_click, quad_click, long_press.
   Firing while the button was still down let the release leak to whatever
   owned the screen next: whisplay-daemon's desktop launched its own selected
   entry, daemon pages took it as a select, and new apps received a stray
-  ``button_released`` (root cause RC1, see docs/LAUNCH_LIFECYCLE.md).
+  ``button_released`` (root cause RC1, see docs/platform/LIFECYCLE.md).
 * Multi-clicks are resolved after ``click_gap_ms`` of quiet. When double and
   triple clicks are unmapped, single clicks fire immediately on release
   ("eager" mode) and quad_click still fires on the fourth rapid click.

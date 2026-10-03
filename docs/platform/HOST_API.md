@@ -47,12 +47,15 @@ manager with a fake host.
 | Launch gate | only the platform may start apps while it runs | `state/launcher.lock` (flock), `state/tickets/<id>`, `state/launch-policy`, checked by `mfruit-run` | No |
 | Event stream | lifecycle and focus events, connect/disconnect | `daemon/events.EventStream` (global `events.subscribe`; synthetic `_connected`/`_disconnected`) | No |
 | Page key input | keys for an internal daemon page | wrapper command `mfruit.page.key` | No |
+| Keyboard bridge for apps without the key hub | Esc and Space for foreground apps that read keys the Whisplay way | `Runtime._bridge_key` → wrapper command `mfruit.app.key`: Esc runs the daemon's own Esc handling (closes the app unless `disable_esc_exit_key`), Space is broadcast as `button_pressed`/`button_released` to that app | No |
 | Recovery display | show recovery UI when the host service is down | `launcher/direct.DirectDisplay` | No |
+| LoRa radio | provision the shared SX126X module, report readiness | `hosts/lora/` (`sx126x`, `modelines`, `readiness`, CLI), `scripts/setup-radio.sh`; settings in the shared radio store ([ADR 0007](ADR/0007-shared-radio-capability.md)) | Yes (module boundary) |
 
 ## whisplay-daemon facts the design depends on
 
 Verified against `daemon/whisplay_daemon.py` (upstream 1066486, the older Pi
-build, and `e57cc4c` used in the 2026-10-02 baseline). A host replacing the
+build, and the copy vendored in the user's ai-chatbot repository at its commit
+`e57cc4c`, used in the 2026-10-02 dev-machine baseline). A host replacing the
 daemon must either provide the same semantics or the platform must change.
 
 1. **`app.launch` is refused while another app is foreground.** To start an
@@ -93,7 +96,7 @@ daemon must either provide the same semantics or the platform must change.
 `health.ping`, `app.register`, `app.list`, `app.launch`, `app.focus.acquire`,
 `app.focus.release`, `app.exit.request`, `framebuffer.acquire`,
 `backlight.set`, `led.set`, `led.fade`, `button.get_state`,
-`events.subscribe`, plus the wrapper's `mfruit.page.key`. The protocol is a
+`events.subscribe`, plus the wrapper's `mfruit.page.key` and `mfruit.app.key`. The protocol is a
 Unix socket (default `/tmp/whisplay-daemon.sock`) with one JSON request and
 one JSON response per line; every request uses a fresh connection with a
 timeout (`daemon/client.py`).
@@ -118,6 +121,20 @@ and a press does nothing. `tests/test_background_ui.py` tests this against
 the real daemon code, including a negative control without the wrapper. The
 launch-window tests in `tests/test_launch_lifecycle.py` run **without** the
 wrapper to cover installations using `--no-background-daemon`.
+
+### LCD DC line parked low (always)
+
+One patch applies whether or not MFruit OS runs: `park_dc_low` wraps
+`WhisplayBoard._send_data` and `_send_data_bytes` so the LCD's data/command
+line (BOARD 13: BCM 27 on a Pi, PH3 on an Orange Pi) is lowered after each
+transfer. With the SX126X LoRa HAT's stock M0/M1 jumpers that line is the
+module's **M1**; upstream Whisplay leaves it high after every frame, which holds
+the radio in configuration mode (it neither sends nor hears; the radio apps
+report "Radio deaf: check M0/M1"). The display samples DC only while SPI
+clocks. During a frame (about 11 ms) the radio is still deaf; only rewiring
+M0/M1 to free GPIOs removes that. This replaces WalkieTalkie's
+`docs/whisplay-dc-fix.patch`, which edited the Whisplay checkout.
+`tests/test_dc_park.py` covers it, including the real `runtime/whisplay.py`.
 
 ## Fallback display
 

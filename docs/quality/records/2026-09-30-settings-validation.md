@@ -69,6 +69,6 @@ Device logs: `~/.mfruit-validation/settings-update-final-tests.log` and
 `~/.mfruit-validation/settings-live/`. Local evidence is copied under
 `/home/meng/mfruit-validation/settings-updater-20260930/`.
 
-Follow [the install/update/downgrade guide](UPDATES.md). Physical button and keyboard
+Follow [the install/update/downgrade guide](../../apps/UPDATE_ROLLBACK.md). Physical button and keyboard
 use, LED colours, pairing, real audio and RF still require manual checks. Changes
 in this follow-up are not committed or pushed by this session.

@@ -6,7 +6,7 @@ way Whisplay clients do (subscribe, then acquire with retries) after a
 realistic start-up delay. MFruit OS runs in-process and is driven only by
 simulated physical button presses, exactly like on the device.
 
-Root causes covered (docs/LAUNCH_LIFECYCLE.md):
+Root causes covered (docs/platform/LIFECYCLE.md):
 RC1  acting while the button was still held leaked the release to the next
      screen owner (daemon desktop launched its own selection, daemon pages
      took it as "select", apps got a stray release)
@@ -60,7 +60,8 @@ class RealDaemonLaunchTests(unittest.TestCase):
             self.daemon.release()
             time.sleep(0.03)
         paths = Paths(os.path.join(self.home, "os"), os.path.join(self.home, ".whisplay-daemon"))
-        self.rt = Runtime(paths, helpers.ROOT, socket_path=self.daemon.socket_path)
+        self.rt = Runtime(paths, helpers.ROOT, socket_path=self.daemon.socket_path,
+                          input_dir=helpers.NO_INPUT_DEVICES)
         self.rt.settings.set("button.click_gap_ms", 200)
         self.rt.settings.set("system.show_system_pages_on_home", True)
         self.thread = threading.Thread(target=self.rt.run, daemon=True)
@@ -221,6 +222,17 @@ class RealDaemonLaunchTests(unittest.TestCase):
         self.wait(lambda: self.rt.focus.has_focus, "MFruit OS back")
         self.baseline = len(self.daemon.launched())
 
+    def select_on_daemon_desktop(self, key):
+        """Tap the daemon desktop (which owns the button) until ``key`` is selected."""
+        for _ in range(20):
+            if self.daemon.state()["selected"] == key:
+                return
+            self.daemon.press()
+            time.sleep(0.05)
+            self.daemon.release()
+            time.sleep(0.05)
+        self.assertEqual(self.daemon.state()["selected"], key)
+
     def test_press_during_launch_window_cannot_start_a_second_app(self):
         # RC2: while an app starts up the daemon desktop owns the button. A hold
         # there launches its selected entry; the launch gate must refuse it.
@@ -229,8 +241,11 @@ class RealDaemonLaunchTests(unittest.TestCase):
         # The daemon itself sometimes turns a hold into a tap (its monitor loop
         # can reset the press start before the release callback runs), so hold
         # until it really attempts a launch.
+        # A hold the daemon turned into a tap also moved its selection on, so
+        # put it back on beta before holding again.
         for _ in range(4):
             time.sleep(0.2)
+            self.select_on_daemon_desktop("beta")
             self.hold()
             if "beta" in self.launches():
                 break

@@ -1,6 +1,6 @@
 """ApplicationManager — the single authority for application launches.
 
-Guarantees (see docs/LAUNCH_LIFECYCLE.md):
+Guarantees (see docs/platform/LIFECYCLE.md):
 
 * **Single flight** — at most one application session exists. A launch
   request while a session is starting, running or stopping is refused and

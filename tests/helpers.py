@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import atexit
 import json
 import os
 import shutil
@@ -14,6 +15,11 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 from mfruitos.paths import Paths  # noqa: E402
+
+# An empty stand-in for /dev/input and /sys/class/input: runtimes under test
+# never open, let alone grab, the machine's real keyboards.
+NO_INPUT_DEVICES = tempfile.mkdtemp(prefix="mfruit-no-input-")
+atexit.register(shutil.rmtree, NO_INPUT_DEVICES, True)
 
 
 class FakeClock:

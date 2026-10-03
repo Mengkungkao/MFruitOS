@@ -31,7 +31,6 @@
     "animation": "minimal",
     "auto_dim": true,
     "brightness": 80,
-    "clock_24h": true,
     "dim_after_sec": 30,
     "dim_level": 15,
     "screen_timeout_sec": 120,
@@ -47,7 +46,6 @@
   },
   "schema": 1,
   "system": {
-    "home_title": "MFruit OS",
     "repository": "https://github.com/Mengkungkao/MFruitOS",
     "show_system_pages_on_home": false
   },

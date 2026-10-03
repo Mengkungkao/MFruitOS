@@ -58,12 +58,12 @@ unused Python imports/assignments, dashboard's unused NumPy installer dependency
 and the redundant npm crypto package/lock entry. Kept assets, vendored SDKs,
 models, environments, configuration, user data and board backups.
 
-- [App rules](APP_RULES.md): creation, shared UI/input/lifecycle, development,
+- [App rules](../../apps/APP_CONTRACT.md): creation, shared UI/input/lifecycle, development,
   native packaging, release and integration checklists; synced into six templates/apps.
-- [App development](../APP_DEVELOPMENT.md): corrected manifest example and
+- [App development](../../apps/README.md): corrected manifest example and
   explicit native-release gaps in existing adopted companions. Chatbot's
   daemon-owned four-click exit remains a documented compatibility exception.
-- [Device guide](DEVICE_SETUP.md): manual SSH copy, prerequisites, backup,
+- [Device guide](../../platform/INSTALLATION.md): manual SSH copy, prerequisites, backup,
   install, checks, hardware validation, logs, debugging, rollback and uninstall.
 - `scripts/setup-device.sh`: checks by default, explicit `--install` delegates
   to the existing installer. Eight tests cover mutation-free checks, failed

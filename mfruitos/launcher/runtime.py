@@ -68,7 +68,8 @@ KEY_ACTIONS = {"down": "next", "right": "next", "tab": "next", "up": "previous",
 
 
 class Runtime(ScreenServices):
-    def __init__(self, paths: Paths, package_dir: str, socket_path: str | None = None):
+    def __init__(self, paths: Paths, package_dir: str, socket_path: str | None = None,
+                 input_dir: str | None = None):
         self.paths = paths
         paths.ensure()
         self.package_dir = package_dir
@@ -106,9 +107,13 @@ class Runtime(ScreenServices):
         # whoever owns the screen: MFruit OS, or the foreground app through
         # the key hub (launcher/keyhub.py).
         self.keyhub = KeyHub(paths.keys_socket)
+        # ``input_dir`` replaces /dev/input and /sys/class/input (tests pass an
+        # empty directory so they never open or grab the machine's keyboards).
+        devices = {"input_dir": input_dir, "sys_dir": input_dir} if input_dir else {}
         self.keyboard = KeyReader(lambda event: self.loop.post(self._on_hardware_key, event),
                                   grab=True,
-                                  on_devices=lambda devices: self.keyhub.set_devices(devices))
+                                  on_devices=lambda devices: self.keyhub.set_devices(devices),
+                                  **devices)
         self._keys_owned: set[int] = set()
         self._key_owners: dict[int, str | None] = {}
         self.fonts = Fonts(os.path.join(package_dir, "assets", "fonts"))
@@ -160,7 +165,6 @@ class Runtime(ScreenServices):
         except OSError as exc:
             log.error("Key hub unavailable, apps will not get keyboard keys: %s", exc)
         self.keyboard.start()
-        self._tick_clock()
         self._refresh_status()
         self._fallback_timer = self.loop.call_later(FALLBACK_AFTER_SEC, self._check_fallback)
         sdnotify.notify("READY=1")
@@ -457,8 +461,33 @@ class Runtime(ScreenServices):
             except DaemonError as exc:
                 log.warning("Cannot forward key to %s: %s", owner, exc)
         elif owner is not None:
-            if not self.keyhub.send(owner, event) and event.action == KEY_DOWN:
-                log.debug("key %s for %s: the app is not listening", event.value, owner)
+            if not self.keyhub.send(owner, event):
+                self._bridge_key(owner, event)
+
+    def _bridge_key(self, owner: str, event: KeyEvent) -> None:
+        """A key for a foreground app that is not listening on the key hub.
+
+        Such apps follow the Whisplay keyboard convention instead: Space is
+        their button and the daemon closes them on Esc. MFruit OS holds the
+        keyboards, so it forwards those two keys through the daemon wrapper
+        (``mfruit.app.key``). Space is not forwarded to apps that claim Esc
+        (MFruit SDK apps): they take keys from the hub once connected.
+        """
+        if event.kind != "key" or event.action == KEY_REPEAT or event.value not in ("escape", "space"):
+            return
+        if event.value == "escape" and event.action != KEY_DOWN:
+            return
+        entry = self.registry.get(owner)
+        if event.value == "space" and (entry is None or entry.disable_esc_exit_key):
+            return
+        if event.value == "escape":
+            lifecycle_log.info("KEY_BRIDGE app=%s key=escape (app does not use the key hub)", owner)
+        try:
+            self.client.request("mfruit.app.key", {"app_id": owner, "value": event.value,
+                                                   "action": 1 if event.action == KEY_DOWN else 0},
+                                timeout=0.5)
+        except DaemonError as exc:
+            log.warning("Cannot forward %s to %s: %s", event.value, owner, exc)
 
     def _key_route(self) -> str | None:
         """Who a key pressed now belongs to."""
@@ -592,16 +621,6 @@ class Runtime(ScreenServices):
         self.request_render()
 
     # ============================================================== timers
-    def _tick_clock(self) -> None:
-        text = time.strftime("%H:%M" if self.settings.get("display.clock_24h") else "%I:%M %p")
-        if text.startswith("0") and not self.settings.get("display.clock_24h"):
-            text = text[1:]
-        if text != self.status.time_text:
-            self.status.time_text = text
-            self.request_render()
-        now = time.time()
-        self.loop.call_later(60.2 - (now % 60), self._tick_clock)
-
     def _refresh_status(self) -> None:
         if getattr(self, "_status_timer", None) is not None:
             self._status_timer.cancel()

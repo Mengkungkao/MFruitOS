@@ -3,7 +3,7 @@
 The schema below is the single source of truth for defaults. ``config/default.json``
 is a generated reference copy (``python3 -m mfruitos.system.settings --dump-defaults``).
 
-Loading rules (see CLAUDE.md §14):
+Loading rules (see docs/platform/CONFIGURATION.md):
   * unreadable/invalid JSON -> the broken file is preserved as
     ``settings.json.broken-<timestamp>`` and safe defaults are used;
   * one invalid entry falls back to its default without affecting the others;
@@ -102,7 +102,9 @@ def _repo_list(value):
 
 _action = _choice(*GESTURE_ACTIONS)
 
-# key -> (default, validator)
+# key -> (default, validator). Keys removed in a later version are simply
+# ignored when an old file is loaded and dropped on the next save; they are
+# listed in docs/platform/CONFIGURATION.md ("Removed keys").
 SCHEMA: dict[str, tuple[Any, Callable[[Any], Any]]] = {
     "display.brightness": (80, _int_range(5, 100)),
     "display.auto_dim": (True, _boolean),
@@ -111,7 +113,6 @@ SCHEMA: dict[str, tuple[Any, Callable[[Any], Any]]] = {
     "display.screen_timeout_sec": (120, _choice(*TIMEOUT_CHOICES)),
     "display.theme": ("dark", _choice("dark", "light")),
     "display.animation": ("minimal", _choice("minimal", "off")),
-    "display.clock_24h": (True, _boolean),
     "button.single_click": ("next", _action),
     "button.double_click": ("previous", _action),
     "button.triple_click": ("none", _action),
@@ -136,7 +137,6 @@ SCHEMA: dict[str, tuple[Any, Callable[[Any], Any]]] = {
     "updater.discovery_topic": ("whisplay-app", _string(50)),
     "updater.sources": ([], _repo_list),
     "system.repository": ("https://github.com/Mengkungkao/MFruitOS", _repo_or_empty),
-    "system.home_title": ("MFruit OS", _string(20)),
     "system.show_system_pages_on_home": (False, _boolean),
     "developer.enabled": (False, _boolean),
     "developer.debug_logging": (False, _boolean),

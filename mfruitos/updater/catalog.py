@@ -23,6 +23,28 @@ def entries() -> list[dict]:
         return json.load(fp)
 
 
+# Device capabilities a catalogue app can need, and who sets them up.
+REQUIREMENTS = {"radio": "LoRa radio (scripts/setup-radio.sh)"}
+
+
+def requirements(item: dict) -> list:
+    needs = item.get("requires") or []
+    unknown = [n for n in needs if n not in REQUIREMENTS]
+    if unknown:
+        raise CatalogError(f"Unknown requirement {unknown!r} for {item.get('id')!r}")
+    return list(needs)
+
+
+def missing_requirements(item: dict, home: str | None = None) -> list:
+    """What the device still lacks for ``item`` (empty when ready). The
+    radio check may run ldconfig: call it off the UI thread."""
+    problems = []
+    if "radio" in requirements(item):
+        from mfruitos.hosts.lora.readiness import radio_status
+        problems += radio_status(home)["problems"]
+    return problems
+
+
 def get(app_id: str) -> dict:
     for item in entries():
         if item['id'] == app_id:

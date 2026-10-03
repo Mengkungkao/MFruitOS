@@ -6,6 +6,69 @@ the OS version.
 
 ## Unreleased
 
+### Fixed
+- Keyboards work again in plain Whisplay apps such as Jump Game and Flappy
+  Bird: MFruit OS holds the keyboards, so it now forwards **Esc** (leave the
+  app, as the daemon does) and **Space** (the app's button) to foreground apps
+  that do not use the key hub. Restart whisplay-daemon once after updating so
+  its wrapper provides the new `mfruit.app.key` command.
+- App installer: an app that is registered but whose files are missing shows
+  **Repair** (reinstall from the catalogue) instead of a misleading *Installed*.
+- `mfruitctl key space` for testing; `mfruitctl catalog [<id>]` lists the
+  curated catalogue with each app's status and installs or repairs an entry.
+- Removed the *Settings → Display → 24-hour clock* toggle, which had no
+  visible effect since the status bar dropped the clock, together with the
+  unused `display.clock_24h` and `system.home_title` settings and the
+  per-minute clock wake-up. Existing settings files still load.
+- Sideloaded package **folders** now get the same safety checks as archives
+  before they are copied: symlinks must stay inside the package, special files
+  are refused, file-count and size limits apply, and set-uid/set-gid and
+  group/world-write bits are removed. Previously an escaping symlink or a
+  set-uid file in a folder was installed as is.
+
+### Radio
+- **Radio no longer deaf behind the Whisplay LCD:** the daemon wrapper parks the
+  LCD's DC line low after each frame. With the LoRa HAT's stock jumpers that line
+  is the radio's M1, and upstream Whisplay left it high, so Messenger and
+  WalkieTalkie showed "Radio deaf: check M0/M1" and nothing was sent or heard.
+- **LoRa radio setup for radio apps:** `scripts/setup-radio.sh` sets up the
+  SX126X HAT once (packages including Codec2, UART, serial console, `dialout`,
+  reboot handling) and provisions the module, by default for AU915 (920 MHz,
+  2400 bps). The App installer and `mfruitctl catalog` show **Needs radio setup
+  first** for WalkieTalkie and Messenger until it has run.
+- **Shared radio identity:** SDK 1.3.0 adds `mfruit_sdk.radio`, one store for the
+  radio settings, Device ID, pairing keys and contact names that every radio
+  app uses, so pairing once works in every radio app.
+
+### Tests
+- The launch-window daemon-page test no longer fails intermittently (5 of 20
+  runs before). Root cause: whisplay-daemon sometimes treats a hold as a tap
+  while a launch is pending, so no page opened; MFruit OS was correct. The
+  test now waits on the observed daemon state and retries across daemon
+  pages, and a new deterministic test opens the page through the daemon API.
+- Regression tests for sideloaded folders (escaping symlinks, special files,
+  limits, permissions, ignored payload).
+- Test runtimes no longer open or grab the machine's real keyboards
+  (`Runtime(input_dir=…)` points them at an empty directory).
+
+### Documentation and tooling
+- The project constitution is now the canonical rule set
+  (`docs/platform/DEVELOPMENT_RULES.md`); documentation is reorganized into
+  `docs/platform/`, `docs/apps/` and `docs/quality/` with one canonical
+  document per topic, new architecture/host API/configuration/security/
+  directory-structure docs, ADRs, and dated records under
+  `docs/quality/records/`. Old paths cited by app repositories keep pointer
+  files.
+- The app rules are now the **app contract** (`docs/apps/APP_CONTRACT.md`);
+  `scripts/check-app.py` compares app copies with it. Apps must refresh
+  `.claude/rules/mfruit-os-app.md` (the template copy is updated).
+- `scripts/check.sh` runs the CI checks locally; `scripts/check-docs.py`
+  checks Markdown links and anchors; GitHub Actions CI runs them, the full
+  suite with real-daemon tests against a pinned Whisplay revision, and a
+  Python 3.9 job.
+- `CLAUDE.md` and `AGENTS.md` point coding agents at the rules.
+
+### Earlier unreleased work
 - Home App installer with checksum-pinned source packages, package-local
   dependency environments and restoration of saved apps to the menu.
 - Bundled ConnectWifi and an initial menu with available starter games.

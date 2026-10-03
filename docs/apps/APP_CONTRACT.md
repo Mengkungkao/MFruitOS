@@ -1,4 +1,6 @@
-# MFruit OS app rules
+# MFruit OS app contract
+
+Contract version: MFruit OS 1.4 with MFruit App SDK 1.2.0.
 
 This app runs on **MFruit OS**: a 240×280 LCD with rounded corners, one
 button, an RGB LED, and optionally a USB or Bluetooth keyboard, on a
@@ -7,13 +9,15 @@ hardware; MFruit OS launches the app and takes the screen back when it
 leaves. Every app must feel like part of the same device. These rules are
 the contract; the MFruit App SDK (`mfruit_sdk/`, vendored) implements it.
 
-Source of truth: `MFruitOS/docs/APP_RULES.md`. Copies live in each app at
-`.claude/rules/mfruit-os-app.md`; change the source, then copy.
+Source of truth: `MFruitOS/docs/apps/APP_CONTRACT.md`. Each app carries a
+byte-identical copy at `.claude/rules/mfruit-os-app.md`
+(`MFruitOS/scripts/check-app.py` compares them); change the source, then copy.
 
 Use this list when creating, developing, packaging and integrating an app.
-The detailed package format is in `MFruitOS/APP_DEVELOPMENT.md`. Platform
-architecture is documented in `MFruitOS/docs/ARCHITECTURE.md`, and core
-contributor workflow in `MFruitOS/CONTRIBUTING.md`. Current SDK apps declare
+Details are in `MFruitOS/docs/apps/`: `GETTING_STARTED.md`, `MANIFEST.md`,
+`SDK.md`, `UI_GUIDELINES.md`, `PACKAGING.md`, `TESTING.md`, `PUBLISHING.md`
+and `MIGRATING_EXISTING_APP.md`. Platform rules are in
+`MFruitOS/docs/platform/DEVELOPMENT_RULES.md`. Current SDK apps declare
 MFruit OS **1.4.0 or newer** in their native package manifest.
 
 ## 1. Input: one controller, the same controls everywhere
@@ -89,6 +93,19 @@ MFruit OS **1.4.0 or newer** in their native package manifest.
   manifest sets `"background": true` (the app must keep receiving, e.g.
   messages); a background app releases the screen and stays quiet.
 - Never keep the screen while not in the foreground; never fight for focus.
+- The managed runtime: the working directory is the active version folder;
+  `WHISPLAY_APP_ID`, `WHISPLAY_OS_APP_DIR` (code, replaced on update),
+  `WHISPLAY_OS_APP_DATA` (persistent data, snapshotted before each update),
+  `MFRUIT_HOME`, `MFRUIT_SESSION` and the manifest `env` are set; stdout and
+  stderr go to `~/.whisplay-os/logs/<id>.log`; the exit code is recorded.
+- Follow the Whisplay daemon integration contract: subscribe to events with
+  your app ID, `app.focus.acquire`, then `framebuffer.acquire` and draw
+  big-endian RGB565 frames; on `app_exit_requested` release focus and exit;
+  on `app_focus_revoked` stop drawing.
+- Never call `app.register` with a `launch_command` (it would replace the
+  `mfruit-run` gate) and never start other apps with `app.launch`: while
+  MFruit OS runs, only it can authorize a start, and other starts are denied
+  in `~/.whisplay-os/logs/launch-gate.log`.
 
 ## 3. Screen layout and look
 

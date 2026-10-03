@@ -7,6 +7,7 @@ import threading
 import time
 import unittest
 
+import helpers
 from helpers import ROOT, TempHomeTestCase
 from fake_daemon import FakeDaemon
 from mfruitos.launcher.control import send
@@ -27,7 +28,8 @@ class RuntimeEndToEndTests(TempHomeTestCase):
                             {"app_id": app_id, "display_name": app_id.title(),
                              "launch_command": "./run.sh", "cwd": self.tmp})
         self.daemon.behaviour["crashy"] = "crash"
-        self.rt = Runtime(self.paths, ROOT, socket_path=self.daemon.socket_path)
+        self.rt = Runtime(self.paths, ROOT, socket_path=self.daemon.socket_path,
+                          input_dir=helpers.NO_INPUT_DEVICES)
         self.rt.settings.set("button.click_gap_ms", 150)
         self.thread = threading.Thread(target=self.rt.run, daemon=True)
         self.thread.start()
@@ -194,6 +196,13 @@ class RuntimeEndToEndTests(TempHomeTestCase):
         keys = [m for m in self.received(app) if m["type"] == "key"]
         self.assertEqual([(k["value"], k["action"]) for k in keys], [("space", 0)])
 
+    def test_runtimes_under_test_never_open_real_keyboards(self):
+        # KI-6: a test runtime must not grab the developer's or the device's keyboards.
+        self.assertEqual(self.rt.keyboard.input_dir, helpers.NO_INPUT_DEVICES)
+        self.assertEqual(self.rt.keyboard.devices, [])
+        default = Runtime(self.paths, ROOT, socket_path=self.daemon.socket_path)
+        self.assertEqual(default.keyboard.input_dir, "/dev/input")   # production unchanged
+
     def test_the_keyboards_are_held_exclusively(self):
         self.assertTrue(self.rt.keyboard.grab)
         self.rt.loop.post(self.rt.yield_to_desktop)   # Developer -> Daemon desktop
@@ -248,7 +257,8 @@ class RuntimeEndToEndTests(TempHomeTestCase):
         for expected in (True, False):  # second start = same boot: no autostart
             self.daemon.handle({"cmd": "app.focus.acquire", "payload": {"app_id": "mfruit-os"}}, None)
             self.daemon.app_releases("mfruit-os")
-            rt = Runtime(self.paths, ROOT, socket_path=self.daemon.socket_path)
+            rt = Runtime(self.paths, ROOT, socket_path=self.daemon.socket_path,
+                         input_dir=helpers.NO_INPUT_DEVICES)
             thread = threading.Thread(target=rt.run, daemon=True)
             thread.start()
             try:

@@ -18,7 +18,6 @@ ROW_H_SUB = ROW_H
 
 @dataclass
 class StatusInfo:
-    time_text: str = ""
     wifi_level: int | None = None     # None: no wifi, 0: disconnected, 1..3
     battery: int | None = None
     charging: bool = False

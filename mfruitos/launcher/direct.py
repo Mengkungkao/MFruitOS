@@ -1,6 +1,7 @@
 """Fallback display when whisplay-daemon is not running.
 
-Why this bypasses the daemon (CLAUDE.md §1 requires a documented reason):
+Why this bypasses the daemon (docs/platform/DEVELOPMENT_RULES.md requires a
+documented reason for any direct hardware access):
 without the daemon there is no framebuffer, so MFruit OS could not show the
 "Daemon unavailable" screen the user needs to recover. This module is only
 used when the daemon's systemd unit is *inactive or failed* (never while it

@@ -18,7 +18,9 @@ sys.path.insert(0, str(ROOT))
 from mfruitos import __version__  # noqa: E402
 from mfruitos.apps.manifest import ManifestError, load_manifest  # noqa: E402
 
+# Each app carries a byte-identical copy of the canonical app contract.
 RULES_PATH = Path(".claude/rules/mfruit-os-app.md")
+CONTRACT_PATH = Path("docs/apps/APP_CONTRACT.md")
 CACHE_DIRS = {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache",
               ".venv", "node_modules"}
 ENV_EXAMPLES = {".env.example", ".env.sample", ".env.template"}
@@ -118,11 +120,11 @@ def check_package(directory: str | Path) -> list[str]:
 
         rules = root / RULES_PATH
         if not rules.is_file():
-            errors.append(f"missing {RULES_PATH}; copy docs/APP_RULES.md from MFruit OS")
+            errors.append(f"missing {RULES_PATH}; copy docs/apps/APP_CONTRACT.md from MFruit OS")
         elif not _inside(rules, root):
             errors.append(f"{RULES_PATH}: rules must be inside the package")
-        elif rules.read_bytes() != (ROOT / "docs/APP_RULES.md").read_bytes():
-            errors.append(f"{RULES_PATH}: differs from MFruit OS docs/APP_RULES.md")
+        elif rules.read_bytes() != (ROOT / CONTRACT_PATH).read_bytes():
+            errors.append(f"{RULES_PATH}: differs from MFruit OS docs/apps/APP_CONTRACT.md")
     except (OSError, RuntimeError, ValueError) as exc:
         errors.append(f"cannot inspect package contents: {exc}")
     return errors

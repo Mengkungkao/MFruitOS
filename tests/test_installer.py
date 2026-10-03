@@ -1,7 +1,9 @@
 import json
 import os
 import tarfile
+import threading
 import unittest
+from unittest import mock
 
 from helpers import TempHomeTestCase, make_package
 from mfruitos.apps.registry import AppRegistry
@@ -221,6 +223,58 @@ class InstallerTests(TempHomeTestCase):
         self.installer.run(InstallRequest(repository="", local_path=src))
         self.assertTrue(os.path.isfile(os.path.join(src, "manifest.json")))
         self.assertEqual(self.current_version(), "1.0.0")
+
+    # A sideloaded folder gets the same checks as an archive (KI-1).
+    def sideload_dir(self, prepare):
+        src = self.package("1.0.0")
+        prepare(src)
+        return src
+
+    def assert_sideload_refused(self, src, message):
+        result = {}
+
+        def run():
+            try:
+                self.installer.run(InstallRequest(repository="", local_path=src))
+            except InstallError as exc:
+                result["error"] = exc
+        worker = threading.Thread(target=run, daemon=True)
+        worker.start()
+        worker.join(10)
+        self.assertFalse(worker.is_alive(), "sideload blocked instead of refusing the package")
+        self.assertIn("error", result, "unsafe package folder was installed")
+        self.assertEqual(result["error"].step, "verify")
+        self.assertIn(message, result["error"].message)
+        self.assertFalse(os.path.exists(self.paths.app_root("weather")))
+
+    def test_sideload_directory_with_escaping_symlink_is_refused(self):
+        outside = os.path.join(self.tmp, "outside.txt")
+        with open(outside, "w") as fp:
+            fp.write("private\n")
+        self.assert_sideload_refused(
+            self.sideload_dir(lambda d: os.symlink(outside, os.path.join(d, "data.txt"))),
+            "absolute symlink")
+        self.assert_sideload_refused(
+            self.sideload_dir(lambda d: os.symlink("../../outside.txt", os.path.join(d, "assets", "x"))),
+            "symlink escapes the package")
+
+    def test_sideload_directory_with_fifo_is_refused(self):
+        self.assert_sideload_refused(self.sideload_dir(lambda d: os.mkfifo(os.path.join(d, "pipe"))),
+                                     "special file")
+
+    def test_sideload_directory_limits_apply(self):
+        from mfruitos.updater import verifier
+        with mock.patch.object(verifier, "MAX_FILES", 3):
+            self.assert_sideload_refused(self.package("1.0.0"), "too many files")
+
+    def test_sideload_directory_keeps_internal_links_and_strips_unsafe_modes(self):
+        def prepare(d):
+            os.symlink("run.sh", os.path.join(d, "start.sh"))
+            os.chmod(os.path.join(d, "run.sh"), 0o4777)
+        self.installer.run(InstallRequest(repository="", local_path=self.sideload_dir(prepare)))
+        current = rollback.current_target(self.paths.app_root("weather"))
+        self.assertEqual(os.readlink(os.path.join(current, "start.sh")), "run.sh")
+        self.assertEqual(os.stat(os.path.join(current, "run.sh")).st_mode & 0o7777, 0o755)
 
     def test_uninstall_removes_only_app(self):
         self.install("1.0.0")

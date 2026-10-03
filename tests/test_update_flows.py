@@ -5,6 +5,7 @@ import shutil
 import tarfile
 from unittest.mock import Mock
 
+import helpers
 from helpers import ROOT, TempHomeTestCase, make_package
 from mfruitos.apps.registry import AppRegistry, AppEntry
 from mfruitos.launcher.runtime import Runtime
@@ -71,7 +72,8 @@ class ReleaseFlowTests(TempHomeTestCase):
 class UpdateScreenTests(TempHomeTestCase):
     def setUp(self):
         super().setUp()
-        self.rt = Runtime(self.paths, ROOT, socket_path=self.tmp + "/none.sock")
+        self.rt = Runtime(self.paths, ROOT, socket_path=self.tmp + "/none.sock",
+                          input_dir=helpers.NO_INPUT_DEVICES)
         self.rt.router.set_root(self.rt.home_screen)
 
     def test_home_exposes_install_and_offline_updater_keeps_management(self):

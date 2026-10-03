@@ -1,5 +1,6 @@
 from unittest.mock import Mock, patch
 
+import helpers
 from helpers import ROOT, TempHomeTestCase
 from mfruitos.launcher.runtime import Runtime
 from mfruitos.launcher.ui.screens.settings import SettingsScreen, WifiScreen, GeneralScreen
@@ -11,7 +12,8 @@ from mfruitos.system.bluetooth import BtDevice, Prompt
 class SettingsScreensTests(TempHomeTestCase):
     def setUp(self):
         super().setUp()
-        self.rt = Runtime(self.paths, ROOT, socket_path=self.tmp + "/none.sock")
+        self.rt = Runtime(self.paths, ROOT, socket_path=self.tmp + "/none.sock",
+                          input_dir=helpers.NO_INPUT_DEVICES)
         self.rt.bluetooth = Mock()
         self.rt.bluetooth.available.return_value = True
         self.rt.bluetooth.powered.return_value = True

@@ -54,12 +54,14 @@ MFruitOS/
 | `launcher/control.py`, `launcher/ctl_handlers.py` | `mfruitctl` control socket and commands | UI |
 | `launcher/ui/` | painter, components, theme, fonts, icons, RGB565, screens | UI |
 | `launcher/preview.py`, `launcher/sdnotify.py` | offscreen self-test/preview; systemd notify | UI |
-| `sdk/` | MFruit App SDK, vendored into apps as `mfruit_sdk` ([SDK](../apps/SDK.md)) | B |
+| `sdk/` | MFruit App SDK, vendored into apps as `mfruit_sdk` ([SDK](../apps/SDK.md)); `sdk/radio/` owns the shared radio store | B |
+| `hosts/lora/` | LoRa radio capability: SX126X provisioning, mode pins, readiness, setup CLI | E |
 
 ## Scripts
 
 | Script | Runs on | Purpose |
 |---|---|---|
+| `setup-radio.sh` | device | one-time LoRa radio setup ([Installation](INSTALLATION.md#radio-setup-lora-apps)) |
 | `install.sh`, `uninstall.sh`, `update.sh`, `setup-device.sh` | device | install, remove, update from a checkout, read-only prerequisite check ([Installation](INSTALLATION.md)) |
 | `mfruit-run` | device (installed to `~/.whisplay-os/bin`) | launch gate and runner for every managed app |
 | `mfruitctl` | device | control CLI (`mfruitctl help`) |
@@ -92,6 +94,7 @@ Physical device validation (level 5) is a recorded procedure, not a test file
 │   ├── backups/data-<version>/ data snapshot taken before hooks ran
 │   └── app.json                install record (versions, source, verified)
 ├── adopted/<id>/               original registrations of adopted daemon apps
+├── shared/radio/  (0700)       radio.json, device.json, keys.json, contacts.json (radio apps)
 ├── bin/                        mfruit-run, mfruitctl, boot-guard.sh, whisplay-daemon-mfruit.py
 ├── cache/                      GitHub metadata, downloads/
 ├── config/settings.json        settings ([Configuration](CONFIGURATION.md))

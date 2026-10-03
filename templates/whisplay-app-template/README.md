@@ -11,7 +11,7 @@ new app, then validate the resulting package and its hardware behaviour.
 | hold, then release | Enter | reset |
 | 4 clicks | Esc | leave the app |
 
-It follows the MFruit OS app rules (`docs/APP_RULES.md` in the MFruit OS
+It follows the MFruit OS app contract (`docs/apps/APP_CONTRACT.md` in the MFruit OS
 repository; included here as `.claude/rules/mfruit-os-app.md`):
 input through the SDK's `InputController`, MFruit OS's status bar and
 footer hints, `exit_gesture: "none"` and `disable_esc_exit_key: true`.
@@ -50,7 +50,7 @@ whisplay-app-template/
 
    ```bash
    ~/MFruitOS/scripts/sdk-sync.sh ./my-app/app
-   cp ~/MFruitOS/docs/APP_RULES.md ./my-app/.claude/rules/mfruit-os-app.md
+   cp ~/MFruitOS/docs/apps/APP_CONTRACT.md ./my-app/.claude/rules/mfruit-os-app.md
    python3 ~/MFruitOS/scripts/check-app.py ./my-app
    ```
 
@@ -80,4 +80,4 @@ physical hardware and have not been completed.
    Optionally attach `<id>-<version>.tar.gz` and a `SHA256SUMS` file;
    otherwise the source archive of the tag is used.
 
-See `APP_DEVELOPMENT.md` in the MFruit OS repository for the full specification.
+See `docs/apps/` in the MFruit OS repository (start with `GETTING_STARTED.md`) for the full specification.

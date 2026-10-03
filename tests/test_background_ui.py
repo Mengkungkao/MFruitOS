@@ -39,7 +39,8 @@ class BackgroundUiTests(unittest.TestCase):
             time.sleep(0.03)
             self.daemon.release()
             time.sleep(0.03)
-        self.rt = Runtime(paths, helpers.ROOT, socket_path=self.daemon.socket_path)
+        self.rt = Runtime(paths, helpers.ROOT, socket_path=self.daemon.socket_path,
+                          input_dir=helpers.NO_INPUT_DEVICES)
         self.rt.settings.set("button.click_gap_ms", 200)
         self.thread = threading.Thread(target=self.rt.run, daemon=True)
         self.thread.start()
@@ -175,6 +176,27 @@ class BackgroundUiTests(unittest.TestCase):
         self.rt.loop.post(self.rt._on_hardware_key, KeyEvent("key", "escape", DOWN, 1))
         self.rt.loop.post(self.rt._on_hardware_key, KeyEvent("key", "escape", UP, 1))
         self.wait(lambda: self.rt.focus.has_focus, "keyboard returns from Volume")
+
+    def test_keys_reach_an_app_that_does_not_use_the_key_hub(self):
+        # Plain Whisplay apps (Jump Game, Flappy Bird) read Space from /dev/input
+        # as their button and leave Esc to the daemon. MFruit OS holds every
+        # keyboard, so it forwards both through the wrapper instead.
+        from mfruitos.sdk.keys import DOWN, UP, KeyEvent
+        from mfruitos.daemon.client import DaemonRequestError
+        self.rt.loop.post(self.rt.launch_app, "beta")
+        self.wait(lambda: "acquired" in self.daemon.records("beta"), "beta on screen")
+        self.wait(lambda: self.rt.focus.phase == "foreground", "beta session running")
+        with self.assertRaises(DaemonRequestError):   # only the foreground app gets keys
+            self.rt.client.request("mfruit.app.key", {"app_id": "slow", "value": "space",
+                                                      "action": 1})
+        for action in (DOWN, UP):
+            self.rt.loop.post(self.rt._on_hardware_key, KeyEvent("key", "space", action, 57))
+        self.wait(lambda: "button_released" in self.daemon.records("beta"), "Space as the button")
+        self.assertIn("button_pressed", self.daemon.records("beta"))
+        for action in (DOWN, UP):
+            self.rt.loop.post(self.rt._on_hardware_key, KeyEvent("key", "escape", action, 1))
+        self.wait(lambda: "exit_requested" in self.daemon.records("beta"), "Esc closes the app")
+        self.wait(lambda: self.rt.focus.has_focus, "back at Home")
 
 
 if __name__ == "__main__":

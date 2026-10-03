@@ -1,35 +1,27 @@
 # MFruit OS documentation
 
-Use this page to find the current guide for a task. Dated reports record what
-was tested at a particular revision; they do not replace the current guides or
-prove that a newer revision has passed.
+Three domains, one canonical document per concept
+([ADR 0004](platform/ADR/0004-documentation-architecture.md)). Status words
+(IMPLEMENTED, AUTOMATED, DEVICE VERIFIED, NOT VERIFIED, PLANNED) mean exactly
+what [Part I §20](platform/DEVELOPMENT_RULES.md#20-quality-status-language)
+says.
 
-## Choose a path
+| Domain | For | Start at |
+|---|---|---|
+| [Platform / OS development](platform/README.md) | changing MFruit OS itself: rules, architecture, lifecycle, host API, installation, configuration, security, roadmap, ADRs | [Development rules](platform/DEVELOPMENT_RULES.md) |
+| [App development](apps/README.md) | building, packaging, publishing and migrating apps | [Getting started](apps/GETTING_STARTED.md) |
+| [Quality](quality/README.md) | testing, validation, known issues, troubleshooting, records | [Known issues](quality/KNOWN_ISSUES.md) |
 
-| I want to… | Start here |
+## I want to…
+
+| Task | Read |
 |---|---|
-| Understand the product goals, current capabilities and roadmap | [Project direction](os/DIRECTION.md) |
-| Change or debug MFruit OS itself | [OS development](os/README.md) |
-| Understand component ownership and runtime flow | [Current architecture](ARCHITECTURE.md) |
-| Install, update or remove MFruit OS | [Installation](../INSTALL.md) |
-| Prepare and validate a device | [Device setup](DEVICE_SETUP.md) |
-| Create, package or integrate an app | [App integration](apps/README.md) |
-| Install, update, downgrade or roll back an app | [App updates](UPDATES.md) |
-| Run tests, investigate a bug or check known issues | [Quality and troubleshooting](quality/README.md) |
-| Review user-visible changes | [Changelog](../CHANGELOG.md) |
-
-## Canonical references
-
-- [OS engineering workflow](os/DEVELOPMENT.md) and [UI/code style](os/STYLE.md)
-- [App package and SDK guide](../APP_DEVELOPMENT.md) and the canonical [app rules](APP_RULES.md)
-- [Hardware test procedure](HARDWARE_TESTS.md)
-- [Launch lifecycle and regression history](LAUNCH_LIFECYCLE.md)
-- [Current work handoff](../CONTINUE.md)
-
-## Validation records
-
-Dated reports are retained at their original paths so existing links remain
-valid. Use [quality records](quality/README.md) to distinguish historical
-results from current known issues and pending checks.
-
-[OS development](os/README.md) · [App integration](apps/README.md) · [Quality](quality/README.md)
+| Install, update or remove MFruit OS | [Installation](platform/INSTALLATION.md) |
+| Understand who owns what | [Architecture](platform/ARCHITECTURE.md) |
+| Fix a launch, input or focus problem | [Lifecycle](platform/LIFECYCLE.md), [Troubleshooting](quality/TROUBLESHOOTING.md) |
+| Build a new app | [Getting started](apps/GETTING_STARTED.md), [App contract](apps/APP_CONTRACT.md) |
+| Bring an existing Whisplay app over | [Migrating an existing app](apps/MIGRATING_EXISTING_APP.md) |
+| Run the tests | [Testing](quality/TESTING.md) |
+| Record a validation or a bug | [Validation](quality/VALIDATION.md), [Bug template](quality/BUG_TEMPLATE.md) |
+| See what changed | [Changelog](../CHANGELOG.md) |
+| Continue the current work | [CONTINUE.md](../CONTINUE.md) |

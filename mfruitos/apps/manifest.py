@@ -1,7 +1,7 @@
 """Validation of MFruit OS app package manifests (``manifest.json``).
 
 A manifest is rejected — never partially trusted — if any required field is
-missing or unsafe. See APP_DEVELOPMENT.md for the specification.
+missing or unsafe. See docs/apps/MANIFEST.md for the specification.
 """
 
 from __future__ import annotations

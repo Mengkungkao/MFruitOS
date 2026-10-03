@@ -1,33 +1,25 @@
-# Validation report template
+# Bug record template
 
-Copy this outline into a dated report when an investigation or validation
-produces evidence worth retaining.
+Use this for every significant bug ([Part I §17](../platform/DEVELOPMENT_RULES.md#17-bug-policy)).
+Put the record in [known issues](KNOWN_ISSUES.md) while it is open; move the
+evidence into a [dated record](records/README.md) when it is resolved.
+Separate observations from hypotheses: a guess is not a root cause.
 
 ```markdown
-# <Feature or issue> — YYYY-MM-DD
+## <Short description of the observable problem>
 
-## Scope
-- Source commit and working-tree state:
-- Board/OS/architecture:
-- Python/Pillow and relevant dependency versions:
-
-## Reproduction or change
-- Expected behavior:
-- Observed behavior:
-- Root cause (or current hypothesis):
-- Fix and regression coverage:
-
-## Results
-| Check | Command or procedure | Result |
-|---|---|---|
-
-## Remaining limitations
-- Automated checks not run or skipped:
-- Physical/service checks not verified:
-- Follow-up owner/action:
+- **Problem:** what observable behavior is wrong?
+- **Expected behavior:** what should happen?
+- **Reproduction:** exact steps, revision, device or test command, how often it fails.
+- **Evidence:** logs (`launcher.log`, `launch-gate.log`, journal), daemon state or
+  trace, test output, or hardware observation — with paths or excerpts.
+- **Root cause:** which invariant or component failed, and the evidence that
+  proves it. Until proven, write "Hypothesis:" instead.
+- **Fix:** what changed (files, behavior).
+- **Regression test:** test name; negative control result (fails without the fix);
+  repeat count for timing tests.
+- **Hardware validation:** required / performed (device, build) / not performed.
+- **Compatibility:** could existing apps, settings or installations be affected?
 ```
 
-Separate observation from hypothesis and confirmed root cause. Keep sensitive
-device details and private app data out of reports. Link the report from
-[known issues](KNOWN_ISSUES.md) while work remains open, then retain it under
-[dated records](README.md#dated-records).
+Keep credentials, private messages and personal data out of bug records.

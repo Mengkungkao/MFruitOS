@@ -76,7 +76,7 @@ def run_preview(outdir: str | None) -> int:
         rt.bluetooth = SimpleNamespace(available=lambda: True, powered=lambda: True,
                                        devices=lambda: [keyboard, speaker], search=lambda: None,
                                        cancel_pairing=lambda: None, answer=lambda accept: None)
-        rt.status.time_text, rt.status.wifi_level, rt.status.battery = "17:42", 3, 82
+        rt.status.wifi_level, rt.status.battery = 3, 82
         live = [{"app_id": a, "display_name": n, "icon": i, "priority": p, "running": r}
                 for a, n, i, p, r in SAMPLE_DAEMON_APPS]
         live += [{"app_id": "weather", "display_name": "Weather"},

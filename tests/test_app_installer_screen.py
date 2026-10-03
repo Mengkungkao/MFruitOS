@@ -66,6 +66,22 @@ class AppInstallerScreenTests(TempHomeTestCase):
         self.os.updater.mark_installed.assert_called_once_with("demo", "1.0.0")
         self.os.refresh_registry.assert_called_once_with(query_daemon=True)
 
+    def test_broken_catalogue_app_is_offered_for_repair_not_shown_installed(self):
+        # The registration exists but the app's folder is gone (seen on the Pi):
+        # "Installed" was a dead end; Repair reinstalls from the pinned source.
+        self.saved(broken="Working directory missing")
+        self.os.settings.set("apps.installed_ids", ["demo"])
+        row = self.rows()[0]
+        self.assertEqual(row.value, "Repair")
+        row.action()
+        dialog = self.os.push.call_args.args[0]
+        self.assertNotIsInstance(dialog, AppDetailScreen)
+        self.assertEqual([i.label for i in dialog.items()], ["Cancel", "Repair"])
+        dialog.items()[1].action()
+        progress = Mock()
+        self.os.start_job.call_args.args[1](progress)
+        self.os.updater.install_catalog.assert_called_once_with("demo", progress)
+
     def test_saved_app_is_restored_without_downloading_or_autostart(self):
         self.saved(enabled=False)
         self.os.settings.set("apps.order", ["other", "demo"])
@@ -129,3 +145,81 @@ class AppInstallerScreenTests(TempHomeTestCase):
         self.os.show_message.assert_called_once_with(
             "Wi-Fi", "Install Connect WiFi to choose a network.")
         self.os.open_system_page.assert_not_called()
+
+
+class CatalogControlTests(TempHomeTestCase):
+    """``mfruitctl catalog``: the App installer's Install/Repair from a shell."""
+
+    def setUp(self):
+        super().setUp()
+        from mfruitos.launcher import ctl_handlers
+        self.handle = ctl_handlers.handle
+        self.rt = SimpleNamespace(registry=Mock(), tasks=Mock(), router=Mock(),
+                                  install_catalog_app=Mock())
+        self.rt.tasks.busy.return_value = False
+        self.rt.tasks.active = {}
+        items = [dict(id="demo", name="Demo", description=""), dict(id="other", name="Other", description="")]
+        self.catalog = patch("mfruitos.updater.catalog.entries", return_value=items)
+        self.catalog.start()
+        self.addCleanup(self.catalog.stop)
+        self.entries = {"demo": AppEntry("demo", "Demo", "daemon", broken="Working directory missing")}
+        self.rt.registry.get.side_effect = self.entries.get
+
+    def test_lists_status_of_each_catalogue_app(self):
+        rows = self.handle(self.rt, "catalog", {})["catalog"]
+        self.assertEqual([(r["id"], r["status"]) for r in rows], [("demo", "broken"), ("other", "available")])
+
+    def test_installs_or_repairs_through_the_same_job_as_the_screen(self):
+        self.assertTrue(self.handle(self.rt, "catalog", {"app_id": "demo"})["ok"])
+        self.rt.install_catalog_app.assert_called_once_with("demo")
+
+    def test_refuses_unknown_running_or_busy(self):
+        self.assertFalse(self.handle(self.rt, "catalog", {"app_id": "nope"})["ok"])
+        self.entries["other"] = AppEntry("other", "Other", "os", running=True)
+        self.assertFalse(self.handle(self.rt, "catalog", {"app_id": "other"})["ok"])
+        self.rt.tasks.busy.return_value = True
+        self.assertFalse(self.handle(self.rt, "catalog", {"app_id": "demo"})["ok"])
+        self.rt.install_catalog_app.assert_not_called()
+
+
+class RadioRequirementTests(AppInstallerScreenTests):
+    """Catalogue apps that need the LoRa radio say so before installing."""
+
+    def setUp(self):
+        super().setUp()
+        self.item["requires"] = ["radio"]
+        self.os.run_task = lambda name, fn, done, error=None, lane="quick": done(fn())
+
+    def screen(self, problems):
+        with patch("mfruitos.updater.catalog.missing_requirements", return_value=problems):
+            screen = InstallAppScreen(self.os)
+            screen.redraw = Mock()
+            screen.on_show()
+        return screen
+
+    def test_missing_radio_setup_is_shown_and_explained_before_install(self):
+        screen = self.screen(["The radio is not set up"])
+        row = screen.items()[0]
+        self.assertEqual((row.value, row.subtitle), ("Download", "Needs radio setup first"))
+        row.action()
+        dialog = self.os.push.call_args.args[0]
+        self.assertIn("LoRa radio", dialog.message)
+        self.assertEqual(dialog.items()[1].label, "Install")     # still installable
+
+    def test_ready_radio_shows_the_normal_description(self):
+        row = self.screen([]).items()[0]
+        self.assertEqual(row.subtitle, "Example app")
+
+    def test_shipped_catalogue_requirements_are_known(self):
+        from mfruitos.updater import catalog
+        self.catalog.stop()
+        try:
+            catalog.entries.cache_clear()
+            needs = {item["id"]: catalog.requirements(item) for item in catalog.entries()}
+        finally:
+            self.catalog.start()
+        self.assertEqual(needs["whisplay-lora-walkie"], ["radio"])
+        self.assertEqual(needs["whisplay-lora-messenger"], ["radio"])
+        self.assertEqual(needs["whisplay-crypto-dashboard"], [])
+        with self.assertRaises(catalog.CatalogError):
+            catalog.requirements({"id": "x", "requires": ["jetpack"]})

@@ -1,80 +1,72 @@
-# Install, update and downgrade
+# Update, rollback and uninstall
 
-Open **Home → App installer**. Manage installed apps under **Settings → Apps**,
-or open **App installer → Updates** to check their update channels.
+How MFruit OS changes an installed app's version and what it guarantees when
+something fails. Updating MFruit OS itself is in
+[platform installation](../platform/INSTALLATION.md#updating-mfruit-os).
 
-## Curated catalogue and saved apps
+Where to find it on the device: manage apps under **Settings → Apps → app**
+(Updates, Versions, Roll back, Uninstall); **App installer → Updates** checks
+every channel. CLI: `mfruitctl check`, `mfruitctl install`, `mfruitctl sideload`.
 
-Select a catalogue app and confirm **Install** to download its pinned source
-archive. MFruit OS verifies the SHA-256 checksum, prepares its package-local
-Python environment and current SDK, and adds it to Apps after installation.
-The catalogue describes hardware requirements; installing a package does not
-configure or validate radio hardware or Codec2. These snapshots are separate
-from the native release workflow below.
+## The pipeline
 
-An app marked **On device** can be restored with **Add**. Its files and data
-are kept, and restoration does not enable autostart. **Installed** opens app
-management. More repositories are available through **More sources**.
+```text
+CHECK → DOWNLOAD → VERIFY → BACKUP → INSTALL → TEST → ACTIVATE
+```
 
-## Local app packages
+| Step | What happens |
+|---|---|
+| Check | HTTPS URL required; at least 50 MB free |
+| Download | up to `updater.max_download_mb`; SHA-256 computed while downloading |
+| Verify | checksum compared when published (required if `updater.require_checksum`); archive extracted with path, link, special-file and size checks into a work directory; manifest validated; app ID, repository and release version must match the request |
+| Backup | the current version directory is the code backup and is never touched; app `data/` is snapshotted to `backups/data-<version>/` |
+| Install | package moved to `versions/<version>-<random>/`; `persist` paths copied from the previous version; `install.sh` then `update.sh` run |
+| Test | manifest re-validated; entrypoint present; `test` hook run |
+| Activate | atomic swap of the `current` symlink; install record written; daemon registration refreshed |
 
-1. Copy a native MFruit OS app archive (`.tar.gz`, `.tgz`, `.tar`, `.zip`) or
-   package folder containing `manifest.json` into `~/.whisplay-os/inbox/`.
-2. Open **App installer → Local packages**, select the package and confirm.
-3. Wait for the progress screen to finish. The installed app appears in Apps.
+On any failure after Backup: the previous version stays (or becomes again)
+active, the data snapshot is restored if hooks had run, the half-installed
+version is deleted, and the progress screen says *Previous version restored*.
+A failed first install removes the partial app. Older versions beyond
+`updater.keep_versions` (default 2) are pruned after success.
 
-Installing an older package downgrades the app; installing the same version
-reinstalls it. Code is installed into a new version directory, hooks and the
-package test run before activation, and the previous code is retained. App data
-stays in the app's `data/` directory. Failed hooks/tests restore the data snapshot.
-Packages must follow [the app rules](APP_RULES.md); arbitrary source clones with
-standalone, system-wide installers are not native packages.
+## Release channel (native packages)
 
-CLI equivalent: `mfruitctl sideload /absolute/path/to/package.tar.gz`.
-
-## GitHub releases
-
-Use **App installer → More sources** for the configured sources/topic, or run
-`mfruitctl install github.com/owner/repository`. A native app repository needs a
-root manifest and a compatible semantic version release or tag. The manifest
-version must match the selected release. Publishing a Git commit alone does not
-create a downloadable version in this channel.
-
-For installed native apps, open **Settings → Apps → app → Updates** (or select
-it in Software Update). **Versions** selects a release to update, downgrade or
-reinstall. **Roll back** switches to the saved previous installation, even
-without internet. Stop a running app before changing its version.
-
-The updater verifies checksums when supplied and honors the require-checksum
-setting. It refuses incompatible manifests or mismatched app IDs, versions and
-repositories. Keep secrets and mutable data out of release archives.
+**Versions** lists releases; choosing one updates, downgrades or reinstalls.
+**Roll back** switches to the saved previous installation without network.
+Stop a running app before changing its version. The updater refuses
+incompatible manifests and mismatched IDs, versions or repositories.
 
 ## Apps installed as Git checkouts
 
-The updater recognizes the repository containing the app's working directory,
-including a nested app folder and Git worktrees. It fast-forwards a clean branch,
-checks changed Python files, and saves the previous commit for **Roll back**.
-Repeated/no-op and failed updates keep the last successful rollback target.
-Local edits and diverged branches require manual reconciliation; they are never
-silently discarded by an update. Copied folders without Git metadata cannot use
-this channel. Git updates do not install new dependencies or compile app assets;
-follow the app's own instructions when a commit needs those steps.
+For an app whose folder is inside a Git repository (including nested app
+folders and worktrees), the updater fast-forwards a clean branch to
+`origin/<branch>`, byte-compiles changed Python files (a syntax error aborts
+the update), and saves the previous commit for **Roll back**. Local edits and
+diverged branches are never discarded; they require manual reconciliation.
+Git updates do not install new dependencies or build assets; follow the app's
+own instructions when a commit needs that. Folders copied without Git
+metadata cannot use this channel.
 
-## MFruit OS
+## Uninstall
 
-Use **Settings → General → Software Update**. **Versions** selects
-a published version; **Roll back** restores the saved local build and restarts
-the launcher. Local `scripts/install.sh` installations now record the previous
-build as well. Both system update and rollback arm the boot guard.
+*Settings → Apps → app → Uninstall* (after a confirmation that lists what is
+deleted) runs `uninstall.sh`, then deletes the managed app directory —
+**including `data/`** — and its log and run record. Back up data that must
+survive removal first. Disabling an app instead keeps everything.
 
-On the Orange Pi inspected on 2026-09-30, the cached GitHub check reports no
-MFruit OS releases/version tags. ConnectWifi and Messenger are copied folders;
-WalkieTalkie has local modifications. These are distribution/checkout conditions,
-not permissions to overwrite local work. Publish compatible releases for version
-selection, or reconcile an app's Git checkout before expecting remote updates.
-The AI chatbot's nested checkout is now detected, but its local edits are still
-protected.
+## What rollback does not do
 
-Automated package tests cover install → update → downgrade → reinstall, failed
-activation, rollback recovery, persistent data and system boot-guard markers.
-They do not certify every companion app as a native release package.
+- It does not reverse data migrations an `update.sh` performed; only the
+  snapshot taken before the failed install is restored automatically.
+- It does not undo changes an app made outside its managed directory.
+- It does not roll back dependencies installed into a persisted `.venv`.
+
+## Testing updates
+
+Before a release, exercise with disposable data: clean install, reinstall,
+update, a deliberately failing smoke test (expect rollback), manual rollback
+and removal; confirm intended data survives updates and nothing is left
+running ([Testing](TESTING.md#package-lifecycle)). Automated coverage:
+`tests/test_installer.py`, `tests/test_update_flows.py`,
+`tests/test_catalog.py`.

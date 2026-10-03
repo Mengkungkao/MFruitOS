@@ -1,37 +1,36 @@
-# App integration
+# App development
 
-MFruit OS runs apps through whisplay-daemon and provides a managed package,
-launch and update path. The app remains responsible for its own features and
-dependencies; MFruit OS owns registration, foreground lifecycle and package
-activation.
+For people building or integrating applications for MFruit OS. An app is
+normally integrated **without changing MFruit OS**: it ships a manifest, uses
+the MFruit App SDK and goes through the managed package pipeline. The app owns
+its features, data and dependencies; MFruit OS owns registration, launching,
+the foreground lifecycle and package activation.
 
-## Choose a path
+## The app lifecycle and where each stage is documented
 
-| I want to… | Start here |
+| Stage ([Part I §9](../platform/DEVELOPMENT_RULES.md#9-app-integration-contract)) | Document |
 |---|---|
-| Create a new compatible app | [App development guide](../../APP_DEVELOPMENT.md) |
-| Check input, screen, lifecycle and release requirements | [MFruit app rules](../APP_RULES.md) |
-| Start from a working example | [Whisplay app template](../../templates/whisplay-app-template) |
-| Install a local package or use app update/rollback | [App updates](../UPDATES.md) |
-| Install or validate MFruit OS on a device | [Device setup](../DEVICE_SETUP.md) |
+| CREATE | [Getting started](GETTING_STARTED.md) — template, app ID, first run |
+| VALIDATE | [Manifest](MANIFEST.md), [App contract](APP_CONTRACT.md), `scripts/check-app.py` ([Testing](TESTING.md)) |
+| PACKAGE | [Packaging](PACKAGING.md) — layout, hooks, dependencies, data |
+| INSTALL | [Installation](INSTALLATION.md) — catalogue, local packages, GitHub, adopted apps |
+| LAUNCH / RUN / EXIT | [App contract](APP_CONTRACT.md) §1–2, [SDK](SDK.md), [UI guidelines](UI_GUIDELINES.md), platform [lifecycle](../platform/LIFECYCLE.md) |
+| UPDATE / ROLLBACK / UNINSTALL | [Update and rollback](UPDATE_ROLLBACK.md) |
+| PUBLISH | [Publishing](PUBLISHING.md) |
+| Existing apps | [Migrating an existing app](MIGRATING_EXISTING_APP.md) |
 
-## Integration stages
+## Integration levels
 
-1. **Run as an app:** use the daemon's shared framebuffer and event contract;
-   do not take independent ownership of the display, button or keyboard.
-2. **Adopt an existing app:** MFruit OS may launch an existing daemon app, but
-   adoption alone does not make its clone a complete native package.
-3. **Package natively:** add a root `manifest.json`, managed entrypoint,
-   repeatable install/update hooks where needed, and a deterministic smoke test.
-4. **Validate the artifact:** run `scripts/check-app.py`, sideload the exact
-   folder/archive, and test launch, exit, update and rollback. Record physical
-   checks separately from automated results.
-5. **Publish:** make the release tag match the manifest version and include the
-   complete runtime artifact and dependency instructions.
+1. **Adopted daemon app:** an app registered with whisplay-daemon runs inside
+   MFruit OS through the launch gate. This alone does not make it a native
+   package.
+2. **Native package:** root `manifest.json`, managed entrypoint, repeatable
+   hooks, a smoke test, the vendored SDK and the app contract.
+3. **Validated release:** the exact artifact passed `check-app.py`, sideload,
+   launch, exit, update, failed-update rollback and removal with disposable
+   data, and device checks are recorded.
 
-The app guide and rules are the contract. A manifest draft or passing unit
-tests alone does not certify dependency installation, data migration, hardware
-behavior or production readiness. Existing companion-app release gaps are
-listed in [the app development guide](../../APP_DEVELOPMENT.md#existing-companion-release-gaps-2026-09-30).
+A manifest draft or passing unit tests do not certify dependency
+installation, data migration, hardware behavior or production readiness.
 
-[Documentation home](../README.md) · [OS development](../os/README.md) · [Quality](../quality/README.md)
+[Documentation home](../README.md) · [Platform](../platform/README.md) · [Quality](../quality/README.md)

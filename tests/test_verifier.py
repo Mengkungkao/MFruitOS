@@ -111,5 +111,28 @@ class ChecksumTests(TempHomeTestCase):
         self.assertIsNone(expected_from_digest("md5:abc"))
 
 
+
+class PackageDirTests(TempHomeTestCase):
+    def test_ignored_payload_is_neither_checked_nor_copied(self):
+        from mfruitos.updater.verifier import copy_package_dir
+        src = os.path.join(self.tmp, "src")
+        os.makedirs(os.path.join(src, ".git"))
+        os.symlink("/etc", os.path.join(src, ".git", "escape"))
+        with open(os.path.join(src, "run.sh"), "w") as fp:
+            fp.write("#!/bin/sh\n")
+        dest = copy_package_dir(src, os.path.join(self.tmp, "dest"))
+        self.assertEqual(os.listdir(dest), ["run.sh"])
+        self.assertTrue(os.path.islink(os.path.join(src, ".git", "escape")), "source untouched")
+
+    def test_symlinked_directory_must_stay_inside(self):
+        from mfruitos.updater.verifier import check_package_dir
+        src = os.path.join(self.tmp, "src")
+        os.makedirs(os.path.join(src, "app"))
+        os.symlink("app", os.path.join(src, "inside"))
+        check_package_dir(src)
+        os.symlink(self.tmp, os.path.join(src, "home"))
+        with self.assertRaises(VerificationError):
+            check_package_dir(src)
+
 if __name__ == "__main__":
     unittest.main()

@@ -23,7 +23,7 @@ Install options are forwarded unchanged to the existing installer:
   --yes                    installer noninteractive mode (sudo still needs authorization)
 
 Hardware drivers and whisplay-daemon must already be installed and running.
-See docs/DEVICE_SETUP.md for prerequisites, manual setup, tests and recovery.
+See docs/platform/INSTALLATION.md for prerequisites, manual setup, tests and recovery.
 EOF
 }
 

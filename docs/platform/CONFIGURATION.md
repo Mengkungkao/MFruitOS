@@ -44,7 +44,6 @@ python3 -m mfruitos.system.settings --dump-defaults > config/default.json
 | `display.screen_timeout_sec` | 120 | 0, 15, 30, 60, 120, 300, 600 | idle time before the backlight turns off (0 = never) |
 | `display.theme` | `dark` | `dark`, `light` | launcher theme |
 | `display.animation` | `minimal` | `minimal`, `off` | progress-screen animation |
-| `display.clock_24h` | true | bool | **no visible effect**: the 1.2.0 status bar dropped the clock, but the launcher still computes an unused clock text every minute |
 | `button.single_click` | `next` | gesture action | action for a tap |
 | `button.double_click` | `previous` | gesture action | action for 2× |
 | `button.triple_click` | `none` | gesture action | action for 3× |
@@ -66,7 +65,6 @@ python3 -m mfruitos.system.settings --dump-defaults > config/default.json
 | `updater.discovery_topic` | `whisplay-app` | string ≤50 | GitHub topic used by *Discover* |
 | `updater.sources` | `[]` | list of GitHub repositories | extra repositories listed in *More sources* |
 | `system.repository` | `https://github.com/Mengkungkao/MFruitOS` | GitHub repository or empty | where system updates come from |
-| `system.home_title` | `MFruit OS` | string ≤20 | **unused**: validated and saved, but no code reads it since the 1.2.0 status bar change |
 | `system.show_system_pages_on_home` | false | bool | list daemon pages on Home |
 | `developer.enabled` | false | bool | show the Developer settings section |
 | `developer.debug_logging` | false | bool | debug-level logs |
@@ -81,6 +79,16 @@ python3 -m mfruitos.system.settings --dump-defaults > config/default.json
 Gesture actions: `next`, `previous`, `select`, `back`, `home`, `none`. LED
 colours: `off`, `white`, `blue`, `cyan`, `green`, `yellow`, `orange`, `red`,
 `purple`, `pink`.
+
+### Removed keys
+
+Keys from older versions are ignored when loaded (no error) and dropped on the
+next save.
+
+| Key | Removed | Why |
+|---|---|---|
+| `display.clock_24h` | after 1.4.0 (2026-10-02) | the 1.2.0 status bar no longer shows a clock; the Display toggle had no visible effect |
+| `system.home_title` | after 1.4.0 (2026-10-02) | no title row since 1.2.0; nothing read it |
 
 ### Per-app flags
 
@@ -119,10 +127,22 @@ example or log, or include it in a validation record.
 every screen offscreen (the system update TEST step); `--preview` also writes
 PNGs. `mfruitctl help` lists the control commands.
 
+## Shared radio files
+
+`~/.whisplay-os/shared/radio/` (mode 0700, files 0600), owned by the SDK's
+`radio` module ([ADR 0007](ADR/0007-shared-radio-capability.md)):
+
+| File | Written by | Content |
+|---|---|---|
+| `radio.json` | `setup-radio.sh` only | `frequency_mhz`, `air_speed`, `power_dbm`, `net_id`, `port`, `band`, `module`, `provisioned_at`, `schema` |
+| `device.json` | radio apps (first use) | this radio's Device ID (`address`, 1–65534) and `name` |
+| `keys.json` | radio apps | this radio's X25519 key and broadcast key, and each paired radio's keys — **secret** |
+| `contacts.json` | radio apps | names of paired radios |
+
 ## Shipped configuration files
 
 | File | Purpose |
 |---|---|
 | `config/default.json` | generated defaults reference (see above) |
-| `config/catalog.json` | curated App installer catalogue: per app `id`, `name`, `description`, `repository`, pinned `ref`, archive `url`, `sha256`, Python `entry` and `dependencies` ([App installation](../apps/INSTALLATION.md#curated-catalogue)) |
+| `config/catalog.json` | curated App installer catalogue: per app `id`, `name`, `description`, `repository`, pinned `ref`, archive `url`, `sha256`, Python `entry`, `dependencies` and optional `requires` (device capabilities, e.g. `radio`) ([App installation](../apps/INSTALLATION.md#curated-catalogue)) |
 | `manifest.json` | MFruit OS's own system package manifest (`type: system`) |

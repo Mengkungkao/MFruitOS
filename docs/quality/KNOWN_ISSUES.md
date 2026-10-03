@@ -1,49 +1,81 @@
-# Known issues and validation status
+# Known issues
 
-Status below reflects the latest handoff recorded on **2026-10-01**. Recheck
-the current checkout and its tests before treating a status as current.
+Open problems with their status, evidence and next step. Status words follow
+[Part I §20](../platform/DEVELOPMENT_RULES.md#20-quality-status-language).
+Last reviewed **2026-10-02** against `f15afe5` plus that session's working
+tree ([record](records/2026-10-02-baseline-and-launch-window.md)).
 
 ## Open
 
-### Launch-window daemon-page regression
+### KI-2 Application IDs special-cased in platform code
 
-`test_press_during_launch_window_page_is_closed` is timing-sensitive. In a
-full test run it did not always capture the expected `INTRUDER` event, although
-the requested app opened. A targeted rerun passed. The trace indicates that a
-second hold can begin while the daemon still reports MFruit OS in front; the
-existing 0.2-second delay is not a reliable handoff barrier. No lifecycle fix
-was recorded in the handoff.
+`connectwifi` is hard-coded in `launcher/services.py` (no Opening screen),
+`apps/registry.py` (`SETTINGS_APPS`), `launcher/ui/screens/settings.py`,
+`launcher/ui/screens/updater.py` and `provision.py`, contrary to Part I §33.
+Behavior is correct today; the coupling blocks other Wi-Fi apps. Next: decide
+[ADR 0006](../platform/ADR/0006-settings-provider-apps.md) (proposed
+`settings_provider` manifest field), then migrate.
 
-Next: reproduce against the real daemon, synchronize on observed ownership
-state, preserve the intruder-closure assertion, and add a negative control. Do
-not mask the race by extending sleeps or weakening the test. See the
-[launch lifecycle record](../LAUNCH_LIFECYCLE.md) and
-[current handoff](../../CONTINUE.md).
+### KI-3 Duplicated launcher and SDK implementations
 
-### Full suite needs a clean rerun
+Gesture recognition, theme, fonts, RGB565 conversion and Wi-Fi/battery reads
+exist in both `mfruitos/launcher/` / `mfruitos/system/` and `mfruitos/sdk/`.
+Next: converge where behavior is identical, honoring SDK compatibility
+([ADR 0003](../platform/ADR/0003-vendored-sdk-distribution.md)).
 
-The Oct 1 handoff records a 347-test full run with one failure and one error,
-followed by focused passing fixes. The complete suite has not subsequently
-been recorded as passing. Run one real-daemon suite at a time and report skips.
-Successful Pi installation and the 39-screen render self-test are not a
-substitute for the full suite.
+### KI-4 Manifest validation gaps
 
-## Physical checks
+`persist` is validated only during installation (unsafe entries skipped with
+a warning); `branch` and the `app_id` alias are accepted without being part of
+the documented contract until 2026-10-02. Next: validate `persist` in
+`validate_manifest` with a compatibility note ([Manifest](../apps/MANIFEST.md)).
 
-Button feel and gesture handling, physical USB/Bluetooth key routing and
-hotplug, LED appearance, perceived audio/radio behavior and reboot appearance
-must be marked verified only after someone observes them on the relevant
-hardware. See the [hardware checklist](../HARDWARE_TESTS.md); older physical
-checklists remain historical until new results are recorded.
+### KI-7 Daemon desktop can turn a hold into a tap (external)
 
-## Reporting status
+whisplay-daemon defect, documented as
+[Host API fact 8](../platform/HOST_API.md#whisplay-daemon-facts-the-design-depends-on).
+With the background wrapper installed (default) the desktop ignores the button
+while MFruit OS runs, so users are not affected; tests no longer depend on it.
+Report upstream if the desktop path matters to other users.
 
-Use only these distinctions in documentation and release notes:
+### KI-8 Adopted record left behind after a repair
 
-- **Implemented:** the behavior exists in this source revision.
-- **Automated:** the named test ran and its result is recorded.
-- **Device verified:** the behavior was observed on a named board/build.
-- **Not verified:** the check was not run or required hardware/service was absent.
-- **Planned:** design intent only; do not describe it as a supported feature.
+Repairing a broken adopted app installs a managed package (which `mfruit-run`
+prefers), but the saved original registration in `~/.whisplay-os/adopted/<id>/`
+stays. Uninstalling MFruit OS restores that original, broken registration.
+Next: retire the adopted record when a managed package replaces it, with a test.
 
-[Testing guide](TESTING.md) · [Report template](REPORT_TEMPLATE.md) · [Quality index](README.md)
+### KI-9 Restarting the launcher interrupts a running install
+
+The install pipeline runs on a worker thread; stopping or restarting
+`whisplay-os.service` (or `mfruitctl restart`) during a job kills it, possibly
+in the middle of its own rollback. Observed 2026-10-03 on the Pi: a catalogue
+install was killed during its smoke test, leaving `apps/<id>/versions/<partial>`,
+an empty `data/` and `apps/.work-*`; the registry then showed *Installation
+incomplete*. No data was lost (fresh install) and the next install succeeded
+after the residue was removed. Next: shutdown waits for or refuses to
+interrupt the `jobs` lane (bounded), and start-up removes stale `.work-*`
+directories and never-activated fresh installs with empty data. Until then:
+check `mfruitctl jobs` before restarting.
+
+## Physical checks outstanding
+
+Button feel and gestures, physical USB/Bluetooth key routing and hotplug,
+Bluetooth pairing flows, LED colours, audio/radio behavior and reboot
+appearance of the current build are **NOT VERIFIED**; follow the
+[hardware checklist](VALIDATION.md#hardware-checklist--launch-lifecycle-and-input).
+On the Raspberry Pi, four daemon registrations (Messenger, WalkieTalkie,
+crypto dashboard, AI chatbot) point to checkouts that do not exist there and
+show as broken until those apps are installed.
+
+## Resolved
+
+| Issue | Resolution | Evidence |
+|---|---|---|
+| Launch-window daemon-page test intermittently failing (2026-10-01) | root cause: daemon hold→tap race (KI-7), not MFruit OS; test now synchronizes on observed state; deterministic variant added | 20/20 dev-machine and 10/10 Pi iterations; negative control fails ([record](records/2026-10-02-baseline-and-launch-window.md)) |
+| KI-1 Sideloaded package folders skipped the archive safety checks: escaping symlinks were copied, no limits applied, set-uid bits kept | `copy_package_dir` applies the archive rules before copying and normalizes permissions | 4 installer + 2 verifier regression tests; all 4 installer tests failed before the fix (2026-10-02) |
+| KI-6 Tests touched real input devices (test runtimes tried to grab the machine's keyboards) | `Runtime(input_dir=…)`; every test runtime uses an empty directory | `test_runtimes_under_test_never_open_real_keyboards` (2026-10-02) |
+| KI-5 Settings with no effect (`system.home_title`; `display.clock_24h` and its Display toggle) | keys, toggle and the per-minute clock tick removed; old files still load | `test_removed_keys_in_an_old_file_load_cleanly_and_are_dropped` (2026-10-02) |
+| Plain Whisplay apps (Jump Game, Flappy Bird) could not be played or left with a keyboard: MFruit OS 1.4.0 holds the keyboards, so their own `/dev/input` reader and the daemon's Esc got nothing (reported by the user, 2026-10-03) | keyboard bridge: Esc through the daemon's Esc handling, Space as the app's button (`mfruit.app.key`) | `test_keys_reach_an_app_that_does_not_use_the_key_hub` (real daemon; failed before the fix) |
+| App installer showed broken catalogue apps (registered, folder missing) as *Installed* with no way to fix them | such rows show **Repair** and reinstall from the pinned catalogue source | `test_broken_catalogue_app_is_offered_for_repair_not_shown_installed` (failed before the fix) |
+| Full suite not recorded as passing after 2026-10-01 | full suite rerun | 349/349 on the dev machine and on the Raspberry Pi, 0 skipped (same record) |

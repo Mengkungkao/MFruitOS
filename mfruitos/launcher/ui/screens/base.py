@@ -1,6 +1,6 @@
 """Screen base classes.
 
-Every screen answers the four UI questions from CLAUDE.md §9:
+Every screen answers the four UI questions (docs/platform/DEVELOPMENT_RULES.md §7):
 where am I (page name in the status bar), what is selected (highlight), what
 happens when I press (footer hints) and how do I go back (footer + a Back row).
 """

@@ -220,6 +220,37 @@ registrations and the daemon desktop. `whisplay-daemon` and apps registered
 directly with it are never removed. Use `--purge` only when managed apps and
 their data are intentionally being discarded.
 
+## Radio setup (LoRa apps)
+
+Apps such as WalkieTalkie and Messenger need the Waveshare SX126X LoRa HAT set
+up once per device ([ADR 0007](ADR/0007-shared-radio-capability.md)). Remove
+the HAT's M0/M1 jumpers first (those pins are also the Whisplay LCD's). Then,
+over SSH as your normal user:
+
+```bash
+bash ~/.whisplay-os/system/current/scripts/setup-radio.sh --check   # report only
+bash ~/.whisplay-os/system/current/scripts/setup-radio.sh           # asks before each change
+```
+
+Options: `--band au915|eu868|us915` (default `au915`, 920 MHz), `--frequency`,
+`--air-speed` (default 2400), `--yes`. Use a band that is legal where you
+are, and the same band, frequency and air rate on every radio.
+
+| Change | Why | Undo |
+|---|---|---|
+| `apt-get install python3-serial python3-cryptography python3-numpy python3-yaml alsa-utils gpiod python3-libgpiod libcodec2-*` | serial port, encryption, voice codec, mode pins | shared system packages; remove by hand if unwanted |
+| Raspberry Pi: `enable_uart=1` in `config.txt`; serial console removed from `cmdline.txt` (backups `*.mfruit.bak`); `serial-getty@ttyS0` disabled | the HAT talks on `/dev/ttyS0`; a console there corrupts packets | restore the `.mfruit.bak` files |
+| Orange Pi: `console=` (and `extraargs`) in `orangepiEnv.txt`/`armbianEnv.txt` (backup `*.mfruit.bak`); `serial-getty@ttyS0` masked | same | restore the backup, `systemctl unmask serial-getty@ttyS0` |
+| user added to `dialout` | apps open the serial port | `sudo gpasswd -d $USER dialout` |
+| module registers written (persistent): band frequency, air rate, power | every radio must match | run the setup again with other values |
+| `~/.whisplay-os/shared/radio/radio.json` | the settings every radio app reads | written again by the next setup |
+
+UART and console changes need a reboot; the script stops, asks to reboot, and
+continues provisioning when run again. Provisioning stops whisplay-daemon for
+a few seconds (closing an open app). Afterwards the launcher is restarted
+unless an install job is running. `mfruitctl catalog` then shows the radio
+apps without missing requirements.
+
 ## Upgrade notes
 
 **1.4.0:** update all keyboard apps to SDK 1.2.0 before restarting MFruit OS.

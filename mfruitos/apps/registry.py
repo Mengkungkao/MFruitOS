@@ -225,6 +225,8 @@ class AppRegistry:
             running=bool(info.get("running")),
             foreground=bool(info.get("foreground")),
             adopted=bool(original),
+            disable_esc_exit_key=bool(info.get("disable_esc_exit_key",
+                                               config.get("disable_esc_exit_key", False))),
         )
         if config:
             if not entry.launch_command:

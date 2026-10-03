@@ -112,8 +112,6 @@ class DisplayScreen(ListScreen):
             Item("Animation", lambda: os.push(choice(os, "Animation", "display.animation",
                                                      [("minimal", "Minimal"), ("off", "Off")])),
                  kind="nav", value=s.get("display.animation").title()),
-            Item("24-hour clock", lambda: s.set("display.clock_24h", not s.get("display.clock_24h")),
-                 kind="toggle", value=s.get("display.clock_24h")),
             back_item(),
         ]
 

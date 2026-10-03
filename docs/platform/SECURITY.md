@@ -21,6 +21,7 @@ do not contain a malicious app once it runs
 |---|---|---|
 | Manifest | rejected as a whole on any invalid field; 64 KiB limit; IDs restricted to `[a-z0-9][a-z0-9_-]{0,47}`; reserved IDs refused; only `mfruit-os` may be `type: system`; entrypoint, icon and test must be safe relative paths inside the package; repository must match the download source; `min_os_version` enforced | `apps/manifest.py` |
 | Archive extraction | no absolute paths, `..` or NUL in names; symlinks and hard links must stay inside the package (zip: no symlinks at all); device files and FIFOs refused; at most 20,000 files and 600 MB extracted; set-uid/set-gid and group/world-write bits removed | `updater/verifier.py` (`safe_extract`) |
+| Sideloaded folders | the same rules checked before copying (relative in-package symlinks only, no special files, the same limits; `.git`, `__pycache__` and `*.pyc` are not part of the payload); permission bits normalized after copying; the source folder is never moved or changed | `updater/verifier.py` (`copy_package_dir`) |
 | Downloads | HTTPS only; size limit `updater.max_download_mb`; SHA-256 verified when the release publishes one (asset digest, `SHA256SUMS`, `<asset>.sha256`); `updater.require_checksum` refuses unverified downloads; catalogue entries pinned to a commit and SHA-256 | `updater/installer.py`, `github.py`, `catalog.py` |
 | Activation | staged in a new version directory; the running version is never modified; activation is an atomic symlink swap after hooks and the smoke test pass | `updater/installer.py`, `rollback.py` |
 | Package hooks | run as the user, stdin `/dev/null`, new session, allowlisted environment (`PATH`, `HOME`, `USER`, `LOGNAME`, `LANG`, `LC_ALL`, `XDG_RUNTIME_DIR` plus the `WHISPLAY_*` contract), timeouts 15 min (install/update) and 2 min (test/uninstall) | `updater/installer.py` |
@@ -38,9 +39,6 @@ planned. Do not describe them as protected.
 - **No isolation:** an app can read and write anything the user can, including
   other apps' data and `settings.json` (which may hold `updater.github_token`
   in plain text).
-- **Sideloaded folders** are copied without the archive checks above (escaping
-  symlinks, special files, size and file-count limits). A FIFO in such a folder
-  can block the install worker.
 - **`persist` paths** are checked only during installation; unsafe entries are
   skipped with a warning instead of rejecting the manifest.
 - **Unverified downloads** are accepted by default when a release publishes no
@@ -50,6 +48,9 @@ planned. Do not describe them as protected.
 - **The daemon socket** (`/tmp/whisplay-daemon.sock`) is whisplay-daemon's; any
   local process allowed to connect can request focus, LED or backlight
   changes.
+- **Shared radio keys** (`shared/radio/keys.json`, 0600) are readable by every
+  app running as the user, like all user files; any app can therefore read or
+  impersonate this radio's encrypted traffic.
 - **Capabilities/permissions** for apps are PLANNED only; no manifest field
   restricts what an app may do.
 

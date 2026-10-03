@@ -133,7 +133,7 @@ class AppUpdateScreen(ListScreen):
                          subtitle="Not a git checkout or a package"),
                     Item("How to enable updates", lambda: os.show_message(
                         "Updates", "Give the app a manifest.json and publish GitHub releases, "
-                        "or install it from a git clone. See APP_DEVELOPMENT.md."), kind="nav"),
+                        "or install it from a git clone. See docs/apps/PUBLISHING.md."), kind="nav"),
                     Item("Check now", lambda: os.check_updates(), icon="refresh"),
                     back_item()]
         rows = [Item("Tracking", kind="info", value=info.installed),
@@ -245,6 +245,25 @@ class VersionListScreen(ListScreen):
 class InstallAppScreen(ListScreen):
     title = "App installer"
 
+    def __init__(self, os):
+        super().__init__(os)
+        self.missing: dict = {}          # app id -> device requirements still missing
+
+    def on_show(self) -> None:
+        from mfruitos.updater import catalog
+        needing = [item for item in catalog.entries() if item.get("requires")]
+        if not needing:
+            return
+        home = getattr(getattr(self.os, "paths", None), "home", None)
+
+        def check():
+            return {item["id"]: catalog.missing_requirements(item, home) for item in needing}
+
+        def done(missing):
+            self.missing = missing
+            self.redraw()
+        self.os.run_task("app-requirements", check, done, lambda exc: None)
+
     def items(self) -> list[Item]:
         from mfruitos.updater import catalog
         os = self.os
@@ -259,12 +278,19 @@ class InstallAppScreen(ListScreen):
         rows = []
         for app_id, item in entries.items():
             saved = local.get(app_id)
-            present = saved is not None and not saved.broken
-            added = app_id in installed
+            # Only catalogue apps reach here broken (saved apps are listed when intact).
+            broken = saved is not None and bool(saved.broken)
+            present = saved is not None and not broken
+            added = app_id in installed and not broken
             rows.append(Item(item['name'],
-                lambda i=item, p=present, a=added: self._pick(i, p, a), icon="package",
-                value="Installed" if added else "On device" if present else "Download",
-                subtitle=item['description'], tone="success" if added else None))
+                lambda i=item, p=present, a=added, b=broken: self._pick(i, p, a, b),
+                icon="package",
+                value="Installed" if added else "On device" if present else
+                "Repair" if broken else "Download",
+                subtitle="App files are missing" if broken else
+                "Needs radio setup first" if self.missing.get(app_id) and not added else
+                item['description'],
+                tone="success" if added else "warning" if broken else None))
         rows += [
             Item("More sources", lambda: os.push(DiscoverScreen(os)), kind="nav", icon="search"),
             Item("Local packages", lambda: os.push(LocalPackagesScreen(os)), kind="nav", icon="package"),
@@ -273,16 +299,24 @@ class InstallAppScreen(ListScreen):
         ]
         return rows
 
-    def _pick(self, item: dict, saved: bool, installed: bool) -> None:
+    def _pick(self, item: dict, saved: bool, installed: bool, broken: bool = False) -> None:
         os = self.os
         if installed:
             from mfruitos.launcher.ui.screens.apps import AppDetailScreen
             os.push(AppDetailScreen(os, item['id']))
             return
+        needs = (" It needs the LoRa radio, which is not set up yet: run "
+                 "setup-radio.sh once over SSH (you can do it afterwards)."
+                 if self.missing.get(item['id']) else "")
+        if broken:
+            os.push(confirm(os, item['name'], "This app is registered but its files are missing. "
+                            "Download and install it again? Its settings are kept." + needs,
+                            "Repair", lambda: os.install_catalog_app(item['id']), danger=False))
+            return
         action = (lambda: os.restore_catalog_app(item['id'])) if saved else (
             lambda: os.install_catalog_app(item['id']))
         message = ("Add the saved app to your Apps menu. Its files and data are kept." if saved else
-                   "Download and install this app. It will appear in Apps when finished.")
+                   "Download and install this app. It will appear in Apps when finished." + needs)
         os.push(confirm(os, item['name'], message, "Add" if saved else "Install", action, danger=False))
 
 

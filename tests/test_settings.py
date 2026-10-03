@@ -110,6 +110,22 @@ class SettingsTests(TempHomeTestCase):
         self.assertTrue(again.get("apps.clean_menu"))
         self.assertEqual(again.get("apps.installed_ids"), ["a", "b"])
 
+    def test_removed_keys_in_an_old_file_load_cleanly_and_are_dropped(self):
+        # display.clock_24h and system.home_title were removed (KI-5); files
+        # written by older versions must still load without errors.
+        self.write_json(self.paths.settings_file, {
+            "schema": 1, "display": {"clock_24h": False, "brightness": 40},
+            "system": {"home_title": "Old title"}})
+        settings = self.new()
+        self.assertEqual(settings.load_errors, [])
+        self.assertEqual(settings.get("display.brightness"), 40)
+        settings.set("display.brightness", 50)
+        settings.save()
+        with open(self.paths.settings_file) as fp:
+            saved = json.load(fp)
+        self.assertNotIn("clock_24h", saved["display"])
+        self.assertNotIn("home_title", saved["system"])
+
     def test_autosave_hook_called(self):
         calls = []
         settings = Settings(self.paths.settings_file, autosave=lambda: calls.append(1))

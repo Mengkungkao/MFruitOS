@@ -18,7 +18,14 @@ behaviours *only while MFruit OS is running* (MFruit OS holds an flock on
 * when an app (or MFruit OS) gives up the screen, its final frame is drawn
   first, so what the user saw last stays up until the next owner draws.
 
-Hardware, app registration, focus, events and the daemon's own pages
+One hardware change applies always, MFruit OS running or not: after every
+data transfer to the LCD the data/command line is parked low
+(``park_dc_low``). On a stacked SX126X LoRa HAT that line is the module's M1;
+upstream leaves it high, which parks the radio in configuration mode where it
+neither sends nor hears. The display samples DC only while SPI clocks, so it
+cannot tell.
+
+Other hardware, app registration, focus, events and the daemon's own pages
 (WiFi, Bluetooth, Volume, Power) are untouched. When MFruit OS is not
 running — or the daemon code does not look as expected — the daemon behaves
 exactly as usual, so the device is never left without a user interface.
@@ -170,6 +177,8 @@ def apply(module, lock_path: str, log=print, startup_grace: float = 0) -> list[s
         original_command = cls.handle_command
 
         def handle_command(self, request, conn):
+            if request.get("cmd") == "mfruit.app.key":
+                return app_key(self, request)
             if request.get("cmd") != "mfruit.page.key":
                 return original_command(self, request, conn)
             payload = request.get("payload") or {}
@@ -191,8 +200,65 @@ def apply(module, lock_path: str, log=print, startup_grace: float = 0) -> list[s
                     return {"ok": False, "error": "unsupported key"}, False
                 self._handle_keyboard_action(action)
                 return {"ok": True, "payload": {}}, False
+
+        def app_key(self, request):
+            """A key for a foreground app that does not use MFruit OS's key hub.
+
+            MFruit OS holds every keyboard, so such an app (for example the
+            Whisplay Jump and Flappy Bird examples, which read Space from
+            /dev/input as their button) and the daemon's own Esc handling would
+            receive nothing. Esc goes through the daemon's keyboard action
+            (closes the app unless it set disable_esc_exit_key); Space reaches
+            the app as its button, exactly as its own keyboard listener would.
+            """
+            payload = request.get("payload") or {}
+            if not isinstance(payload, dict):
+                return {"ok": False, "error": "invalid key payload"}, False
+            with self.state_lock:
+                app_id = payload.get("app_id")
+                app = self.apps.get(app_id) if isinstance(app_id, str) else None
+                if (request.get("version", 1) != 1 or not mfruit_running() or self._screen_locked
+                        or app is None or self.foreground_app_id != app_id
+                        or self.internal_apps.is_internal_app(app_id)):
+                    return {"ok": False, "error": "app does not own input"}, False
+                value, action = payload.get("value"), payload.get("action")
+                if value == "escape" and action == 1:
+                    self._handle_keyboard_action("cancel")
+                elif value == "space" and action in (0, 1):
+                    event = "button_pressed" if action == 1 else "button_released"
+                    self.event_broadcaster.broadcast(event, {"app_id": app_id}, app_id=app_id)
+                else:
+                    return {"ok": False, "error": "unsupported key"}, False
+                return {"ok": True, "payload": {}}, False
         cls.handle_command = handle_command
         patched.append("handle_command")
+    return patched
+
+
+def park_dc_low(module) -> list[str]:
+    """Lower ``WhisplayBoard.DC_PIN`` after each LCD data transfer.
+
+    Same change as WalkieTalkie's docs/whisplay-dc-fix.patch, applied here so
+    the Whisplay checkout stays unmodified. A checkout that already lowers DC
+    gets one redundant GPIO write per transfer. Returns the patched methods.
+    """
+    cls = getattr(module, "WhisplayBoard", None)
+    if cls is None or not hasattr(cls, "DC_PIN") or not hasattr(cls, "_gpio_output"):
+        return []
+    patched: list[str] = []
+    for name in ("_send_data", "_send_data_bytes"):
+        original = getattr(cls, name, None)
+        if original is None or getattr(original, "_mfruit_dc_parked", False):
+            continue
+
+        def parked(self, *args, _original=original, **kwargs):
+            try:
+                return _original(self, *args, **kwargs)
+            finally:
+                self._gpio_output(self.DC_PIN, 0)
+        parked._mfruit_dc_parked = True
+        setattr(cls, name, parked)
+        patched.append(name)
     return patched
 
 
@@ -214,6 +280,7 @@ def main(argv=None) -> int:
         runpy.run_path(sys.argv[0], run_name="__main__")
         return 0
     patched = apply(daemon, args.lock, startup_grace=30)
+    patched += park_dc_low(sys.modules.get("whisplay"))
     print(f"[mfruit] daemon user interface in the background while MFruit OS runs "
           f"(patched: {', '.join(patched)})", flush=True)
 

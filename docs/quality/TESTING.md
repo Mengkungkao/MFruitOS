@@ -1,68 +1,69 @@
-# Testing and validation
+# Testing MFruit OS
 
-Run commands from the MFruit OS repository root unless noted. Use Linux for
-shell, process, socket, permission and real-daemon integration behavior. A
-Windows-only run can validate portable code, but it is not Linux or device
-certification.
+How to test the platform. Testing an app is in [apps/TESTING.md](../apps/TESTING.md);
+physical validation and records are in [Validation](VALIDATION.md).
 
-## Local checks
+Run commands from the repository root on Linux. Linux is required for the
+process, socket, shell and real-daemon paths; a Windows-only run is not Linux
+or device evidence.
 
-```bash
-PYTHONDONTWRITEBYTECODE=1 python3 -m mfruitos --help
-PYTHONDONTWRITEBYTECODE=1 python3 -m mfruitos --self-test
-PYTHONDONTWRITEBYTECODE=1 python3 -m mfruitos --preview /tmp/mfruit-preview
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests
-```
-
-Self-test imports the application and renders screens without taking hardware
-focus. Preview writes frames for visual review. Neither is an interactive
-headless launcher or a physical test.
-
-## Focused and integration checks
-
-Run the narrowest relevant test first, then the full suite for shared lifecycle,
-input, package or installer changes. Tests that rely on daemon semantics use
-the real-daemon harness under `tests/real_daemon/`. Set `WHISPLAY_SRC` when the
-compatible Whisplay checkout is not in a default test location.
+## One command
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_application_manager.py
-PYTHONDONTWRITEBYTECODE=1 WHISPLAY_SRC=/path/to/Whisplay python3 -m unittest discover -s tests -v
+bash scripts/check.sh            # what CI runs
+bash scripts/check.sh --quick    # skip the full unit suite
 ```
 
-Use the actual test module relevant to the change. Never run two real-daemon
-test runs simultaneously: they share fake-app cleanup. For timing-sensitive
-regressions, repeat the focused test and retain the negative control that proves
-the test fails when the guard is removed. Do not claim a full-suite pass from a
-focused run; list skips and unavailable dependencies.
+It runs: Python syntax for 3.9, the unit and integration suite (real-daemon
+tests run when a Whisplay checkout is found), the offscreen self-test, shell
+syntax, the template package preflight, the SDK copy check, the Markdown link
+check and whitespace checks.
 
-## App package checks
+## The levels ([Part I §19](../platform/DEVELOPMENT_RULES.md#19-test-pyramid))
 
-From the repository root, check the exact package directory before testing it
-on a device:
+| Level | What | Where | Hardware |
+|---|---|---|---|
+| 1 Unit | manifest, settings, versions, verifier, gestures, application manager, SDK | most `tests/test_*.py` | none |
+| 2 Integration | runtime with fakes: focus, screens, registry, provisioning, installer flows | `test_runtime.py`, `test_focus.py`, `test_screen_services.py`, … with `fake_daemon.py` | none |
+| 3 Real host contract | the real whisplay-daemon code with a simulated board and fake apps | `test_launch_lifecycle.py`, `test_background_ui.py` (`tests/real_daemon/`) | none; needs a Whisplay checkout |
+| 4 Package lifecycle | install, update, failed update, rollback, uninstall, installer reruns with disposable homes | `test_installer.py`, `test_update_flows.py`, `test_catalog.py`, `test_install_setup.py`, `test_device_setup.py` | none |
+| 5 Device | display, button, keyboard, Bluetooth, audio, radio, LED, reboot | [Validation](VALIDATION.md) | the board |
+
+## Commands
 
 ```bash
-python3 scripts/check-app.py templates/whisplay-app-template
-bash scripts/sdk-sync.sh /path/to/app --check
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests            # full suite
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_manifest.py
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_launch_lifecycle.py -k launch_window
+PYTHONDONTWRITEBYTECODE=1 python3 -m mfruitos --self-test                   # import + render every screen
+PYTHONDONTWRITEBYTECODE=1 python3 -m mfruitos --preview /tmp/mfruit-preview # write screen PNGs
 ```
 
-Then sideload and test the actual package through install, launch, exit, update,
-failed smoke-test rollback and removal using disposable data. Static checks do
-not run package hooks or certify app behavior. Follow the [app integration
-guide](../apps/README.md) and [device setup guide](../DEVICE_SETUP.md).
+`--self-test` and `--preview` render offline; they are not an interactive
+headless launcher and not a physical test.
 
-## Hardware validation
+### Real-daemon tests
 
-Use [the hardware checklist](../HARDWARE_TESTS.md) on each target board. Record
-button, keyboard, display, LED, audio and radio checks separately. A software
-key event, screenshot, framebuffer capture or SSH health check cannot stand in
-for a physical observation.
+They need a compatible Whisplay checkout, found at `WHISPLAY_SRC`,
+`~/Whisplay` or `~/ai-chatbot/Whisplay`; without one they are **skipped**
+(report skips). CI clones a pinned upstream revision. **Never run two
+real-daemon suites at once** on one machine: they share fake-app clean-up.
+These tests start the launcher in-process with an empty input-device
+directory (`helpers.NO_INPUT_DEVICES`), so they never touch the machine's
+keyboards.
 
-## Record results
+Record the Whisplay revision with results; daemon semantics differ between
+builds ([Host API](../platform/HOST_API.md#whisplay-daemon-facts-the-design-depends-on)).
 
-Use the [quality report template](REPORT_TEMPLATE.md). Include revision,
-platform/runtime versions, exact commands, totals, skips, logs and outstanding
-manual checks. Keep the active investigation in [known issues](KNOWN_ISSUES.md)
-and use dated reports for completed evidence.
+## Timing-sensitive tests
 
-[Quality index](README.md) · [OS development workflow](../os/DEVELOPMENT.md)
+Synchronize on observable state (daemon state, session state, files), never on
+a sleep ([Regression policy](REGRESSION_POLICY.md)). Before calling a timing
+test stable, repeat it (for example 20 iterations) and record the counts.
+
+## Reporting results
+
+State the revision, machine, Python/Pillow/daemon versions, the exact command,
+totals and skips. A focused pass is not a full-suite pass; an automated pass
+is not device verification. Durable results go into a
+[dated record](records/README.md).

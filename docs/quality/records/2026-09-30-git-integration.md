@@ -89,7 +89,7 @@ Orange Pi SSH health checks show Home/IDLE, keyboard event3, both services activ
 launcher PID 24012 and zero restarts. The isolated chatbot Node build and
 interrupted-reply regression passed there. No production restart or redeployment
 was needed for these documentation/history changes. The prior full device test
-run and deployment are recorded in [the validation report](VALIDATION_2026-09-30.md).
+run and deployment are recorded in [the validation report](2026-09-30-validation.md).
 
 Post-merge logs: `/tmp/mfruit-merge-*-tests.log` and
 `/tmp/mfruit-merge-device-check.log`. Physical button, keyboard, Bluetooth pairing,

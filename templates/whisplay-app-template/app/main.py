@@ -6,7 +6,7 @@
     hold, release     Enter               reset to 0
     4 clicks          Esc                 leave the app, back to MFruit OS
 
-It shows how an MFruit OS app is put together (docs/APP_RULES.md in the
+It shows how an MFruit OS app is put together (docs/apps/APP_CONTRACT.md in the
 MFruit OS repository):
 
 * All input goes through mfruit_sdk.input.InputController -- the button and

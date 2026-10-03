@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 import os
-import time
 from typing import Any, Callable
 
 from mfruitos import OS_APP_ID, OS_NAME
@@ -410,8 +409,3 @@ class ScreenServices:
     def flush_settings(self) -> None:
         if self.settings.dirty:
             self.settings.save()
-
-    @staticmethod
-    def now_text(clock_24h: bool) -> str:
-        return time.strftime("%H:%M" if clock_24h else "%I:%M").lstrip("0") if not clock_24h \
-            else time.strftime("%H:%M")

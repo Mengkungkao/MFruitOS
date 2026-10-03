@@ -13,7 +13,7 @@ ACTIONS = ("next", "previous", "select", "back", "home")
 # Keyboard key -> its Linux key code, for "key": a press and release through
 # the same path a real keyboard takes (Runtime._on_key).
 KEY_CODES = {"up": 103, "down": 108, "left": 105, "right": 106, "tab": 15, "enter": 28,
-             "escape": 1, "home": 102}
+             "escape": 1, "home": 102, "space": 57}
 
 
 def handle(rt, cmd: str, args: dict) -> dict:
@@ -131,6 +131,37 @@ def _sideload(rt, args):
     return {"ok": True, "message": "install started; progress is shown on the device"}
 
 
+def _catalog(rt, args):
+    """List the curated catalogue, or install/repair one entry (the App
+    installer's Install and Repair, from a shell)."""
+    from mfruitos.updater import catalog
+    app_id = args.get("app_id", "")
+    if not app_id:
+        rows = []
+        home = getattr(getattr(rt, "paths", None), "home", None)
+        for item in catalog.entries():
+            entry = rt.registry.get(item["id"])
+            status = "available" if entry is None else "broken" if entry.broken else "installed"
+            rows.append({"id": item["id"], "name": item["name"], "status": status,
+                         "detail": entry.broken if entry is not None and entry.broken else "",
+                         "requires": catalog.requirements(item),
+                         "missing": catalog.missing_requirements(item, home)})
+        return {"ok": True, "catalog": rows}
+    try:
+        catalog.get(app_id)
+    except catalog.CatalogError as exc:
+        return {"ok": False, "error": str(exc)}
+    entry = rt.registry.get(app_id)
+    if entry is not None and entry.running:
+        return {"ok": False, "error": f"{app_id} is running; stop it first"}
+    if rt.tasks.busy("jobs"):
+        return {"ok": False, "error": f"busy: {rt.tasks.active.get('jobs')}"}
+    rt.router.home()
+    rt.install_catalog_app(app_id)
+    return {"ok": True, "message": "install started; progress is shown on the device; "
+                                   "follow it with 'mfruitctl jobs'"}
+
+
 def _jobs(rt, args):
     return {"ok": True, "active": dict(rt.tasks.active)}
 
@@ -145,5 +176,5 @@ COMMANDS = {
     "action": _action, "button": _button, "key": _key, "screenshot": _screenshot,
     "apps": _apps,
     "launch": _launch, "reload": _reload, "check-updates": _check, "install": _install,
-    "sideload": _sideload, "jobs": _jobs, "restart": _restart,
+    "sideload": _sideload, "catalog": _catalog, "jobs": _jobs, "restart": _restart,
 }

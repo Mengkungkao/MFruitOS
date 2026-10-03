@@ -30,6 +30,9 @@
       "Pillow>=9",
       "numpy>=1.21",
       "cryptography>=3.4"
+    ],
+    "requires": [
+      "radio"
     ]
   },
   {
@@ -46,6 +49,9 @@
       "PyYAML>=6",
       "Pillow>=9",
       "numpy>=1.21"
+    ],
+    "requires": [
+      "radio"
     ]
   }
 ]

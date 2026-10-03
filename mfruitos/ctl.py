@@ -5,12 +5,15 @@
     mfruitctl launch <app_id>         open an app
     mfruitctl install <github repo>   install an app from GitHub (progress on the device)
     mfruitctl sideload <path>         install a local package (.tar.gz/.zip/folder)
+    mfruitctl catalog                 list the curated catalogue (available/installed/broken)
+    mfruitctl catalog <app_id>        install or repair a catalogue app
+    mfruitctl jobs                    show the running install/update job
     mfruitctl check                   check for updates
     mfruitctl reload                  rescan apps
     mfruitctl tap|double|hold|quad    simulate a gesture
     mfruitctl next|prev|select|back   simulate a navigation action
     mfruitctl key up|down|enter|...   simulate a key on a keyboard (up down left right
-                                      tab enter escape home)
+                                      tab enter escape home space)
     mfruitctl screenshot <file.png>   save the current screen
     mfruitctl restart                 restart the launcher
     mfruitctl summon                  bring MFruit OS to the front (daemon desktop entry)
@@ -75,6 +78,8 @@ def main(argv=None) -> int:
         cmd, args = "install", {"repository": rest[0]}
     elif command == "sideload" and rest:
         cmd, args = "sideload", {"path": rest[0]}
+    elif command == "catalog":
+        cmd, args = "catalog", {"app_id": rest[0] if rest else ""}
     elif command == "screenshot":
         cmd, args = "screenshot", {"path": rest[0] if rest else "/tmp/mfruit-screen.png"}
     elif command == "check":

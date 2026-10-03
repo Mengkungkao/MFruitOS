@@ -30,8 +30,8 @@ from mfruitos.paths import Paths, is_valid_app_id
 from mfruitos.system.settings import atomic_write_json
 from mfruitos.updater import rollback
 from mfruitos.updater.github import GitHubError
-from mfruitos.updater.verifier import (VerificationError, safe_extract, sha256_file,
-                                       verify_sha256)
+from mfruitos.updater.verifier import (VerificationError, copy_package_dir, safe_extract,
+                                       sha256_file, verify_sha256)
 from mfruitos.updater.version import parse_version
 
 log = logging.getLogger("mfruitos.updater.installer")
@@ -282,10 +282,8 @@ class _Job:
                 raise InstallError("verify", "Release has no checksum and checksums are required")
             self.warnings.append("No checksum published; integrity relies on HTTPS")
         if os.path.isdir(self.archive):
-            # Sideloaded folder: copy it, never move the user's source directory.
-            self.package_dir = os.path.join(self.work, "pkg")
-            shutil.copytree(self.archive, self.package_dir, symlinks=True,
-                            ignore=shutil.ignore_patterns(".git", "__pycache__", "*.pyc"))
+            # Sideloaded folder: checked like an archive, copied, never moved.
+            self.package_dir = copy_package_dir(self.archive, os.path.join(self.work, "pkg"))
         else:
             self.package_dir = safe_extract(self.archive, os.path.join(self.work, "pkg"))
         if self.req.catalog_id:

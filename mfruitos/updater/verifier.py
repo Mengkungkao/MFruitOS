@@ -3,7 +3,8 @@
 Archives from the internet are untrusted. Extraction rejects absolute paths,
 ``..`` traversal, links that escape the destination, device files and FIFOs,
 and enforces file-count and size limits. Set-uid/set-gid bits and
-group/other write permissions are stripped.
+group/other write permissions are stripped. Sideloaded package folders get the
+same rules before they are copied (``copy_package_dir``).
 """
 
 from __future__ import annotations
@@ -156,13 +157,18 @@ def _make_link(dest: str, name: str, link: str) -> None:
         os.makedirs(os.path.dirname(target), exist_ok=True)
         shutil.copy2(source, target)
         return
+    _check_symlink(name, link, "archive")
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    os.symlink(link, target)
+
+
+def _check_symlink(name: str, link: str, where: str) -> None:
+    """A package symlink must be relative and resolve inside the package."""
     if os.path.isabs(link):
-        raise VerificationError(f"absolute symlink in archive: {name!r} -> {link!r}")
+        raise VerificationError(f"absolute symlink in {where}: {name!r} -> {link!r}")
     resolved = os.path.normpath(os.path.join(os.path.dirname(name), link))
     if resolved.startswith("..") or os.path.isabs(resolved):
         raise VerificationError(f"symlink escapes the package: {name!r} -> {link!r}")
-    os.makedirs(os.path.dirname(target), exist_ok=True)
-    os.symlink(link, target)
 
 
 def _extract_zip(archive: str, dest: str) -> None:
@@ -192,3 +198,50 @@ def _extract_zip(archive: str, dest: str) -> None:
                 os.chmod(target, _safe_mode(mode or 0o644, False))
     except zipfile.BadZipFile as exc:
         raise VerificationError(f"not a valid zip archive: {exc}") from exc
+
+
+# Not part of a package payload when a folder is sideloaded.
+COPY_IGNORED = (".git", "__pycache__")
+
+
+def _copy_ignored(name: str) -> bool:
+    return name in COPY_IGNORED or name.endswith(".pyc")
+
+
+def check_package_dir(source: str) -> None:
+    """Apply the archive rules to a package folder: links stay inside, no
+    special files, file-count and size limits. Nothing is opened or followed."""
+    root = os.path.realpath(source)
+    count = total = 0
+    for folder, dirs, names in os.walk(root):
+        dirs[:] = [d for d in dirs if not _copy_ignored(d)]
+        for name in dirs + [n for n in names if not _copy_ignored(n)]:
+            path = os.path.join(folder, name)
+            relative = os.path.relpath(path, root)
+            count += 1
+            if count > MAX_FILES:
+                raise VerificationError("package has too many files")
+            info = os.lstat(path)
+            if stat.S_ISLNK(info.st_mode):
+                _check_symlink(relative, os.readlink(path), "package folder")
+            elif stat.S_ISREG(info.st_mode):
+                total += info.st_size
+                if total > MAX_TOTAL_BYTES:
+                    raise VerificationError("package is too large")
+            elif not stat.S_ISDIR(info.st_mode):
+                raise VerificationError(f"package contains a special file: {relative!r}")
+
+
+def copy_package_dir(source: str, dest: str) -> str:
+    """Copy a sideloaded package folder into ``dest`` (the source is never moved
+    or changed) after ``check_package_dir``; strip unsafe permission bits."""
+    check_package_dir(source)
+    shutil.copytree(source, dest, symlinks=True,
+                    ignore=lambda _folder, names: [n for n in names if _copy_ignored(n)])
+    for folder, dirs, names in os.walk(dest):
+        for name in dirs + names:
+            path = os.path.join(folder, name)
+            info = os.lstat(path)
+            if not stat.S_ISLNK(info.st_mode):
+                os.chmod(path, _safe_mode(info.st_mode, stat.S_ISDIR(info.st_mode)))
+    return dest
