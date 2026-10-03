@@ -489,3 +489,25 @@ class SystemUpdateTests(TempHomeTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class InUseTests(InstallerTestBase):
+    """Installing over an app that is open is refused (found with RadioConnect)."""
+
+    def test_an_open_app_is_not_installed_over_and_a_closed_one_is(self):
+        self.install("1.0.0")
+        self.installer.in_use = lambda app_id: app_id == "weather"
+        with self.assertRaises(InstallError) as ctx:
+            self.install("1.1.0", mode="update")
+        self.assertEqual(ctx.exception.step, "check")
+        self.assertIn("is open", ctx.exception.message)
+        self.assertEqual(self.current_version(), "1.0.0")
+        self.installer.in_use = lambda app_id: False
+        self.install("1.1.0", mode="update")
+        self.assertEqual(self.current_version(), "1.1.0")
+
+    def test_a_fresh_install_does_not_ask(self):
+        asked = []
+        self.installer.in_use = lambda app_id: asked.append(app_id) or True
+        self.install("1.0.0")
+        self.assertEqual(asked, [])

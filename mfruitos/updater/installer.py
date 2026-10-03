@@ -85,13 +85,17 @@ class InstallResult:
 class Installer:
     def __init__(self, paths: Paths, os_version: str, settings, github=None,
                  register: Callable[[Manifest], None] | None = None,
-                 python: str = sys.executable or "python3"):
+                 python: str = sys.executable or "python3",
+                 in_use: Callable[[str], bool] | None = None):
         self.paths = paths
         self.os_version = os_version
         self.settings = settings
         self.github = github
         self.register = register
         self.python = python
+        # True while an app is open or running: installing over it would leave
+        # the running process on the old code with its data changing under it.
+        self.in_use = in_use or (lambda app_id: False)
 
     # ================================================================ public
     def run(self, request: InstallRequest, progress: Progress | None = None) -> InstallResult:
@@ -412,6 +416,8 @@ class _Job:
         self.root = self.i.target_root(manifest.id, self.system)
         self.previous_record = self.i.read_record(self.root)
         self.previous_dir = rollback.current_target(self.root)
+        if self.previous_dir and not self.system and self.i.in_use(manifest.id):
+            raise InstallError("check", f"{manifest.name} is open; close it, then install again")
         self.fresh = self.previous_dir is None
         # Reinstalling an app uninstalled with its data kept: that data is the
         # user's, so a failure must not take it with the half-installed version.

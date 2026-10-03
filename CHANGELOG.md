@@ -38,6 +38,14 @@ the OS version.
 - **Leftover daemon apps are shown as broken:** an app whose script no longer
   exists (WiFi Config's `wifi_config_app.py`) says *App files missing*.
 - A failed reinstall over kept data restores that data instead of deleting it.
+- **No installing over an open app:** an install, sideload or update of an app
+  that is open is refused ("close it, then install again"). Before, a sideload
+  replaced its code under the running process.
+- **No stale "running" after an app closes:** the app list is refreshed once
+  the process has gone. Before, an app that exited on its own could stay
+  "running" and roll back, update and reset were refused.
+- `mfruitctl rollback` reports a roll back that could not start, instead of
+  "started".
 
 ### Radio
 - **Radio no longer deaf behind the Whisplay LCD:** the daemon wrapper parks the

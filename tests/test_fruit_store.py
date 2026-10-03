@@ -176,7 +176,8 @@ class StoreControlTests(TempHomeTestCase):
         self.rt = SimpleNamespace(registry=Mock(), tasks=Mock(), router=Mock(),
                                   uninstall_app=Mock(return_value=True),
                                   delete_app_data=Mock(return_value=True),
-                                  reset_app=Mock(return_value=True), rollback_app=Mock())
+                                  reset_app=Mock(return_value=True),
+                                  rollback_app=Mock(return_value=True))
         self.rt.registry.get.side_effect = self.entries.get
         self.rt.registry.leftover.side_effect = self.kept.get
         self.rt.tasks.busy.return_value = False
@@ -201,6 +202,8 @@ class StoreControlTests(TempHomeTestCase):
                          "nothing kept")
         self.entries["new"] = type(self.entries["demo"])("new", "New", "os")
         self.assertFalse(self.handle(self.rt, "rollback", {"app_id": "new"})["ok"])
+        self.rt.rollback_app.return_value = False      # refused (e.g. the app is open)
+        self.assertFalse(self.handle(self.rt, "rollback", {"app_id": "demo"})["ok"])
         self.rt.tasks.busy.return_value = True
         self.assertFalse(self.handle(self.rt, "uninstall", {"app_id": "demo"})["ok"])
         self.rt.uninstall_app.assert_not_called()

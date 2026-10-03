@@ -54,3 +54,18 @@
 - The first on-device run of the questions showed long texts cut off with "…";
   they were shortened and rechecked in the preview.
 - After Delete data the app's page stayed open with only Back; it now closes.
+
+## Follow-up: RadioConnect lifecycle on two devices (same day)
+
+RadioConnect 0.2.0, built with its `tools/build-release.sh`, was sideloaded as
+a release archive.
+
+| Check | Result |
+|---|---|
+| Pi: update 0.1.0 → 0.2.0, data kept | ok |
+| Pi: `mfruitctl rollback` | **first refused but reported "started"**: the app had exited on its own and the registry still said running (refresh before the process was gone). Fixed (refresh after every close; ctl reports refusal); then ok |
+| Pi: failed update (0.2.1 whose `test.sh` exits 1) | rolled back, data restored, 0.2.0 still active |
+| Pi: reset, uninstall (data kept), reinstall (data back), uninstall + delete (nothing left; shared radio store kept), fresh install | ok |
+| Pi: sideload while RadioConnect was open | **found: the first update went over the open app** (0.1.0 kept running from its old folder). Fixed: refused with "RadioConnect is open; close it, then install again" (verified after deploy) |
+| Orange Pi: update 0.1.0 → 0.2.0 | ok |
+| Both: MFruit OS deployed from `~/MFruitOS-candidate`, `install.sh --no-service`, launcher restart (no job running) | ok; check.sh 425 tests before deploying |

@@ -82,7 +82,7 @@ class Runtime(ScreenServices):
         self.lifecycle = AppLifecycle(self.client, paths)
         self.github = GitHubClient(paths.cache_dir, token=self.settings.get("updater.github_token"))
         self.installer = Installer(paths, __version__, self.settings, self.github,
-                                   register=self._register_manifest)
+                                   register=self._register_manifest, in_use=self._app_in_use)
         self.updater = UpdateService(paths, self.settings, self.github, self.installer, __version__)
         # The single launch authority (core) and its Whisplay host.
         self.apps = ApplicationManager()
@@ -282,6 +282,14 @@ class Runtime(ScreenServices):
         log.debug("event %s %s", name, payload)
         self.focus.on_event(name, payload)
 
+    def _app_in_use(self, app_id: str) -> bool:
+        """Is ``app_id`` open or running? Asked from the install worker."""
+        session = self.apps.session
+        if session is not None and session.app_id == app_id:
+            return True
+        entry = self.registry.get(app_id)
+        return bool(entry and entry.running)
+
     def _register_manifest(self, manifest: Manifest) -> None:
         """Installer callback (worker thread): register an OS-managed app."""
         entry = AppEntry(id=manifest.id, name=manifest.name, kind="os", env=dict(manifest.env),
@@ -380,8 +388,10 @@ class Runtime(ScreenServices):
 
         def done(result):
             lifecycle_log.info("APP_CLOSED app=%s session=%s result=%s", app_id, session_id, result)
-            if result in ("terminated", "killed"):
-                self.refresh_registry(query_daemon=True)
+            # Always: the refresh when the session ended can come before the
+            # process has gone, and a stale "running" refuses updates, rollback
+            # and reset ("Stop the app first") until something else refreshes.
+            self.refresh_registry(query_daemon=True)
         self.run_task(f"close-{app_id}", lambda: self.lifecycle.ensure_stopped(app_id, session_id),
                       done, lane="cleanup")
 

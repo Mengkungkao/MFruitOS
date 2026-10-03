@@ -338,18 +338,19 @@ class ScreenServices:
                        lambda r: f"{OS_NAME} {r.version} installed. Restarting…",
                        on_success=on_success)
 
-    def rollback_app(self, app_id: str) -> None:
+    def rollback_app(self, app_id: str) -> bool:
+        """Start a roll back. False (and a toast) if it cannot start."""
         entry = self.registry.get(app_id)
         if entry is None:
-            return
+            return False
         if entry.running:
             self.toast("Stop the app before rolling back")
-            return
-        self.start_job("Roll back app",
-                       lambda progress: self.installer.rollback_to_previous(app_id),
-                       lambda version: f"Rolled back to {version}",
-                       on_success=lambda version: self.updater.mark_installed(app_id, version),
-                       steps=("activate",))
+            return False
+        return self.start_job(
+            "Roll back app", lambda progress: self.installer.rollback_to_previous(app_id),
+            lambda version: f"Rolled back to {version}",
+            on_success=lambda version: self.updater.mark_installed(app_id, version),
+            steps=("activate",)) is not None
 
     # ---------------------------------------------- uninstall, delete, reset
     # Fruit Store and mfruitctl share these. They run on the "jobs" lane, so

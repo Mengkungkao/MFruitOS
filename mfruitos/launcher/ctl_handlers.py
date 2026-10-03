@@ -188,8 +188,7 @@ def _package_action(rt, args, action: str):
         if not entry.previous_version:
             return {"ok": False, "error": f"{app_id} has no earlier version to roll back to"}
         rt.router.home()
-        rt.rollback_app(app_id)
-        started = True
+        started = rt.rollback_app(app_id)
     if not started:
         return {"ok": False, "error": f"{action} refused for {app_id} (see the launcher log)"}
     return {"ok": True, "message": f"{action} started; follow it with 'mfruitctl jobs' and "
