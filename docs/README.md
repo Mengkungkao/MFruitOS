@@ -18,6 +18,7 @@ says.
 |---|---|
 | Install, update or remove MFruit OS | [Installation](platform/INSTALLATION.md) |
 | Understand who owns what | [Architecture](platform/ARCHITECTURE.md) |
+| Understand, test or troubleshoot the Whisplay HAT driver | [Whisplay driver](WHISPLAY_DRIVER.md) |
 | Fix a launch, input or focus problem | [Lifecycle](platform/LIFECYCLE.md), [Troubleshooting](quality/TROUBLESHOOTING.md) |
 | Build a new app | [Getting started](apps/GETTING_STARTED.md), [App contract](apps/APP_CONTRACT.md) |
 | Bring an existing Whisplay app over | [Migrating an existing app](apps/MIGRATING_EXISTING_APP.md) |

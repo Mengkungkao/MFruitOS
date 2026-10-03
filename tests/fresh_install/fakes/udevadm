@@ -1,0 +1,3 @@
+#!/bin/sh
+# Rehearsal stand-in for udevadm (tests/fresh_install): no udev daemon in the container.
+exit 0

@@ -15,9 +15,9 @@ this page is the quick start.
    sudo apt-get install python3 python3-pil git   # or: pip install Pillow
    ```
 
-   For the real-daemon contract tests, also clone
-   [PiSugar/Whisplay](https://github.com/PiSugar/Whisplay) to `~/Whisplay` or set
-   `WHISPLAY_SRC`.
+   The real-daemon contract tests use the Whisplay daemon bundled in
+   `drivers/whisplay` ([Whisplay driver](docs/WHISPLAY_DRIVER.md)); nothing
+   else needs cloning.
 
 2. **Run the checks:** `bash scripts/check.sh` (the same as CI;
    [Testing](docs/quality/TESTING.md)).

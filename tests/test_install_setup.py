@@ -111,7 +111,8 @@ esac
         result = self.run_script("install.sh", "--no-service")
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("python3-venv is required", result.stdout)
-        self.assertIn("sudo apt-get install -y python3-venv", self.log.read_text())
+        # Packages go through the helper that uses an offline pack when there is one.
+        self.assertRegex(self.log.read_text(), r"sudo bash \S+/scripts/offline\.sh install python3-venv\n")
         self.assertFalse((self.tmp / "installed").exists())
 
     def test_successful_package_command_does_not_hide_missing_venv(self):

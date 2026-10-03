@@ -6,45 +6,46 @@ updating, rolling back and removing MFruit OS. Failures are diagnosed with
 [Validation](../quality/VALIDATION.md).
 
 The installer follows **check → install → verify → start → health check**
-([Part I §14](DEVELOPMENT_RULES.md#14-installation-architecture)). It does not
-configure GPIO pin mappings, SPI overlays, audio codecs or board drivers;
-MFruit OS sits on top of a working hardware service.
+([Part I §14](DEVELOPMENT_RULES.md#14-installation-architecture)). On a
+supported board it also installs the bundled
+[Whisplay driver](../WHISPLAY_DRIVER.md) (SPI/I2C/I2S, sound card,
+`whisplay-daemon`); no separate Whisplay checkout or installer is needed.
 
 ## Requirements
 
 | | |
 |---|---|
-| Board | Raspberry Pi Zero 2 W (primary target), Orange Pi Zero 2W, or another board supported by Whisplay |
+| Board | Raspberry Pi Zero 2 W (primary target), Orange Pi Zero 2W; the driver also supports Orange Pi Zero 3W, Radxa ZERO 3W and Radxa Cubie A7Z (not validated with MFruit OS) |
 | HAT | PiSugar Whisplay |
 | OS | Raspberry Pi OS / Debian 12+, Ubuntu 22.04+ (systemd) |
 | Python | 3.9 or newer |
-| Hardware service | [PiSugar/Whisplay](https://github.com/PiSugar/Whisplay) with `whisplay-daemon.service` installed and running as your normal user |
+| Hardware service | installed by MFruit OS: [Whisplay driver](../WHISPLAY_DRIVER.md) (`whisplay-daemon.service` runs as your normal user) |
+| Network | needed on the first install for missing packages and the sound card build (kernel headers), unless an [offline pack](../WHISPLAY_DRIVER.md#offline-installation) is next to the code |
 | Packages | Pillow (`python3-pil`), Python venv support (`python3-venv`), NetworkManager for Wi-Fi. Optional: `git` (updates for git-installed apps), `alsa-utils` (speaker test) |
 
 Catalogue apps install their own dependencies into package-local
 environments. The launcher needs no NumPy, web server or desktop stack.
 
-## 1. Prepare the board and hardware service
+## 1. Prepare the board
 
-1. Install a systemd-based image, enable SSH and use a normal user with sudo.
-2. Follow the Whisplay driver instructions for that exact board and image; do
-   not copy kernel modules or overlays from a different board. Confirm the
-   LCD, button, LED and audio with the driver's own tests first.
-3. Install and start `whisplay-daemon.service` as your normal user and confirm
-   its `WorkingDirectory` points to the Whisplay checkout. Stop standalone app
-   services that would compete for the display.
-4. Log in as the daemon's user and check:
+1. Install the board's official systemd-based image (Raspberry Pi OS; Orange
+   Pi OS with Linux `6.1.31-sun50iw9` for the Zero 2W, Debian 1.0.2 or Ubuntu 22.04), enable SSH and
+   use a normal user with sudo. Fit the Whisplay HAT.
+2. Stop standalone app services that would compete for the display.
+3. Log in as that user. The Whisplay driver is installed by MFruit OS in
+   step 5; its own read-only check is
+   `bash drivers/whisplay/install.sh --check` ([Whisplay driver](../WHISPLAY_DRIVER.md)).
 
-   ```bash
-   whoami
-   python3 --version
-   systemctl show whisplay-daemon.service -p User -p WorkingDirectory
-   systemctl status whisplay-daemon.service --no-pager
-   ```
+A device prepared earlier with a PiSugar/Whisplay checkout needs nothing
+extra: the next install moves `whisplay-daemon` to the bundled driver and
+leaves the checkout in place.
 
 Do not run the MFruit OS installer as root.
 
 ## 2. Get the source onto the device
+
+Without internet on the board, copy the code and an offline pack onto the
+SD card or a USB stick instead ([Offline installation](../WHISPLAY_DRIVER.md#offline-installation)).
 
 For a published version:
 
@@ -92,9 +93,10 @@ bash scripts/setup-device.sh --check
 ```
 
 Read-only: verifies Linux, a normal user, Python/Pillow, the source and
-manifest version, systemd, the daemon service's user and source directory,
-and a `health.ping` through `/tmp/whisplay-daemon.sock`. It exits non-zero
-naming the failed prerequisite and installs nothing.
+manifest version and systemd, reports the Whisplay driver's state, and, when
+`whisplay-daemon` is installed, its user and a `health.ping` through
+`/tmp/whisplay-daemon.sock`. It exits non-zero naming the failed prerequisite
+and installs nothing.
 
 ## 5. Install
 
@@ -104,16 +106,19 @@ bash scripts/install.sh            # or: bash scripts/setup-device.sh --install
 
 | Option | Effect |
 |---|---|
-| `--no-service` | install files only; start manually with `PYTHONPATH=~/.whisplay-os/system/current python3 -m mfruitos` |
+| `--no-service` | install files only (no driver, no systemd changes); start manually with `PYTHONPATH=~/.whisplay-os/system/current python3 -m mfruitos` |
+| `--no-driver` | do not install or update the Whisplay driver |
+| `--reboot` | reboot without asking when the driver needs it (otherwise it asks; with `--yes` it only says so) |
 | `--no-background-daemon` | keep whisplay-daemon's own desktop visible between apps |
 | `--dev` | run directly from the checkout (development; keep the directory in place) |
 | `--yes` | non-interactive; does not bypass sudo authorization |
 
 What the installer does, in order:
 
-1. Checks the OS, Python, Pillow, venv support, the Whisplay runtime and
-   `whisplay-daemon`; missing Pillow/venv packages are installed with `apt-get`
-   before any file is copied.
+1. Checks the OS, Python, Pillow and venv support; missing Pillow/venv
+   packages are installed with `apt-get` before any file is copied.
+   Then runs `sudo bash drivers/whisplay/install.sh` on a supported board
+   ([what it changes](../WHISPLAY_DRIVER.md#how-mfruit-os-sets-it-up-and-starts-it)).
 2. Copies the code to `~/.whisplay-os/system/versions/<version>-local<date>`
    and points `system/current` at it; the previous version is recorded for
    rollback.
@@ -125,20 +130,23 @@ What the installer does, in order:
    seeds the Apps menu with available starter games, Fruit Store and
    Settings. Reruns preserve existing apps, settings, order and launch policy.
 6. With the service: the system changes listed below, then enables and starts
-   `whisplay-os.service`.
+   `whisplay-os.service`. When the driver enabled a bus or the sound card, the
+   services are only enabled and the installer asks to reboot; after the
+   reboot everything starts by itself.
 
 ### System changes and why they are needed
 
 | Change | Why | Removed by `uninstall.sh` |
 |---|---|---|
 | `apt-get install python3-pil python3-venv network-manager` when missing | launcher rendering, package-local app environments, Wi-Fi settings | no (shared system packages) |
+| Whisplay driver: packages, boot overlays, sound card module and ALSA config, Orange Pi `gpio` udev rule, `/etc/sudoers.d/whisplay-daemon-power`, `/usr/local/share/whisplay`, `whisplay-daemon.service` ([details](../WHISPLAY_DRIVER.md#where-it-lives)) | the display, button, LED and audio | no; `sudo bash drivers/whisplay/uninstall.sh [--audio]` |
 | `/etc/systemd/system/whisplay-os.service` | runs the launcher as your user after the daemon, with `Restart=always`, a 60 s watchdog, `ExecStartPre=boot-guard.sh`, `ExecStopPost=mfruitctl release` | yes |
 | `/etc/systemd/system/whisplay-daemon.service.d/mfruit-os.conf` (skipped with `--no-background-daemon`) | starts the daemon through `whisplay-daemon-mfruit.py` so its own UI stays in the background ([Host API](HOST_API.md#whisplay-user-interface-in-the-background)); the daemon restarts once, closing running apps | yes |
 | `/etc/sudoers.d/whisplay-os` | allows exactly `systemctl restart whisplay-daemon.service` and `systemctl restart whisplay-os.service` without a password (*Restart daemon* on the fallback screen), validated with `visudo -c` | yes |
 | `/etc/polkit-1/rules.d/49-mfruit-wifi.rules` | grants the target user the listed NetworkManager scan/control/settings actions, because the service has no interactive polkit session | yes |
 | `/usr/local/bin/mfruitctl` symlink | `mfruitctl` on the PATH | yes |
 
-No other system files are changed. Adopted daemon app registrations are
+No other system files are changed by MFruit OS itself. Adopted daemon app registrations are
 changed only through the daemon's `app.register` API and are restored on
 uninstall ([Lifecycle](LIFECYCLE.md#launch-gate-and-intruder-eviction)).
 
@@ -216,8 +224,9 @@ bash scripts/uninstall.sh --purge  # also delete ~/.whisplay-os (apps, data, log
 ```
 
 The uninstaller removes the files listed above, restores adopted app
-registrations and the daemon desktop. `whisplay-daemon` and apps registered
-directly with it are never removed. Use `--purge` only when managed apps and
+registrations and the daemon desktop. The Whisplay driver (`whisplay-daemon`)
+and apps registered directly with it are never removed; the driver has its own
+`drivers/whisplay/uninstall.sh`. Use `--purge` only when managed apps and
 their data are intentionally being discarded.
 
 ## Radio setup (LoRa apps)

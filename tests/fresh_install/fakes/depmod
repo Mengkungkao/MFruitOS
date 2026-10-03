@@ -1,0 +1,5 @@
+#!/bin/sh
+# Rehearsal: "depmod -a" for the board's kernel release, not the host's (tests/fresh_install).
+. /etc/mfruit-rehearsal.env
+if [ "$#" -eq 1 ] && [ "$1" = "-a" ]; then exec /usr/sbin/depmod -a "$FAKE_KERNEL"; fi
+exec /usr/sbin/depmod "$@"

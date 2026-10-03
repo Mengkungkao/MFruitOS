@@ -1,0 +1,5 @@
+#!/bin/sh
+# Rehearsal: report the board's kernel release (tests/fresh_install), like
+# Whisplay's own image builder does in its chroot.
+. /etc/mfruit-rehearsal.env
+if [ "$#" -eq 1 ] && [ "$1" = "-r" ]; then echo "$FAKE_KERNEL"; else exec /usr/bin/uname "$@"; fi

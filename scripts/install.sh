@@ -7,10 +7,15 @@
 #   bash scripts/install.sh --yes        do not ask questions
 #   bash scripts/install.sh --no-background-daemon
 #                                        keep whisplay-daemon's own user interface
+#   bash scripts/install.sh --no-driver  do not install or update the Whisplay driver
+#   bash scripts/install.sh --reboot     reboot by itself when the driver needs it
+#                                        (otherwise it asks, or with --yes only says so)
 #
-# Run as your normal user (the one whisplay-daemon runs as). sudo is only
-# used for missing Python dependencies, NetworkManager, narrowly scoped
-# polkit/sudoers rules, the systemd unit and /usr/local/bin/mfruitctl link.
+# Run as your normal user (the one whisplay-daemon runs as). sudo is used for
+# the Whisplay driver (drivers/whisplay/install.sh: packages, SPI/I2C/I2S
+# overlays, sound card module, whisplay-daemon.service; docs/WHISPLAY_DRIVER.md),
+# missing Python dependencies, NetworkManager, narrowly scoped polkit/sudoers
+# rules, the systemd unit and /usr/local/bin/mfruitctl link.
 set -euo pipefail
 
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -25,15 +30,19 @@ SOCKET=/tmp/whisplay-daemon.sock
 
 INSTALL_SERVICE=1
 BACKGROUND_DAEMON=1
+INSTALL_DRIVER=1
+REBOOT_NOW=0
 DEV=0
 ASSUME_YES=0
 for arg in "$@"; do
   case "$arg" in
     --no-service) INSTALL_SERVICE=0 ;;
     --no-background-daemon) BACKGROUND_DAEMON=0 ;;
+    --no-driver) INSTALL_DRIVER=0 ;;
+    --reboot) REBOOT_NOW=1 ;;
     --dev) DEV=1 ;;
     --yes|-y) ASSUME_YES=1 ;;
-    -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
     *) echo "Unknown option: $arg" >&2; exit 2 ;;
   esac
 done
@@ -56,6 +65,8 @@ say "MFruit OS $VERSION for user $TARGET_USER"
 
 # ------------------------------------------------------------------ checks
 say "Checking system"
+OFFLINE_PACK="$(bash "$SRC/scripts/offline.sh" find 2>/dev/null || true)"
+[ -z "$OFFLINE_PACK" ] || ok "offline pack: $OFFLINE_PACK (packages and the sound card build need no internet)"
 [ "$(uname -s)" = "Linux" ] || fail "MFruit OS needs Linux"
 ok "$(uname -sm)"
 if [ -r /proc/device-tree/model ]; then ok "device: $(tr -d '\0' </proc/device-tree/model)"; fi
@@ -71,26 +82,45 @@ ok "$("$PYTHON" --version)"
 
 if ! "$PYTHON" -c "import PIL" 2>/dev/null; then
   warn "Pillow missing; installing python3-pil"
-  sudo apt-get install -y python3-pil || fail "could not install Pillow"
+  sudo bash "$SRC/scripts/offline.sh" install python3-pil || fail "could not install Pillow"
 fi
 ok "Pillow $("$PYTHON" -c 'import PIL; print(PIL.__version__)')"
 if ! "$PYTHON" -c "import venv, ensurepip" 2>/dev/null; then
   warn "Python venv support missing; installing python3-venv"
-  sudo apt-get install -y python3-venv || fail "python3-venv is required for App installer"
+  sudo bash "$SRC/scripts/offline.sh" install python3-venv || fail "python3-venv is required for App installer"
   "$PYTHON" -c "import venv, ensurepip" 2>/dev/null || fail "venv support is still unavailable in $PYTHON"
 fi
 command -v git >/dev/null && ok "git (updates for git-installed apps)" || warn "git not found: git-tracked app updates disabled"
 command -v aplay >/dev/null && ok "aplay (speaker test)" || warn "aplay not found: speaker test disabled"
 
-say "Checking Whisplay"
+say "Whisplay driver"
+DRIVER_DIR=/usr/local/share/whisplay
+REBOOT_REQUIRED=0
+AUDIO_FAILED=0
+if [ "$INSTALL_SERVICE" = 0 ] || [ "$INSTALL_DRIVER" = 0 ]; then
+  warn "driver not installed or updated (--no-service or --no-driver)"
+else
+  DRIVER_RC=0
+  sudo bash "$SRC/drivers/whisplay/install.sh" --user "$TARGET_USER" --restart-later || DRIVER_RC=$?
+  case "$DRIVER_RC" in
+    0)
+      STATUS=/run/mfruitos/whisplay-driver.status
+      [ "$(sed -n 's/^REBOOT_REQUIRED=//p' "$STATUS" 2>/dev/null)" = 1 ] && REBOOT_REQUIRED=1
+      [ "$(sed -n 's/^DAEMON_CHANGED=//p' "$STATUS" 2>/dev/null)" = 1 ] && RESTART_DAEMON=1
+      [ "$(sed -n 's/^AUDIO_FAILED=//p' "$STATUS" 2>/dev/null)" = 1 ] && AUDIO_FAILED=1
+      ok "Whisplay driver ($DRIVER_DIR)" ;;
+    3) warn "no supported Whisplay board detected; the Whisplay driver was not installed" ;;
+    *) fail "Whisplay driver installation failed (messages above; docs/WHISPLAY_DRIVER.md)" ;;
+  esac
+fi
 WHISPLAY_ROOT=""
 if command -v systemctl >/dev/null && systemctl cat "$DAEMON_SERVICE" >/dev/null 2>&1; then
   WHISPLAY_ROOT="$(systemctl show -p WorkingDirectory "$DAEMON_SERVICE" | cut -d= -f2)"
   ok "$DAEMON_SERVICE installed ($(systemctl is-active "$DAEMON_SERVICE" || true))"
 else
-  warn "$DAEMON_SERVICE not found. Install Whisplay first: https://github.com/PiSugar/Whisplay"
+  warn "$DAEMON_SERVICE not found (the Whisplay driver installs it on a supported board)"
 fi
-[ -n "$WHISPLAY_ROOT" ] || WHISPLAY_ROOT="$TARGET_HOME/Whisplay"
+[ -n "$WHISPLAY_ROOT" ] || WHISPLAY_ROOT="$DRIVER_DIR"
 if [ -f "$WHISPLAY_ROOT/runtime/whisplay.py" ]; then ok "Whisplay runtime at $WHISPLAY_ROOT"
 else warn "Whisplay runtime not found (daemon-down fallback display disabled)"; fi
 if [ -S "$SOCKET" ]; then ok "daemon socket $SOCKET"; else warn "daemon socket not present yet"; fi
@@ -114,7 +144,7 @@ else
   CODE_DIR="$OS_HOME/system/versions/$VERSION-local$STAMP"
   as_user mkdir -p "$CODE_DIR"
   ITEMS=()
-  for item in mfruitos assets config scripts templates docs bundled manifest.json LICENSE README.md \
+  for item in mfruitos assets config scripts templates docs bundled drivers manifest.json LICENSE README.md \
       APP_DEVELOPMENT.md INSTALL.md CHANGELOG.md CONTRIBUTING.md; do
     [ -e "$SRC/$item" ] && ITEMS+=("$item")
   done
@@ -202,7 +232,7 @@ sudo ln -sfn "$OS_HOME/bin/mfruitctl" /usr/local/bin/mfruitctl && ok "/usr/local
 # The launcher is a system service without an interactive polkit session.
 # Permit only NetworkManager Wi-Fi actions for this installation's user.
 if ! command -v nmcli >/dev/null; then
-  sudo apt-get install -y network-manager || fail "NetworkManager is required for Settings > Wi-Fi"
+  sudo bash "$SRC/scripts/offline.sh" install network-manager || fail "NetworkManager is required for Settings > Wi-Fi"
   command -v nmcli >/dev/null || fail "nmcli is still unavailable after installing NetworkManager"
 fi
 sudo mkdir -p /etc/polkit-1/rules.d
@@ -295,11 +325,29 @@ elif [ -f "$DROPIN_DIR/mfruit-os.conf" ]; then
   RESTART_DAEMON=1
 fi
 sudo systemctl daemon-reload
+sudo systemctl enable "$SERVICE" >/dev/null 2>&1
+if [ "$REBOOT_REQUIRED" = 1 ]; then
+  # The display bus and sound card appear only after a reboot; both services
+  # are enabled and start then.
+  say "MFruit OS $VERSION installed; reboot to finish the Whisplay driver"
+  [ "$AUDIO_FAILED" = 0 ] || warn "no sound card yet: rerun this installer with internet or an offline pack (docs/WHISPLAY_DRIVER.md)"
+  echo "    After the reboot MFruit OS starts by itself. To check it: bash $SRC/scripts/setup-device.sh --check"
+  if [ "$REBOOT_NOW" = 0 ] && [ "$ASSUME_YES" = 0 ] && [ -t 0 ]; then
+    read -r -p "    Reboot now? [Y/n] " answer || answer=n
+    case "$answer" in [nN]*) ;; *) REBOOT_NOW=1 ;; esac
+  fi
+  if [ "$REBOOT_NOW" = 1 ]; then
+    say "Rebooting"
+    sudo systemctl reboot
+  else
+    echo "    Reboot when ready: sudo reboot"
+  fi
+  exit 0
+fi
 if [ "${RESTART_DAEMON:-0}" = 1 ]; then
   warn "restarting whisplay-daemon (running apps are closed)"
   sudo systemctl restart "$DAEMON_SERVICE"
 fi
-sudo systemctl enable "$SERVICE" >/dev/null 2>&1
 sudo systemctl restart "$SERVICE"
 sleep 4
 if systemctl is-active --quiet "$SERVICE"; then
@@ -310,6 +358,7 @@ fi
 systemctl status "$SERVICE" --no-pager -n 5 || true
 
 say "MFruit OS $VERSION installed"
+[ "$AUDIO_FAILED" = 0 ] || warn "no sound card yet: rerun this installer with internet or an offline pack (docs/WHISPLAY_DRIVER.md)"
 echo "    status:  systemctl status whisplay-os"
 echo "    logs:    journalctl -u whisplay-os -f    (or $OS_HOME/logs/)"
 echo "    control: mfruitctl help"

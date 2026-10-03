@@ -1,7 +1,7 @@
 """Launch-lifecycle regression tests against the REAL whisplay-daemon code.
 
-The daemon runs from a Whisplay checkout (WHISPLAY_SRC, ~/Whisplay or
-~/ai-chatbot/Whisplay) with a simulated board; fake apps take the screen the
+The daemon runs from the bundled driver (drivers/whisplay, or WHISPLAY_SRC)
+with a simulated board; fake apps take the screen the
 way Whisplay clients do (subscribe, then acquire with retries) after a
 realistic start-up delay. MFruit OS runs in-process and is driven only by
 simulated physical button presses, exactly like on the device.

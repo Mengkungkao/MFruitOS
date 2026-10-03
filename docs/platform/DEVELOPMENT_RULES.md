@@ -1138,9 +1138,13 @@ on whisplay-daemon). Current module ownership is mapped in
   package code or apps. The single documented exception is
   `launcher/direct.py`, which shows recovery UI only while the daemon unit is
   `inactive` or `failed` ([Host API](HOST_API.md#fallback-display)).
-- **The external Whisplay checkout is not edited.** Platform behavior that
-  needs daemon changes goes into `scripts/whisplay-daemon-mfruit.py` and is
-  tested against real daemon source with a negative control.
+- **The bundled Whisplay driver files are not edited.** `drivers/whisplay/`
+  holds upstream files byte-for-byte (`upstream.sha256`, checked by
+  `scripts/check.sh`; [Whisplay driver](../WHISPLAY_DRIVER.md)). Platform
+  behavior that needs daemon changes goes into
+  `scripts/whisplay-daemon-mfruit.py` and is tested against the real daemon
+  source with a negative control; a newer upstream comes in only through
+  `scripts/whisplay-driver-sync.sh`.
 - **UI and CLI share services.** Screens and `mfruitctl` call the same
   `ScreenServices`/updater/installer operations; screens request actions,
   they do not own installation, process creation or update policy.

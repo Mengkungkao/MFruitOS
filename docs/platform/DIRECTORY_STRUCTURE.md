@@ -13,6 +13,9 @@ MFruitOS/
 ├── scripts/               installer, helpers installed on devices, developer tools
 ├── templates/             whisplay-app-template: a complete MFruit app to start from
 ├── bundled/connectwifi/   Wi-Fi app shipped with the OS and provisioned on install
+├── drivers/whisplay/      Whisplay driver: upstream runtime, daemon, sound card (unmodified)
+│                          + MFruit OS install.sh/uninstall.sh (docs/WHISPLAY_DRIVER.md)
+├── offline/               (not committed) offline packs from scripts/make-offline-pack.sh
 ├── config/                default.json (generated defaults), catalog.json (curated apps)
 ├── contrib/manifests/     draft manifests for companion apps (not release packages)
 ├── assets/fonts/          Inter (SIL OFL) used by the launcher and the SDK
@@ -77,7 +80,9 @@ MFruitOS/
 | Path | Level ([Part I §19](DEVELOPMENT_RULES.md#19-test-pyramid)) |
 |---|---|
 | `tests/test_*.py` without a daemon | 1–2: units and services with fakes (`fake_daemon.py`, `helpers.py`) |
-| `tests/test_launch_lifecycle.py`, `tests/test_background_ui.py` | 3: real whisplay-daemon code with a simulated board (`tests/real_daemon/`, needs `WHISPLAY_SRC`) |
+| `tests/test_launch_lifecycle.py`, `tests/test_background_ui.py` | 3: real whisplay-daemon code with a simulated board (`tests/real_daemon/`; the bundled `drivers/whisplay`, or `WHISPLAY_SRC`) |
+| `tests/fresh_install/` | 4: fresh offline installation in a disposable container (`rehearse.sh`, `verify.sh`, `fakes/`) |
+| `tests/test_whisplay_driver.py`, `tests/test_whisplay_driver_install.py` | 1–2: the bundled Whisplay driver on recorded SPI/GPIO; its installer's detection, boot configuration and staged copy |
 | `tests/test_installer.py`, `test_update_flows.py`, `test_catalog.py`, `test_install_setup.py`, `test_device_setup.py` | 4: package and installer lifecycles with disposable data |
 
 Physical device validation (level 5) is a recorded procedure, not a test file

@@ -18,7 +18,9 @@ entirely with the HAT's single button.
 It runs **on top of `whisplay-daemon`**, not instead of it. The daemon keeps
 owning the LCD, backlight, RGB LED, button and the foreground-app lifecycle;
 MFruit OS is a daemon foreground app that draws into the daemon's shared
-framebuffer. Keyboard-using apps need MFruit SDK 1.2.0 so they can receive
+framebuffer. The daemon, the display driver and the sound card driver ship
+with MFruit OS as its [Whisplay driver](docs/WHISPLAY_DRIVER.md), so no
+separate Whisplay installation is needed. Keyboard-using apps need MFruit SDK 1.2.0 so they can receive
 input through the launcher's key hub; button-only apps retain their integration.
 
 The interface uses MFruit OS names and app descriptions, such as **Radio
@@ -33,6 +35,7 @@ and storage paths remain stable for compatibility with existing installations.
                │ daemon API (/tmp/whisplay-daemon.sock)
 ┌──────────────▼──────────────┐
 │ whisplay-daemon             │  LCD · button · LED · backlight · app lifecycle
+│ + sound card (drivers/)     │  MFruit OS Whisplay driver
 └──────────────┬──────────────┘
 ┌──────────────▼──────────────┐
 │ Display HAT                 │
@@ -79,14 +82,17 @@ and storage paths remain stable for compatibility with existing installations.
 
 ## Quick start
 
-On the device, with the [display driver and hardware service installed](https://github.com/PiSugar/Whisplay):
+On a Raspberry Pi or Orange Pi Zero 2W with the Whisplay HAT fitted:
 
 ```bash
 git clone https://github.com/Mengkungkao/MFruitOS.git
 cd MFruitOS
-bash scripts/install.sh
+bash scripts/install.sh        # also installs the Whisplay driver; reboot if it asks
 systemctl status whisplay-os
 ```
+
+No internet on the board? Copy the code and an offline pack onto the SD card:
+[offline installation](docs/WHISPLAY_DRIVER.md#offline-installation).
 
 See [the installation guide](docs/platform/INSTALLATION.md) for board
 preparation, the read-only `bash scripts/setup-device.sh --check`, the system

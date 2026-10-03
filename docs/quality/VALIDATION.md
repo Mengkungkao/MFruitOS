@@ -67,6 +67,22 @@ Also: `ls ~/.whisplay-os/adopted/` lists gated daemon apps and
   comparison, reject/cancel, disconnect/reconnect, forget.
 - Boot shows only the logo; configuration errors remain visible afterwards.
 
+### Whisplay driver (bundled since 2026-10-03)
+
+For each board, once as a fresh install and once as a changeover from a
+`~/Whisplay` installation ([Whisplay driver](../WHISPLAY_DRIVER.md)):
+
+| # | Do | Expect |
+|---|---|---|
+| D1 | `bash scripts/install.sh`, reboot if asked | no prompt from the driver; `bash drivers/whisplay/install.sh --check` prints only `OK` lines |
+| D2 | Changeover only: compare before/after | `~/Whisplay`, `~/.whisplay-daemon/settings.json` and `~/.whisplay-daemon/app/*.json` unchanged; old unit in `/var/backups/mfruitos/`; sound card not rebuilt |
+| D3 | Power on | logo, then Home; colours, orientation and the rounded-corner margins as before |
+| D4 | Diagnostics: display, button, LED, speaker tests | each passes; backlight dims and brightens from Settings → Display |
+| D5 | `arecord -D whisplaysound -f S16_LE -r 48000 -c 2 -d 3 /tmp/mic.wav && aplay -D whisplaysound /tmp/mic.wav` | the recording plays back clearly |
+| D6 | Open and leave an app that uses `whisplay_client` (BTC Dashboard, RadioConnect) | it draws and reacts to the button (it found `/usr/local/share/whisplay/runtime`) |
+| D7 | Power page: Reboot; then Shut down | both work without a password prompt |
+| D8 | `sudo bash drivers/whisplay/install.sh --rollback` after a second install | the previous copy runs; `--check` reports the version difference |
+
 ## What a record contains
 
 Every dated record in [records/](records/README.md) states

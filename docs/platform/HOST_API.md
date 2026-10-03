@@ -2,7 +2,8 @@
 
 A **host** is everything MFruit OS needs from the device underneath it:
 screen ownership, frame output, input, indicators, status and app processes.
-Today there is one host, whisplay-daemon on a Whisplay HAT, and most of its
+Today there is one host, whisplay-daemon on a Whisplay HAT (shipped with
+MFruit OS as the [Whisplay driver](../WHISPLAY_DRIVER.md)), and most of its
 contract is **implicit**: platform code calls concrete Whisplay classes. This
 document records that contract as it exists, so it can be extracted into
 explicit interfaces one boundary at a time
@@ -55,7 +56,9 @@ manager with a fake host.
 
 Verified against `daemon/whisplay_daemon.py` (upstream 1066486, the older Pi
 build, and the copy vendored in the user's ai-chatbot repository at its commit
-`e57cc4c`, used in the 2026-10-02 dev-machine baseline). A host replacing the
+`e57cc4c`, used in the 2026-10-02 dev-machine baseline). Since 2026-10-03 the
+real-daemon tests run the copy bundled in `drivers/whisplay` (upstream
+`c73051e`). A host replacing the
 daemon must either provide the same semantics or the platform must change.
 
 1. **`app.launch` is refused while another app is foreground.** To start an
@@ -104,7 +107,8 @@ timeout (`daemon/client.py`).
 ## Whisplay user interface in the background
 
 `scripts/whisplay-daemon-mfruit.py` starts the unmodified daemon from the
-Whisplay checkout (systemd drop-in written by `install.sh`) and patches five
+installed Whisplay driver, `/usr/local/share/whisplay` (systemd drop-in
+written by `install.sh`), and patches five
 `WhisplayDaemon` methods. The patches act only while MFruit OS holds
 `state/launcher.lock` (checked through `/proc/locks`, never by taking the
 lock), during a bounded start-up grace period, and not in Daemon desktop mode:
@@ -145,14 +149,16 @@ the radio in configuration mode (it neither sends nor hears; the radio apps
 report "Radio deaf: check M0/M1"). The display samples DC only while SPI
 clocks. During a frame (about 11 ms) the radio is still deaf; only rewiring
 M0/M1 to free GPIOs removes that. This replaces WalkieTalkie's
-`docs/whisplay-dc-fix.patch`, which edited the Whisplay checkout.
+`docs/whisplay-dc-fix.patch`, which edited the Whisplay checkout; the bundled
+driver files stay unmodified.
 `tests/test_dc_park.py` covers it, including the real `runtime/whisplay.py`.
 
 ## Fallback display
 
 When the daemon's systemd unit is `inactive` or `failed` (never while it is
-starting), `launcher/direct.py` opens the official `WhisplayBoard` from the
-Whisplay runtime to show *Daemon unavailable* with Retry / Restart daemon /
+starting), `launcher/direct.py` opens `WhisplayBoard` from the Whisplay
+driver's runtime (`/usr/local/share/whisplay`, else an older `~/Whisplay`
+checkout, else the copy in this MFruit OS version) to show *Daemon unavailable* with Retry / Restart daemon /
 Diagnostics, and releases the hardware as soon as the unit becomes active
 again. It is the only path that drives the HAT directly: without the daemon
 there is no framebuffer in which to show the problem.

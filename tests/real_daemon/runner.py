@@ -1,4 +1,4 @@
-"""Runs the *real* whisplay-daemon (from a Whisplay checkout) with a stub board.
+"""Runs the *real* whisplay-daemon (drivers/whisplay or WHISPLAY_SRC) with a stub board.
 
 Usage: python3 runner.py <whisplay_src> <socket_path> <home> [<mfruit_lock>]
 
@@ -36,6 +36,8 @@ from daemon_pisugar import PiSugarManager  # noqa: E402
 from internal_apps import ExternalKeyboardReader, InternalAppManager  # noqa: E402
 
 PiSugarManager.socket_path = lambda self: None
+if hasattr(PiSugarManager, "detect_pisugar3"):  # upstream c73051e probes I2C for a PiSugar 3
+    PiSugarManager.detect_pisugar3 = lambda self: False
 PiSugarManager.probe_battery_level = lambda self: None
 InternalAppManager.start = lambda self: None
 InternalAppManager.stop = lambda self: None

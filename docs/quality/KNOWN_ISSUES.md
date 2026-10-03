@@ -58,6 +58,14 @@ interrupt the `jobs` lane (bounded), and start-up removes stale `.work-*`
 directories and never-activated fresh installs with empty data. Until then:
 check `mfruitctl jobs` before restarting.
 
+### KI-10 Fruit Store tile shows the Settings description
+
+On Home, the Fruit Store tile's subtitle reads "Apps, display, button, LED…":
+`HomeScreen._subtitle` (`launcher/ui/screens/home.py`) gives every built-in
+entry except the Updater the Settings text. Seen in a screenshot on the
+Orange Pi, 2026-10-03. Cosmetic. Next: a subtitle for `os.installer`, with a
+test.
+
 ## Physical checks outstanding
 
 Button feel and gestures, physical USB/Bluetooth key routing and hotplug,

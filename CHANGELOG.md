@@ -6,6 +6,33 @@ the OS version.
 
 ## Unreleased
 
+### Whisplay driver included
+- **No separate Whisplay installation.** MFruit OS now carries the Whisplay
+  HAT driver in `drivers/whisplay`: the display, button and LED driver, the
+  `whisplay-daemon` hardware service and the sound card driver, copied
+  unmodified from PiSugar/Whisplay `c73051e`. `scripts/install.sh` installs it
+  on a supported board (packages, SPI/I2C/I2S, sound card, service) without
+  questions and asks for a reboot when needed (`--no-driver` skips it).
+  Existing devices switch `whisplay-daemon` to `/usr/local/share/whisplay` on
+  the next install; `~/Whisplay`, the daemon's settings and app registrations
+  are left as they are. New installs no longer get Whisplay's demo games.
+  [Whisplay driver](docs/WHISPLAY_DRIVER.md).
+- Tests and CI use the bundled daemon instead of cloning Whisplay.
+- **Offline installation:** `scripts/make-offline-pack.sh` (run once on a board
+  with internet) makes a pack of the packages and sound card build files for
+  that OS image; with the pack in `MFruitOS/offline/`, `scripts/install.sh`
+  needs no internet. A sound card that cannot be built no longer stops the
+  installation: the display, button and LED are installed and the problem is
+  reported.
+- The installer asks to reboot when the driver needs it (`--reboot` without
+  asking) and builds the sound card in a temporary copy, so no build files
+  end up in the checkout.
+- Fixed: on a fresh image without DejaVu fonts (Ubuntu 22.04, Pillow 9.0) the
+  daemon's own screens crashed; the driver now installs `fonts-dejavu-core`,
+  and Bluetooth support (`bluez`, `python3-dbus`, `python3-gi`) when
+  available. Found by the new fresh-install rehearsal
+  (`tests/fresh_install/rehearse.sh`).
+
 ### Fixed
 - Keyboards work again in plain Whisplay apps such as Jump Game and Flappy
   Bird: MFruit OS holds the keyboards, so it now forwards **Esc** (leave the

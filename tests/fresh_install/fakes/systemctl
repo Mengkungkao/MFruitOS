@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Rehearsal stand-in for systemctl (tests/fresh_install): no systemd runs in
+# the container. Unit files are written for real; nothing is started.
+echo "systemctl $*" >>/tmp/fake-systemctl.log 2>/dev/null
+args=() props=() value=0 quiet=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -p) props+=("$2"); shift ;;
+    --property=*) props+=("${1#--property=}") ;;
+    --value) value=1 ;;
+    -q|--quiet) quiet=1 ;;
+    -*) ;;
+    *) args+=("$1") ;;
+  esac
+  shift
+done
+unit_files() {
+  [ -f "/etc/systemd/system/$1" ] && echo "/etc/systemd/system/$1"
+  ls "/etc/systemd/system/$1.d/"*.conf 2>/dev/null
+}
+case "${args[0]:-}" in
+  cat)
+    files="$(unit_files "${args[1]}")"
+    [ -n "$files" ] || exit 1
+    for f in $files; do echo "# $f"; cat "$f"; done ;;
+  show)
+    for p in "${props[@]}"; do
+      v=""
+      for f in $(unit_files "${args[1]}"); do
+        while IFS= read -r line; do case "$line" in "$p="*) v="${line#*=}" ;; esac; done <"$f"
+      done
+      case "$p" in MainPID) v=0 ;; ActiveState) v=inactive ;; esac
+      if [ "$value" = 1 ]; then echo "$v"; else echo "$p=$v"; fi
+    done ;;
+  is-active)
+    [ "$quiet" = 1 ] || for u in "${args[@]:1}"; do echo inactive; done
+    exit 3 ;;
+  list-unit-files) [ -n "$(unit_files "${args[1]}")" ] ;;
+  status) echo "(rehearsal: systemd is not running)"; exit 3 ;;
+  *) exit 0 ;;  # daemon-reload, enable, disable, start, stop, restart, reboot
+esac

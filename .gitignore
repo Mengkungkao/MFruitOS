@@ -1,3 +1,5 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+# Offline packs are large (~200 MB) and per board image; publish them as release assets.
+/offline/

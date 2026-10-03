@@ -4,9 +4,9 @@
 #   bash scripts/check.sh           all checks
 #   bash scripts/check.sh --quick   skip the full unit/integration suite
 #
-# Real-daemon tests run when a Whisplay checkout is found (WHISPLAY_SRC,
-# ~/Whisplay or ~/ai-chatbot/Whisplay); otherwise they are reported as skipped.
-# Never run two real-daemon suites at once on one machine.
+# Real-daemon tests run the daemon bundled in drivers/whisplay (WHISPLAY_SRC
+# substitutes another Whisplay checkout). Never run two real-daemon suites at
+# once on one machine.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 export PYTHONDONTWRITEBYTECODE=1
@@ -39,10 +39,16 @@ PY
 
 shell_syntax() {
   local ok=0 f
-  for f in scripts/*.sh templates/whisplay-app-template/*.sh bundled/connectwifi/*.sh; do
+  for f in scripts/*.sh templates/whisplay-app-template/*.sh bundled/connectwifi/*.sh drivers/whisplay/*.sh; do
     [ -f "$f" ] || continue
     if head -1 "$f" | grep -q bash; then bash -n "$f" || ok=1; else sh -n "$f" || ok=1; fi
   done
+  for f in tests/fresh_install/*.sh tests/fresh_install/fakes/systemctl; do bash -n "$f" || ok=1; done
+  for f in tests/fresh_install/fakes/udevadm tests/fresh_install/fakes/uname tests/fresh_install/fakes/depmod; do
+    sh -n "$f" || ok=1
+  done
+  # Whisplay's sound card scripts start as sh and re-run themselves under bash.
+  for f in drivers/whisplay/audio/whisplay-soundcard/scripts/*.sh; do bash -n "$f" || ok=1; done
   sh -n scripts/mfruit-run || ok=1
   sh -n scripts/mfruitctl || ok=1
   return $ok
@@ -64,6 +70,9 @@ step "shell syntax" shell_syntax
 step "LF line endings" line_endings
 step "whitespace" whitespace
 step "Markdown links" "$PYTHON" scripts/check-docs.py
+step "Whisplay driver files match upstream" bash scripts/whisplay-driver-sync.sh --check
+step "Whisplay daemon upstream tests" "$PYTHON" -m unittest discover -s drivers/whisplay/daemon/tests \
+  -t drivers/whisplay/daemon/tests
 step "template package preflight" "$PYTHON" scripts/check-app.py templates/whisplay-app-template
 step "template SDK copy" sh scripts/sdk-sync.sh templates/whisplay-app-template/app --check
 step "offscreen self-test" "$PYTHON" -m mfruitos --self-test

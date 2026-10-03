@@ -10,6 +10,7 @@ Name new records `YYYY-MM-DD-topic.md` and add them to the top of this list.
 
 | Date | Record | Scope |
 |---|---|---|
+| 2026-10-03 | [Bundled Whisplay driver and offline installation](2026-10-03-bundled-whisplay-driver.md) | Whisplay driver in `drivers/whisplay`, offline packs; dev machine and Orange Pi (no privileged step run) |
 | 2026-10-03 | [Fruit Store](2026-10-03-fruit-store.md) | WiFi Config leftover explained; uninstall/delete/reset; Pi check |
 | 2026-10-03 | [Radio deaf: LCD DC line](2026-10-03-radio-deaf-dc-line.md) | Messenger "Radio deaf: check M0/M1": root cause, daemon-wrapper fix, Pi check |
 | 2026-10-03 | [Keyboard bridge and App installer repair](2026-10-03-keyboard-bridge-and-repair.md) | Jump/Flappy Bird keyboard play and exit; Repair for broken catalogue apps; Pi install |

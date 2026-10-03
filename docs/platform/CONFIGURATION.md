@@ -70,7 +70,7 @@ python3 -m mfruitos.system.settings --dump-defaults > config/default.json
 | `developer.debug_logging` | false | bool | debug-level logs |
 | `daemon.socket_path` | `/tmp/whisplay-daemon.sock` | string ≤200 | hardware service socket |
 | `daemon.fallback_direct_display` | true | bool | allow the recovery display when the daemon unit is down |
-| `daemon.whisplay_root` | `""` | string ≤300 | Whisplay checkout for the recovery display (empty = detect) |
+| `daemon.whisplay_root` | `""` | string ≤300 | Whisplay driver directory for the recovery display (empty = detect: the daemon's `WorkingDirectory`, `/usr/local/share/whisplay`, `~/Whisplay`, the bundled copy) |
 | `apps.order` | `[]` | list of app IDs | user's Home order |
 | `apps.clean_menu` | false | bool | show only `installed_ids` (plus system entries) on Home |
 | `apps.installed_ids` | `[]` | list of app IDs | apps added to the curated menu |

@@ -27,8 +27,10 @@ framebuffer and decides which app runs.
       app_manager/lifecycle.py, system/hardware.py, launcher/direct.py
    │  /tmp/whisplay-daemon.sock (line-delimited JSON)
    ▼
- whisplay-daemon (Whisplay checkout, started by whisplay-daemon-mfruit.py)
+ whisplay-daemon (Whisplay driver: drivers/whisplay → /usr/local/share/whisplay,
+   │  started by whisplay-daemon-mfruit.py)
    │  LCD, backlight, RGB LED, button, PiSugar, app processes, focus
+   │  sound card kernel module + overlays (installed by drivers/whisplay/install.sh)
    ▼
  Display HAT and board (Raspberry Pi Zero 2 W, Orange Pi Zero 2W)
 ```

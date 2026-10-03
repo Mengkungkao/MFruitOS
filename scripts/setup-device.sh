@@ -22,7 +22,8 @@ Install options are forwarded unchanged to the existing installer:
   --no-background-daemon   retain the daemon's own desktop between apps
   --yes                    installer noninteractive mode (sudo still needs authorization)
 
-Hardware drivers and whisplay-daemon must already be installed and running.
+scripts/install.sh installs the MFruit OS Whisplay driver (docs/WHISPLAY_DRIVER.md)
+when it is missing or out of date; --check only reports its state.
 See docs/platform/INSTALLATION.md for prerequisites, manual setup, tests and recovery.
 EOF
 }
@@ -76,7 +77,18 @@ if manifest.id != "mfruit-os" or manifest.type != "system" or manifest.version !
 print(f"OK: Python {sys.version.split()[0]}, Pillow {PIL.__version__}, MFruit OS {__version__}")
 PY
 
-systemctl cat whisplay-daemon.service >/dev/null 2>&1 || fail "install whisplay-daemon.service using the driver instructions for your board"
+printf 'Whisplay driver:\n'
+DRIVER_CHECK=0
+bash "$SRC/drivers/whisplay/install.sh" --check | sed 's/^/  /' || DRIVER_CHECK=$?
+[ "$DRIVER_CHECK" != 3 ] || fail "no supported Whisplay board detected (docs/WHISPLAY_DRIVER.md)"
+[ "$DRIVER_CHECK" = 0 ] || ok "scripts/install.sh installs or updates the Whisplay driver (sudo; a reboot when buses or the sound card are new)"
+if ! systemctl cat whisplay-daemon.service >/dev/null 2>&1; then
+  if [ "$MODE" = check ]; then
+    printf 'Preflight passed (the driver is installed first). Install with: bash scripts/setup-device.sh --install\n'
+    exit 0
+  fi
+  exec bash "$SRC/scripts/install.sh" "${INSTALL_ARGS[@]}"
+fi
 DAEMON_USER="$(systemctl show --property=User --value whisplay-daemon.service)"
 [ "$DAEMON_USER" = "$(id -un)" ] || fail "whisplay-daemon runs as ${DAEMON_USER:-root}; log in as its configured non-root user"
 systemctl is-active --quiet whisplay-daemon.service || fail "whisplay-daemon is not active; inspect journalctl -u whisplay-daemon -n 80"

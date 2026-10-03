@@ -74,8 +74,42 @@ Then: a new project merging Messenger and WalkieTalkie into one app.
 | S6 | Fruit Store catalogue: RadioConnect in, Messenger and WalkieTalkie out (user) | DONE: native catalogue entries (`"native": true`, pinned `ref` 959354d + SHA-256, `version` 0.4.0); installed from the catalogue on the Pi (fresh OS image, hostname now pizero2w: no UART yet, so radio offline until setup-radio.sh) and reinstalled over the sideloaded copy on the Orange Pi (verified=True, data kept); check.sh 427 + new tests |
 | P1 | New project **RadioConnect** (`/home/meng/RadioConnect`): Messenger + WalkieTalkie in one app (user: WalkieTalkie v3 + SOS protocol; keep the old apps) | R0, R1 (Chats), L1 (standalone lifecycle on both devices) DONE; Talk redesign, voice/text delivery ticks, pairing-loss fix and unpairing (0.3.2) on both devices, texts ✓✓ both ways; R2 SOS next — see RadioConnect/CONTINUE.md |
 
+## Whisplay driver in MFruit OS (2026-10-03, user request)
+
+User: replace the external PiSugar/Whisplay driver with an MFruit OS-owned
+one; change nothing else; then: installing offline from the GitHub code
+copied to an SD card must work too. Canonical:
+[docs/WHISPLAY_DRIVER.md](docs/WHISPLAY_DRIVER.md),
+[ADR 0008](docs/platform/ADR/0008-bundled-whisplay-driver.md), evidence:
+[record](docs/quality/records/2026-10-03-bundled-whisplay-driver.md).
+
+| Step | Work | Status |
+|---|---|---|
+| W1 | `drivers/whisplay/`: 48 upstream files of `c73051e` unmodified (runtime, daemon, sound card), `upstream.sha256`, `UPSTREAM.md` (taken/left out, licences) | DONE; checksums in check.sh |
+| W2 | `drivers/whisplay/install.sh` (replaces Whisplay's 7 installers; `--check`, `--rollback`), `uninstall.sh`, `scripts/whisplay-driver-sync.sh` | DONE; detection/boot-config/staged-copy tests |
+| W3 | `scripts/install.sh` runs the driver (`--no-driver`), reboot handling; `setup-device.sh --check` reports it; recovery display finds `/usr/local/share/whisplay` | DONE |
+| W4 | Tests/CI use the bundled daemon (no Whisplay clone); driver SPI/GPIO tests | DONE: check.sh 461 OK |
+| W5 | Offline packs: `scripts/offline.sh`, `scripts/make-offline-pack.sh`; sound card failure no longer fatal | DONE; real pack built on the Orange Pi (207 MB), resolves on an empty system |
+| W7 | One-script fresh install: `tests/fresh_install/rehearse.sh` (offline, disposable container on the Orange Pi's Docker); fixed missing DejaVu fonts (daemon pages crashed on a fresh 22.04), Bluetooth packages, reboot prompt/`--reboot`, sound card built in a temp copy | DONE: 47/47 checks + real-daemon tests against the installed driver |
+| W6 | Device: changeover / fresh install / checklist D1–D8 | Orange Pi changeover DONE (user ran install.sh 2026-10-03 17:23; D1, D2, lifecycle, D6 verified over SSH). Fresh install, offline install, D3–D5, D7, D8 NOT VERIFIED |
+
+The user plans to wipe the Orange Pi to a fresh image next: its data and the
+offline pack are saved on the dev machine in
+`~/mfruit-backups/orangepi-20261003-before-wipe/` (restore radio keys from
+there if the pairing is wanted). After the reflash: copy the dev machine's SSH
+key again (`ssh-copy-id`), then the fresh/offline install test.
+Non-root device tests passed on the Orange Pi (record); backup taken in
+`~/mfruit-backups/20261003-072228-before-bundled-driver`. Claude Code blocks
+using a password typed into the chat, so the user runs the install step.
+To finish W6 on the Orange Pi (user, with sudo password):
+`cd ~/MFruitOS-candidate && bash scripts/install.sh`, then
+`bash drivers/whisplay/install.sh --check` and checklist D1–D8. Check
+`mfruitctl jobs` first (KI-9). New installs no longer get Whisplay's demo
+games (user to decide whether they belong in the Fruit Store).
+
 ## Next steps (in order)
 
+0. Whisplay driver W6 above (device install with the user's sudo).
 1. User decision: commit and push (CI then runs for the first time; check
    both jobs, especially Python 3.9).
 2. User decision on [ADR 0006](docs/platform/ADR/0006-settings-provider-apps.md)
@@ -97,8 +131,8 @@ Then: a new project merging Messenger and WalkieTalkie into one app.
   `~/MFruitOS`: on the Orange Pi that is the user's git clone. On the Pi,
   `~/MFruitOS` was overwritten by earlier deploys this session (no `.git` there).
 
-- Raspberry Pi Zero 2 W: `ssh jarvis@192.168.0.33` (key-based); Whisplay at
-  upstream `1066486`; sudoers allows `systemctl restart whisplay-os.service`
+- Raspberry Pi Zero 2 W: `ssh jarvis@192.168.0.33` (key-based; unreachable
+  2026-10-03 afternoon); Whisplay at upstream `1066486`; sudoers allows `systemctl restart whisplay-os.service`
   and `whisplay-daemon.service`. Orange Pi not tested this session.
 - `~/ai-chatbot/Whisplay` on the dev machine is a copy vendored in the
   ai-chatbot repository, not a Whisplay git checkout.

@@ -4,10 +4,11 @@
 Installed by MFruit OS's install.sh as a systemd drop-in for
 whisplay-daemon.service:
 
-    python3 whisplay-daemon-mfruit.py --whisplay /home/pi/Whisplay \\
+    python3 whisplay-daemon-mfruit.py --whisplay /usr/local/share/whisplay \\
         --lock /home/pi/.whisplay-os/state/launcher.lock
 
-It starts the unmodified daemon from the Whisplay checkout and changes four
+It starts the unmodified daemon from the Whisplay driver directory
+(/usr/local/share/whisplay, docs/WHISPLAY_DRIVER.md) and changes four
 behaviours *only while MFruit OS is running* (MFruit OS holds an flock on
 ``--lock``; the check reads /proc/locks and never takes the lock itself):
 
@@ -267,7 +268,7 @@ def park_dc_low(module) -> list[str]:
     """Lower ``WhisplayBoard.DC_PIN`` after each LCD data transfer.
 
     Same change as WalkieTalkie's docs/whisplay-dc-fix.patch, applied here so
-    the Whisplay checkout stays unmodified. A checkout that already lowers DC
+    the Whisplay driver files stay unmodified. A driver that already lowers DC
     gets one redundant GPIO write per transfer. Returns the patched methods.
     """
     cls = getattr(module, "WhisplayBoard", None)
@@ -292,7 +293,7 @@ def park_dc_low(module) -> list[str]:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--whisplay", required=True, help="Whisplay checkout (contains daemon/)")
+    parser.add_argument("--whisplay", required=True, help="Whisplay driver directory (contains daemon/)")
     parser.add_argument("--lock", required=True, help="MFruit OS launcher.lock")
     args, rest = parser.parse_known_args(argv)
     daemon_dir = os.path.join(os.path.abspath(args.whisplay), "daemon")

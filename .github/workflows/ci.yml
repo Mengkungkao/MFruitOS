@@ -14,23 +14,17 @@ jobs:
     name: Checks and full suite (Python 3.12, real daemon)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    env:
-      # whisplay-daemon revision validated on the Raspberry Pi (2026-10-02 record).
-      WHISPLAY_REF: 1066486ae0e27736ed9c23f0a400c550182a08d0
     steps:
       - uses: actions/checkout@v4
       - name: System Python modules used by the launcher and the real daemon
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends python3-pil python3-numpy python3-dbus python3-gi python3-cryptography
-      - name: Pinned whisplay-daemon source for the real-host contract tests
-        run: |
-          git clone --quiet https://github.com/PiSugar/Whisplay.git "$RUNNER_TEMP/Whisplay"
-          git -C "$RUNNER_TEMP/Whisplay" checkout --quiet "$WHISPLAY_REF"
+      # The real-host contract tests run the daemon bundled in drivers/whisplay.
       - name: scripts/check.sh
         env:
           PYTHON: /usr/bin/python3
-        run: WHISPLAY_SRC="$RUNNER_TEMP/Whisplay" bash scripts/check.sh
+        run: bash scripts/check.sh
 
   python39:
     name: Python 3.9 compatibility (no daemon)
@@ -42,7 +36,7 @@ jobs:
         with:
           python-version: "3.9"
       - run: python -m pip install --quiet "Pillow>=9,<12" "cryptography>=3.4"
-      - name: Unit and integration suite (real-daemon tests skip without WHISPLAY_SRC)
+      - name: Unit and integration suite (WHISPLAY_SRC=/nonexistent skips the real-daemon tests)
         env:
           PYTHONDONTWRITEBYTECODE: "1"
           WHISPLAY_SRC: /nonexistent

@@ -25,8 +25,10 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m mfruitos --preview /tmp/mfruit-preview
 python3 scripts/check-docs.py                      # Markdown links and anchors
 ```
 
-Real-daemon tests need a Whisplay checkout (`WHISPLAY_SRC`); never run two
-real-daemon suites at once.
+Real-daemon tests run the daemon bundled in `drivers/whisplay` (`WHISPLAY_SRC`
+substitutes another checkout); never run two real-daemon suites at once. The
+files in `drivers/whisplay` are upstream copies: never edit them
+([docs/WHISPLAY_DRIVER.md](docs/WHISPLAY_DRIVER.md)).
 
 ## Hard rules worth repeating
 

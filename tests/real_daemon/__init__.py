@@ -10,14 +10,16 @@ import tempfile
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-CANDIDATES = (os.environ.get("WHISPLAY_SRC", ""), os.path.expanduser("~/Whisplay"),
-              os.path.expanduser("~/ai-chatbot/Whisplay"))
+# The daemon MFruit OS ships (drivers/whisplay). WHISPLAY_SRC replaces it, e.g.
+# with a newer PiSugar/Whisplay checkout; a WHISPLAY_SRC without a daemon skips
+# the real-daemon tests (the Python 3.9 CI job sets /nonexistent).
+BUNDLED = os.path.join(os.path.dirname(os.path.dirname(HERE)), "drivers", "whisplay")
 
 
 def find_whisplay_src() -> str | None:
-    for path in CANDIDATES:
-        if path and os.path.isfile(os.path.join(path, "daemon", "whisplay_daemon.py")):
-            return path
+    path = os.environ.get("WHISPLAY_SRC") or BUNDLED
+    if os.path.isfile(os.path.join(path, "daemon", "whisplay_daemon.py")):
+        return path
     return None
 
 

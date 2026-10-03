@@ -8,8 +8,9 @@ used when the daemon's systemd unit is *inactive or failed* (never while it
 is starting), and the hardware is released as soon as the unit is active
 again, so it can never compete with a running daemon for GPIO/SPI.
 
-It uses the official ``WhisplayBoard`` from the Whisplay runtime; no
-hardware logic is duplicated here.
+It uses ``WhisplayBoard`` from the MFruit OS Whisplay driver's runtime
+(drivers/whisplay, installed to /usr/local/share/whisplay; docs/WHISPLAY_DRIVER.md);
+no hardware logic is duplicated here.
 """
 
 from __future__ import annotations
@@ -22,9 +23,12 @@ import subprocess
 import sys
 from typing import Callable
 
+from mfruitos.paths import package_root
+
 log = logging.getLogger("mfruitos.direct")
 
 DAEMON_UNIT = "whisplay-daemon.service"
+DRIVER_DIR = "/usr/local/share/whisplay"
 SAFE_STATES = {"inactive", "failed"}
 
 
@@ -49,7 +53,10 @@ def find_whisplay_root(configured: str = "") -> str | None:
             candidates.append(out.split("=", 1)[1].strip())
     except (OSError, subprocess.SubprocessError):
         pass
-    candidates.append(os.path.expanduser("~/Whisplay"))
+    # The installed driver, then a Whisplay checkout of an older installation,
+    # then the copy shipped with this MFruit OS version.
+    candidates += [DRIVER_DIR, os.path.expanduser("~/Whisplay"),
+                   os.path.join(package_root(), "drivers", "whisplay")]
     for path in candidates:
         if path and os.path.isfile(os.path.join(path, "runtime", "whisplay.py")):
             return path

@@ -27,6 +27,7 @@ Daemon-managed apps that are not MFruit OS packages may log to
 | The daemon's "Opening app…" or desktop still appears | Rerun `install.sh` (adds the daemon drop-in). *Settings → General → Diagnostics* shows *Hardware desktop: background* when active. |
 | The hardware desktop shows instead of MFruit OS | `systemctl status whisplay-os`; pick **MFruit OS** on the hardware desktop. *Developer → Daemon desktop* switches there on purpose. |
 | "Hardware service unavailable" | The daemon is stopped or failed: `journalctl -u whisplay-daemon -n 50`. *Retry* waits for it; *Restart daemon* restarts it (sudoers rule). |
+| Black screen, no sound, or the daemon restarts in a loop | `bash drivers/whisplay/install.sh --check` names the missing part (SPI, sound card, files, service); see [Whisplay driver](../WHISPLAY_DRIVER.md#troubleshooting). |
 | "Application failed to start" | *Logs* on that screen, or the app log. Check the app's dependencies before reinstalling. |
 | A different app than selected opened, or two apps | Find the `LAUNCH_REQUEST` and its `source` in `launcher.log`; `DENIED` lines in `launch-gate.log` and `INTRUDER` lines show starts MFruit OS blocked. Report with the [bug template](BUG_TEMPLATE.md). |
 | `LAUNCH_REFUSED_BY_DAEMON` | The line records who held the screen; usually another app was still closing. Retry. |

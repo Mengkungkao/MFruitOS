@@ -3,3 +3,9 @@
 *.sh text eol=lf
 scripts/mfruit-run text eol=lf
 scripts/mfruitctl text eol=lf
+# Copied unmodified from PiSugar/Whisplay (drivers/whisplay/UPSTREAM.md); the
+# checksums in upstream.sha256 must keep matching, so upstream whitespace stays.
+drivers/whisplay/LICENSE -whitespace
+drivers/whisplay/audio/** -whitespace
+drivers/whisplay/daemon/** -whitespace
+drivers/whisplay/runtime/** -whitespace
