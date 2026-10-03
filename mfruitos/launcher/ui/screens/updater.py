@@ -334,9 +334,17 @@ class InstallAppScreen(ListScreen):
         if installed:
             self._open(item['id'], item)
             return
-        needs = (" It needs the LoRa radio, which is not set up yet: run "
-                 "setup-radio.sh once over SSH (you can do it afterwards)."
-                 if self.missing.get(item['id']) else "")
+        from mfruitos.updater import catalog
+        if not self.missing.get(item['id']):
+            needs = ""
+        elif catalog.is_native(item):
+            # A native package checks its own dependencies and stops if the
+            # radio setup (which installs them) has not run.
+            needs = (" Set up the LoRa radio first: run setup-radio.sh once over SSH, "
+                     "then install.")
+        else:
+            needs = (" It needs the LoRa radio, which is not set up yet: run "
+                     "setup-radio.sh once over SSH (you can do it afterwards).")
         if broken:
             os.push(confirm(os, item['name'], "This app is registered but its files are missing. "
                             "Download and install it again? Its settings are kept." + needs,

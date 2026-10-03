@@ -31,16 +31,23 @@ Installing one:
 4. copies the current platform SDK into the package as `mfruit_sdk/`;
 5. runs the normal pipeline (hooks, smoke test, activation).
 
+An entry marked `"native": true` (RadioConnect) is a native MFruit OS package
+and is installed exactly as published: steps 2–4 are skipped. Only its
+`manifest.json` `id` and `version` must match the entry's `id` and `version`.
+Its own hooks run, and it updates from its GitHub releases like any native
+app.
+
 A catalogue app that is registered but whose files are missing shows
 **Repair**; it runs the same installation. From a shell, `mfruitctl catalog`
 lists each entry as `available`, `installed` or `broken`, and
 `mfruitctl catalog <id>` installs or repairs it (follow it with
 `mfruitctl jobs`).
 
-Entries with `requires: ["radio"]` (WalkieTalkie, Messenger) show **Needs
+Entries with `requires: ["radio"]` (RadioConnect) show **Needs
 radio setup first** until the LoRa radio is set up
-([radio setup](../platform/INSTALLATION.md#radio-setup-lora-apps)); they can
-still be installed first. Apart from that, the catalogue does not configure hardware: a radio, Codec2 or audio setup that
+([radio setup](../platform/INSTALLATION.md#radio-setup-lora-apps)). An
+adopted entry can still be installed first; RadioConnect's own install check
+stops with that instruction, and the previous state is kept. Apart from that, the catalogue does not configure hardware: a radio, Codec2 or audio setup that
 an app needs is still the user's step. Apps already on disk but missing from
 the menu can be restored with **Add** (files and data kept, autostart off).
 

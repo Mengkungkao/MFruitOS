@@ -71,6 +71,7 @@ Then: a new project merging Messenger and WalkieTalkie into one app.
 | S3 | Wrapper `mfruit.app.unregister` + client + lifecycle fallback | DONE (3 real-daemon tests, local + upstream 1066486) |
 | S4 | Services `uninstall_app`/`delete_app_data`/`reset_app`; Fruit Store screens (`store.py`); Settings > Apps uninstall uses the same flow; `mfruitctl uninstall/delete/reset/rollback` | DONE (9 store + ctl tests) |
 | S5 | Docs, check.sh, deploy to Pi, uninstall WiFi Config there | DONE: check.sh 422 OK; WiFi Config uninstalled + data deleted on the Pi through the Fruit Store ([record](docs/quality/records/2026-10-03-fruit-store.md)) |
+| S6 | Fruit Store catalogue: RadioConnect in, Messenger and WalkieTalkie out (user) | DONE: native catalogue entries (`"native": true`, pinned `ref` 959354d + SHA-256, `version` 0.4.0); installed from the catalogue on the Pi (fresh OS image, hostname now pizero2w: no UART yet, so radio offline until setup-radio.sh) and reinstalled over the sideloaded copy on the Orange Pi (verified=True, data kept); check.sh 427 + new tests |
 | P1 | New project **RadioConnect** (`/home/meng/RadioConnect`): Messenger + WalkieTalkie in one app (user: WalkieTalkie v3 + SOS protocol; keep the old apps) | R0, R1 (Chats), L1 (standalone lifecycle on both devices) DONE; Talk redesign, voice/text delivery ticks, pairing-loss fix and unpairing (0.3.2) on both devices, texts ✓✓ both ways; R2 SOS next — see RadioConnect/CONTINUE.md |
 
 ## Next steps (in order)

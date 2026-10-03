@@ -216,6 +216,12 @@ class RadioRequirementTests(AppInstallerScreenTests):
         self.assertIn("LoRa radio", dialog.message)
         self.assertEqual(dialog.items()[1].label, "Install")     # still installable
 
+    def test_a_native_radio_app_asks_for_the_radio_setup_before_installing(self):
+        self.item.update(native=True, version="0.4.0")
+        self.screen(["The radio is not set up"]).items()[0].action()
+        dialog = self.os.push.call_args.args[0]
+        self.assertIn("Set up the LoRa radio first", dialog.message)
+
     def test_ready_radio_shows_the_normal_description(self):
         row = self.screen([]).items()[0]
         self.assertEqual(row.subtitle, "Example app")
@@ -228,8 +234,7 @@ class RadioRequirementTests(AppInstallerScreenTests):
             needs = {item["id"]: catalog.requirements(item) for item in catalog.entries()}
         finally:
             self.catalog.start()
-        self.assertEqual(needs["whisplay-lora-walkie"], ["radio"])
-        self.assertEqual(needs["whisplay-lora-messenger"], ["radio"])
+        self.assertEqual(needs["radioconnect"], ["radio"])
         self.assertEqual(needs["whisplay-crypto-dashboard"], [])
         with self.assertRaises(catalog.CatalogError):
             catalog.requirements({"id": "x", "requires": ["jetpack"]})

@@ -284,7 +284,8 @@ class UpdateService:
         from mfruitos.updater import catalog
         item = catalog.get(app_id)
         return self.installer.run(InstallRequest(
-            repository=item['repository'], version='1.0.0', ref=item['ref'], url=item['url'],
+            repository=item['repository'], version=item.get('version', '1.0.0'),
+            ref=item['ref'], url=item['url'],
             expected_sha256=item['sha256'], app_id=app_id, catalog_id=app_id), progress)
 
     def install_from_repository(self, repository: str, progress=None) -> InstallResult:

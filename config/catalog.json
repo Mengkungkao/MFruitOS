@@ -16,40 +16,15 @@
     ]
   },
   {
-    "id": "whisplay-lora-walkie",
-    "name": "WalkieTalkie",
-    "description": "Requires a LoRa radio and Codec2",
-    "repository": "https://github.com/Mengkungkao/WalkieTalkie",
-    "ref": "a99c4bd93192c297feb84f94406fd89c478e17df",
-    "url": "https://api.github.com/repos/Mengkungkao/WalkieTalkie/tarball/a99c4bd93192c297feb84f94406fd89c478e17df",
-    "sha256": "cbac5542da0297173fc916424cbec954233843fe593ded97039ae7c1d217b408",
-    "entry": "-m app.main",
-    "dependencies": [
-      "pyserial>=3.5",
-      "PyYAML>=6",
-      "Pillow>=9",
-      "numpy>=1.21",
-      "cryptography>=3.4"
-    ],
-    "requires": [
-      "radio"
-    ]
-  },
-  {
-    "id": "whisplay-lora-messenger",
-    "name": "Messenger",
-    "description": "Radio messages; LoRa hardware required",
-    "repository": "https://github.com/Mengkungkao/Messenger",
-    "ref": "6d46d1552490d10f2301d2ef09294b3d6f2380cb",
-    "url": "https://api.github.com/repos/Mengkungkao/Messenger/tarball/6d46d1552490d10f2301d2ef09294b3d6f2380cb",
-    "sha256": "ce00d3d7d1df96bca69134f25941cf73e6592034d740abcf065c548c903b20fb",
-    "entry": "main.py",
-    "dependencies": [
-      "pyserial>=3.5",
-      "PyYAML>=6",
-      "Pillow>=9",
-      "numpy>=1.21"
-    ],
+    "id": "radioconnect",
+    "name": "RadioConnect",
+    "description": "LoRa voice, chats and pairing; needs the radio set up",
+    "repository": "https://github.com/Mengkungkao/RadioConnect",
+    "ref": "959354d239712780e7bd21852e314043039abe2f",
+    "url": "https://api.github.com/repos/Mengkungkao/RadioConnect/tarball/959354d239712780e7bd21852e314043039abe2f",
+    "sha256": "ff433b45106731544d14db6ff636a4a3222f13c898374033d97a01e034868f88",
+    "native": true,
+    "version": "0.4.0",
     "requires": [
       "radio"
     ]

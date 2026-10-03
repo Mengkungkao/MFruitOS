@@ -222,7 +222,7 @@ their data are intentionally being discarded.
 
 ## Radio setup (LoRa apps)
 
-Apps such as WalkieTalkie and Messenger need the Waveshare SX126X LoRa HAT set
+Radio apps such as RadioConnect need the Waveshare SX126X LoRa HAT set
 up once per device ([ADR 0007](ADR/0007-shared-radio-capability.md)). Remove
 the HAT's M0/M1 jumpers first (those pins are also the Whisplay LCD's). Then,
 over SSH as your normal user:

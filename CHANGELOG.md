@@ -27,6 +27,11 @@ the OS version.
   set-uid file in a folder was installed as is.
 
 ### Fruit Store
+- **RadioConnect is in the Fruit Store; Messenger and WalkieTalkie are not.**
+  RadioConnect replaces both. Copies already installed stay on the device, and
+  their pages in the Fruit Store still uninstall and delete them.
+- **Native catalogue entries:** `"native": true` installs an MFruit OS package
+  exactly as published (own manifest and hooks), pinned by commit and SHA-256.
 - **The App installer is now the Fruit Store:** each app has a page to open,
   update, roll back, reset, uninstall and delete it.
 - **Uninstall and delete are two steps, each confirmed:** Uninstall removes the

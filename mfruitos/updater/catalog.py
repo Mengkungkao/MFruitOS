@@ -1,4 +1,14 @@
-"""Small offline catalogue of reviewed, checksum-pinned app source packages."""
+"""Small offline catalogue of reviewed, checksum-pinned app source packages.
+
+Two kinds of entry:
+
+* **adopted** (default): an app that is not a native MFruit OS package. Its
+  own installers are replaced by generated ``manifest.json``, ``install.sh``
+  (a venv with ``dependencies``), ``run.sh`` and ``test.sh`` (``prepare``).
+* **native** (``"native": true``): an MFruit OS package with its own manifest
+  and hooks, installed exactly as published. The pinned source must carry
+  the entry's ``id`` and ``version``; nothing in it is rewritten.
+"""
 from __future__ import annotations
 
 from functools import lru_cache
@@ -45,6 +55,21 @@ def missing_requirements(item: dict, home: str | None = None) -> list:
     return problems
 
 
+def is_native(item: dict) -> bool:
+    return bool(item.get("native"))
+
+
+def _check_native(root: Path, item: dict) -> None:
+    try:
+        manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise CatalogError(f"Native catalogue package has no readable manifest: {exc}")
+    for key in ("id", "version"):
+        if manifest.get(key) != item.get(key):
+            raise CatalogError(f"Native catalogue package {key} is {manifest.get(key)!r}, "
+                               f"expected {item.get(key)!r}")
+
+
 def get(app_id: str) -> dict:
     for item in entries():
         if item['id'] == app_id:
@@ -80,8 +105,12 @@ def _write_text(path: Path, text: str) -> None:
 
 
 def prepare(directory: str, item: dict) -> None:
-    """Replace standalone system installers with package-local dependency setup."""
+    """Replace standalone system installers with package-local dependency setup.
+    A native package is only checked: its own manifest and hooks are used."""
     root = Path(directory)
+    if is_native(item):
+        _check_native(root, item)
+        return
     command = _entry_command(root, item['entry'])
     # Only used after verifying the exact source archive pinned in our catalogue.
     for name in ['install.sh', 'update.sh', 'uninstall.sh', 'run.sh', 'test.sh', 'manifest.json']:

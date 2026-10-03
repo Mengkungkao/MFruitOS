@@ -35,8 +35,34 @@ class CatalogTests(TempHomeTestCase):
                 owner_repo = item['repository'].removeprefix('https://github.com/')
                 self.assertEqual(item['url'],
                                  f"https://api.github.com/repos/{owner_repo}/tarball/{item['ref']}")
-                self.assertTrue(item['dependencies'])
+                if catalog.is_native(item):
+                    self.assertRegex(item['version'], r'^\d+\.\d+\.\d+$')
+                else:
+                    self.assertTrue(item['dependencies'])
                 self.assertEqual(catalog.get(item['id']), item)
+
+    def test_radioconnect_replaces_messenger_and_walkietalkie(self):
+        ids = [item['id'] for item in catalog.entries()]
+        self.assertIn('radioconnect', ids)
+        self.assertNotIn('whisplay-lora-messenger', ids)
+        self.assertNotIn('whisplay-lora-walkie', ids)
+        item = catalog.get('radioconnect')
+        self.assertTrue(catalog.is_native(item))
+        self.assertEqual(catalog.requirements(item), ['radio'])
+
+    def test_a_native_package_is_installed_as_published(self):
+        item = dict(id='weather', name='Weather', description='', native=True, version='2.1.0',
+                    repository='https://github.com/example/weather')
+        package = make_package(str(Path(self.tmp) / 'native'), app_id='weather', version='2.1.0',
+                               install_sh='#!/bin/sh\necho own hook\n')
+        before = {p.name: p.read_bytes() for p in Path(package).iterdir() if p.is_file()}
+        catalog.prepare(package, item)
+        after = {p.name: p.read_bytes() for p in Path(package).iterdir() if p.is_file()}
+        self.assertEqual(after, before, 'nothing rewritten')
+        for changes in ({'version': '2.0.0'}, {'id': 'other'}):
+            with self.subTest(changes=changes):
+                with self.assertRaises(catalog.CatalogError):
+                    catalog.prepare(package, dict(item, **changes))
 
     def test_unknown_id_has_actionable_error(self):
         with self.assertRaisesRegex(ValueError, 'Unknown catalogue app'):
