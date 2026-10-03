@@ -115,12 +115,24 @@ lock), during a bounded start-up grace period, and not in Daemon desktop mode:
 | `_on_button_pressed` / `_on_button_released` | ignored when no app owns the screen |
 | `_handle_keyboard_action` | ignored when no app owns the screen |
 | `_release_focus` | first draws the releasing owner's final frame |
+| `handle_command` | adds `mfruit.app.key`, `mfruit.page.key` and `mfruit.app.unregister` (below) |
 
 So during an app's start-up the LCD shows MFruit OS's "Opening <App>" screen
 and a press does nothing. `tests/test_background_ui.py` tests this against
 the real daemon code, including a negative control without the wrapper. The
 launch-window tests in `tests/test_launch_lifecycle.py` run **without** the
 wrapper to cover installations using `--no-background-daemon`.
+
+### Removing an app registration
+
+whisplay-daemon has no unregister command. `mfruit.app.unregister`
+(`{"app_id": ...}`) removes the app from the daemon's list and deletes its JSON
+file through the daemon's own `_save_app`. It is refused for MFruit OS, the
+daemon's built-in pages and an app that is running, starting or on screen.
+Without the wrapper the daemon answers `unknown command`; the launcher then
+re-registers the app as an empty, non-persistent "<name> (removed)" entry,
+which the registry hides until the daemon restarts.
+`tests/test_daemon_unregister.py` covers both against the real daemon.
 
 ### LCD DC line parked low (always)
 

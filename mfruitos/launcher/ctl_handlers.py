@@ -162,6 +162,40 @@ def _catalog(rt, args):
                                    "follow it with 'mfruitctl jobs'"}
 
 
+def _package_action(rt, args, action: str):
+    """uninstall / delete / reset / rollback: the Fruit Store's actions from a
+    shell, through the same services, without the questions (the shell user
+    asked explicitly)."""
+    app_id = args.get("app_id", "")
+    if not app_id:
+        return {"ok": False, "error": "app id required"}
+    if rt.tasks.busy("jobs"):
+        return {"ok": False, "error": f"busy: {rt.tasks.active.get('jobs')}"}
+    entry = rt.registry.get(app_id)
+    if action == "delete":
+        if entry is not None:
+            return {"ok": False, "error": f"{app_id} is installed; uninstall it first"}
+        if rt.registry.leftover(app_id) is None:
+            return {"ok": False, "error": f"nothing is kept for {app_id}"}
+        started = rt.delete_app_data(app_id)
+    elif entry is None:
+        return {"ok": False, "error": f"{app_id} is not installed"}
+    elif action == "uninstall":
+        started = rt.uninstall_app(app_id)
+    elif action == "reset":
+        started = rt.reset_app(app_id)
+    else:
+        if not entry.previous_version:
+            return {"ok": False, "error": f"{app_id} has no earlier version to roll back to"}
+        rt.router.home()
+        rt.rollback_app(app_id)
+        started = True
+    if not started:
+        return {"ok": False, "error": f"{action} refused for {app_id} (see the launcher log)"}
+    return {"ok": True, "message": f"{action} started; follow it with 'mfruitctl jobs' and "
+                                   "'mfruitctl apps'"}
+
+
 def _jobs(rt, args):
     return {"ok": True, "active": dict(rt.tasks.active)}
 
@@ -177,4 +211,8 @@ COMMANDS = {
     "apps": _apps,
     "launch": _launch, "reload": _reload, "check-updates": _check, "install": _install,
     "sideload": _sideload, "catalog": _catalog, "jobs": _jobs, "restart": _restart,
+    "uninstall": lambda rt, args: _package_action(rt, args, "uninstall"),
+    "delete": lambda rt, args: _package_action(rt, args, "delete"),
+    "reset": lambda rt, args: _package_action(rt, args, "reset"),
+    "rollback": lambda rt, args: _package_action(rt, args, "rollback"),
 }

@@ -90,15 +90,16 @@ Physical device validation (level 5) is a recorded procedure, not a test file
 ├── apps/<id>/
 │   ├── current -> versions/<version>-<random>   active version (atomic swap)
 │   ├── versions/               installed versions; the previous one is the code backup
-│   ├── data/                   app data, kept across updates
+│   ├── data/                   app data, kept across updates and Uninstall
 │   ├── backups/data-<version>/ data snapshot taken before hooks ran
-│   └── app.json                install record (versions, source, verified)
+│   ├── app.json                install record (versions, source, verified)
+│   └── uninstalled.json        only after Uninstall kept the data (then no current/versions)
 ├── adopted/<id>/               original registrations of adopted daemon apps
 ├── shared/radio/  (0700)       radio.json, device.json, keys.json, contacts.json (radio apps)
 ├── bin/                        mfruit-run, mfruitctl, boot-guard.sh, whisplay-daemon-mfruit.py
 ├── cache/                      GitHub metadata, downloads/
 ├── config/settings.json        settings ([Configuration](CONFIGURATION.md))
-├── inbox/                      local packages offered by App installer → Local packages
+├── inbox/                      local packages offered by Fruit Store → Local packages
 ├── logs/                       launcher.log, updater.log, launch-gate.log, <app>.log
 ├── state/  (0700)              launcher.lock, tickets/, runs/, launch-policy, control.sock,
 │                               keys.sock, boot and update markers

@@ -351,6 +351,85 @@ class ScreenServices:
                        on_success=lambda version: self.updater.mark_installed(app_id, version),
                        steps=("activate",))
 
+    # ---------------------------------------------- uninstall, delete, reset
+    # Fruit Store and mfruitctl share these. They run on the "jobs" lane, so
+    # they never overlap an install or update, and report through callbacks.
+
+    def _package_task(self, name: str, work, on_done=None, on_error=None) -> bool:
+        if self.tasks.busy("jobs"):
+            self.toast("Another install or update is running")
+            if on_error:
+                on_error(RuntimeError("busy"))
+            return False
+
+        def failed(exc):
+            text = exc.message if isinstance(exc, InstallError) else (str(exc) or type(exc).__name__)
+            log.warning("%s failed: %s", name, text)
+            self.refresh_registry(query_daemon=True)
+            if on_error:
+                on_error(exc)
+            else:
+                self.show_message(f"{name} failed", text, tone="error", icon="warning")
+
+        def done(result):
+            self.refresh_registry(query_daemon=True)
+            if on_done:
+                on_done(result)
+        self.run_task(name, work, done, failed, lane="jobs")
+        return True
+
+    def uninstall_app(self, app_id: str, on_done=None, on_error=None) -> bool:
+        """Remove an app from the device, keeping its data. ``on_done(kept)``
+        says whether anything is left for ``delete_app_data``."""
+        entry = self.registry.get(app_id)
+        if entry is None or entry.kind not in ("os", "daemon") or app_id == OS_APP_ID:
+            self.toast("Not an installed app", "error")
+            return False
+
+        def work():
+            if entry.running:
+                self.lifecycle.request_stop(entry)
+                self.lifecycle.force_stop(entry)
+            if entry.kind == "os":
+                kept = self.installer.uninstall(app_id)
+                self.lifecycle.unregister(app_id, entry.name)
+                return kept
+            if not self.lifecycle.unregister(app_id, entry.name):
+                raise InstallError("check", "whisplay-daemon did not remove the app; "
+                                            "is it running?")
+            return os.path.isdir(os.path.join(self.paths.home, "adopted", app_id))
+
+        def done(kept):
+            self.settings.forget_app(app_id)
+            self.updater.forget(app_id)
+            self.flush_settings()
+            log.info("Uninstalled %s (%s)", app_id, "data kept" if kept else "nothing kept")
+            if on_done:
+                on_done(kept)
+        return self._package_task(f"Uninstall {entry.name}", work, done, on_error)
+
+    def delete_app_data(self, app_id: str, on_done=None, on_error=None) -> bool:
+        """Delete what MFruit OS keeps for an uninstalled app (Installer.delete_data)."""
+        if self.registry.get(app_id) is not None:
+            self.toast("Uninstall the app first", "error")
+            return False
+        leftover = self.registry.leftover(app_id)
+        name = leftover.name if leftover else app_id
+        return self._package_task(f"Delete {name}", lambda: self.installer.delete_data(app_id),
+                                  on_done, on_error)
+
+    def reset_app(self, app_id: str, on_done=None, on_error=None) -> bool:
+        """Empty an installed app's data folder (Installer.reset_data)."""
+        entry = self.registry.get(app_id)
+        if entry is None or entry.kind != "os":
+            self.toast("Only apps installed by MFruit OS can be reset", "error")
+            return False
+        if entry.running:
+            self.toast("Stop the app before resetting it")
+            return False
+        return self._package_task(f"Reset {entry.name}", lambda: self.installer.reset_data(app_id),
+                                  on_done, on_error)
+
     def rollback_system(self) -> None:
         self.start_job("Roll back system",
                        lambda progress: self.installer.rollback_to_previous(OS_APP_ID, system=True),

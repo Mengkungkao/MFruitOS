@@ -26,6 +26,7 @@ from typing import Callable
 from mfruitos import OS_APP_ID
 from mfruitos.apps.manifest import (Manifest, ManifestError, is_safe_relative_path,
                                     load_manifest, same_repository)
+from mfruitos.apps.registry import UNINSTALLED_FILE
 from mfruitos.paths import Paths, is_valid_app_id
 from mfruitos.system.settings import atomic_write_json
 from mfruitos.updater import rollback
@@ -43,6 +44,7 @@ INSTALL_TIMEOUT_SEC = 900
 TEST_TIMEOUT_SEC = 120
 MIN_FREE_BYTES = 50 * 1024 * 1024
 ENTRYPOINT_FILE = ".mfruit-entrypoint"
+KEPT_ON_UNINSTALL = ("data", "backups")
 
 Progress = Callable[[str, str, float | None], None]
 
@@ -148,31 +150,123 @@ class Installer:
         log.info("Rolled %s back to %s", app_id, manifest.version)
         return manifest.version
 
-    def uninstall(self, app_id: str) -> None:
-        if not is_valid_app_id(app_id) or app_id == OS_APP_ID:
-            raise InstallError("check", f"Refusing to uninstall {app_id!r}")
+    def uninstall(self, app_id: str, keep_data: bool = True) -> bool:
+        """Remove an installed app's code. True if its data was kept.
+
+        With ``keep_data`` the package folder keeps ``data/`` and ``backups/``
+        plus an ``uninstalled.json`` note; reinstalling the app finds its data
+        again, and ``delete_data`` removes the rest. An app with no data, or
+        ``keep_data=False``, is removed completely.
+        """
+        self._check_app_id(app_id, "uninstall")
         root = self.paths.app_root(app_id)
-        if not os.path.isdir(root):
-            raise InstallError("check", "App is not installed by MFruit OS")
         current = rollback.current_target(root)
-        script = os.path.join(current, "uninstall.sh") if current else ""
-        if script and os.path.isfile(script):
+        if not os.path.isdir(root) or current is None:
+            raise InstallError("check", "App is not installed by MFruit OS")
+        record = self.read_record(root)
+        script = os.path.join(current, "uninstall.sh")
+        if os.path.isfile(script):
             log.info("Running uninstall.sh for %s", app_id)
             try:
                 _run_script(["/bin/bash", script], current, self._env(app_id, root, current),
                             self.paths.app_log(app_id), 120)
             except InstallError as exc:
                 log.warning("uninstall.sh failed for %s (continuing): %s", app_id, exc.message)
-        rollback.safe_rmtree(root, self.paths.apps_dir)
-        for path in (self.paths.app_log(app_id), self.paths.app_log(app_id) + ".1",
-                     os.path.join(self.paths.runs_dir, f"{app_id}.json")):
-            try:
+        data = os.path.join(root, "data")
+        if not keep_data or not (os.path.isdir(data) and os.listdir(data)):
+            self._remove_everything(app_id)
+            log.info("Uninstalled %s (nothing kept)", app_id)
+            return False
+        for name in sorted(os.listdir(root)):
+            if name in KEPT_ON_UNINSTALL:
+                continue
+            path = os.path.join(root, name)
+            if os.path.isdir(path) and not os.path.islink(path):
+                rollback.safe_rmtree(path, root)
+            else:
                 os.remove(path)
-            except FileNotFoundError:
-                pass
-            except OSError as exc:
-                log.warning("Cannot remove %s: %s", path, exc)
-        log.info("Uninstalled %s", app_id)
+        atomic_write_json(os.path.join(root, UNINSTALLED_FILE), {
+            "id": app_id, "name": record.get("name") or app_id,
+            "version": record.get("installed_version", ""),
+            "repository": record.get("repository", ""),
+            "uninstalled_at": time.strftime("%Y-%m-%d %H:%M:%S")})
+        self._remove_run_record(app_id)
+        log.info("Uninstalled %s; its data is kept in %s", app_id, data)
+        return True
+
+    def delete_data(self, app_id: str) -> list[str]:
+        """Delete what MFruit OS keeps for an app that is no longer installed:
+        its package folder (data, backups), logs, run record and adoption
+        record. Refused while the app is installed. Returns what was removed.
+
+        Files outside MFruit OS's folders (a daemon app's own folder, data an
+        app keeps under the home directory, the shared radio store) are never
+        touched.
+        """
+        self._check_app_id(app_id, "delete")
+        root = self.paths.app_root(app_id)
+        if rollback.current_target(root) is not None:
+            raise InstallError("check", "Uninstall the app before deleting its data")
+        removed = self._remove_everything(app_id)
+        log.info("Deleted the data of %s: %s", app_id, ", ".join(removed) or "nothing left")
+        return removed
+
+    def reset_data(self, app_id: str) -> int:
+        """Empty an installed app's data folder (a fresh start; the app and its
+        settings in MFruit OS stay). Returns the number of entries removed."""
+        self._check_app_id(app_id, "reset")
+        root = self.paths.app_root(app_id)
+        if rollback.current_target(root) is None:
+            raise InstallError("check", "App is not installed by MFruit OS")
+        data = os.path.join(root, "data")
+        count = 0
+        for name in sorted(os.listdir(data)) if os.path.isdir(data) else []:
+            path = os.path.join(data, name)
+            if os.path.isdir(path) and not os.path.islink(path):
+                rollback.safe_rmtree(path, data)
+            else:
+                os.remove(path)
+            count += 1
+        backups = os.path.join(root, "backups")
+        if os.path.isdir(backups):
+            rollback.safe_rmtree(backups, root)
+        log.info("Reset %s: %d data entries removed", app_id, count)
+        return count
+
+    def _check_app_id(self, app_id: str, action: str) -> None:
+        if not is_valid_app_id(app_id) or app_id == OS_APP_ID:
+            raise InstallError("check", f"Refusing to {action} {app_id!r}")
+
+    def _remove_everything(self, app_id: str) -> list[str]:
+        removed = []
+        root = self.paths.app_root(app_id)
+        if os.path.isdir(root):
+            rollback.safe_rmtree(root, self.paths.apps_dir)
+            removed.append(root)
+        adopted = os.path.join(self.paths.home, "adopted", app_id)
+        if os.path.isdir(adopted):
+            rollback.safe_rmtree(adopted, os.path.join(self.paths.home, "adopted"))
+            removed.append(adopted)
+        for path in (self.paths.app_log(app_id), self.paths.app_log(app_id) + ".1"):
+            if self._remove_file(path):
+                removed.append(path)
+        if self._remove_run_record(app_id):
+            removed.append(os.path.join(self.paths.runs_dir, f"{app_id}.json"))
+        return removed
+
+    def _remove_run_record(self, app_id: str) -> bool:
+        return self._remove_file(os.path.join(self.paths.runs_dir, f"{app_id}.json"))
+
+    @staticmethod
+    def _remove_file(path: str) -> bool:
+        try:
+            os.remove(path)
+            return True
+        except FileNotFoundError:
+            return False
+        except OSError as exc:
+            log.warning("Cannot remove %s: %s", path, exc)
+            return False
 
     def _env(self, app_id: str, root: str, version_dir: str, previous: str = "") -> dict:
         env = {k: v for k, v in os.environ.items()
@@ -205,6 +299,7 @@ class _Job:
         self.manifest: Manifest | None = None
         self.root = ""
         self.fresh = False
+        self.kept_root = False
         self.previous_dir: str | None = None
         self.previous_version = ""
         self.new_dir = ""
@@ -318,6 +413,9 @@ class _Job:
         self.previous_record = self.i.read_record(self.root)
         self.previous_dir = rollback.current_target(self.root)
         self.fresh = self.previous_dir is None
+        # Reinstalling an app uninstalled with its data kept: that data is the
+        # user's, so a failure must not take it with the half-installed version.
+        self.kept_root = self.fresh and not self.system and os.path.isdir(self.root)
         if self.previous_dir:
             try:
                 self.previous_version = load_manifest(self.previous_dir).version
@@ -329,8 +427,8 @@ class _Job:
         os.makedirs(os.path.join(self.root, "versions"), exist_ok=True)
         if not self.system:
             os.makedirs(os.path.join(self.root, "data"), exist_ok=True)
-            if not self.fresh:
-                self.data_snapshot = rollback.snapshot_data(self.root, self.previous_version or "prev")
+            if not self.fresh or self.kept_root:
+                self.data_snapshot = rollback.snapshot_data(self.root, self.previous_version or "kept")
         self.report("backup", "Previous version kept" if not self.fresh else "Fresh install", None)
 
     def _install(self) -> None:
@@ -422,6 +520,11 @@ class _Job:
             "verified": self.verified, "source": "local" if self.req.local_path else "github",
         })
         atomic_write_json(self.i.record_path(self.root), record)
+        if not self.system:
+            try:
+                os.remove(os.path.join(self.root, UNINSTALLED_FILE))   # installed again
+            except FileNotFoundError:
+                pass
         if self.system:
             atomic_write_json(os.path.join(self.i.paths.state_dir, "pending_system_update.json"),
                               {"version": manifest.version, "previous_dir": self.previous_dir or "",
@@ -445,7 +548,10 @@ class _Job:
             if self.new_dir and os.path.isdir(self.new_dir):
                 rollback.safe_rmtree(self.new_dir, os.path.join(self.root, "versions"))
             if self.fresh and not self.system and os.path.isdir(self.root):
-                rollback.safe_rmtree(self.root, self.i.paths.apps_dir)
+                if self.kept_root:
+                    self._remove_job_files()
+                else:
+                    rollback.safe_rmtree(self.root, self.i.paths.apps_dir)
             if self.previous_dir:
                 current = rollback.current_target(self.root)
                 ok = current is not None and os.path.realpath(current) == os.path.realpath(self.previous_dir)
@@ -453,6 +559,16 @@ class _Job:
             log.critical("Rollback failed: %s", exc)
             ok = False
         return ok
+
+    def _remove_job_files(self) -> None:
+        """Undo a failed reinstall over kept data: everything but that data."""
+        for name in ("current", "app.json"):
+            path = os.path.join(self.root, name)
+            if os.path.lexists(path):
+                os.remove(path)
+        versions = os.path.join(self.root, "versions")
+        if os.path.isdir(versions) and not os.listdir(versions):
+            os.rmdir(versions)
 
     def _cleanup_work(self) -> None:
         if os.path.isdir(self.work):

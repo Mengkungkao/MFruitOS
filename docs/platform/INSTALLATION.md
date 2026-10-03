@@ -122,7 +122,7 @@ What the installer does, in order:
 4. Installs `mfruit-run`, `mfruitctl` and `boot-guard.sh` into
    `~/.whisplay-os/bin` and runs the offline self-test.
 5. Provisions bundled ConnectWifi when no Wi-Fi app exists; a first install
-   seeds the Apps menu with available starter games, App installer and
+   seeds the Apps menu with available starter games, Fruit Store and
    Settings. Reruns preserve existing apps, settings, order and launch policy.
 6. With the service: the system changes listed below, then enables and starts
    `whisplay-os.service`.
@@ -182,7 +182,7 @@ sudo systemctl start whisplay-os.service
 
 ## Updating MFruit OS
 
-- **On the device:** *Settings → General → Software Update* (or *App installer →
+- **On the device:** *Settings → General → Software Update* (or *Fruit Store →
   Updates → MFruit OS*) installs a published GitHub release and restarts.
   **Versions** selects a release; **Roll back** restores the saved local build.
 - **From a checkout:** `bash scripts/update.sh` (fast-forward `git pull`, then

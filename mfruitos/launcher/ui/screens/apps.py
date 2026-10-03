@@ -102,7 +102,7 @@ class AppDetailScreen(ListScreen):
             rows.append(Item("Updates", lambda: os.open_app_updates(app.id), kind="nav",
                              icon="updater",
                              value="Available" if app.update_available else None, tone="accent"))
-        if app.kind == "os":
+        if app.kind in ("os", "daemon"):
             rows.append(Item("Uninstall", self._uninstall, kind="danger", icon="trash"))
         rows.append(back_item())
         return rows
@@ -150,27 +150,7 @@ class AppDetailScreen(ListScreen):
                              lambda: self.os.run_task("force-stop", run, done)))
 
     def _uninstall(self) -> None:
-        app = self.app
-        message = (f"This will delete:\n  Application files\n  Configuration\n  Cache and logs\n"
-                   f"Version {app.version}.")
-
-        def run():
-            if app.running:
-                self.os.lifecycle.request_stop(app)
-                self.os.lifecycle.force_stop(app)
-            self.os.updater.installer.uninstall(app.id)
-            return True
-
-        def done(_):
-            self.os.lifecycle.unregister(app.id, app.name)
-            self.os.settings.forget_app(app.id)
-            self.os.updater.forget(app.id)
-            self.os.refresh_registry(query_daemon=True)
-            self.os.pop_to_type(ApplicationsScreen)
-            self.os.toast(f"{app.name} removed", "success")
-
-        def failed(exc):
-            self.os.push(MessageScreen(self.os, "Uninstall failed", str(exc), tone="error",
-                                       icon="warning"))
-        self.os.push(confirm(self.os, f"Remove {app.name}?", message, "Remove",
-                             lambda: self.os.run_task("uninstall", run, done, failed)))
+        """The Fruit Store's two questions: uninstall (data kept), then delete."""
+        from mfruitos.launcher.ui.screens.store import ask_uninstall
+        ask_uninstall(self.os, self.app_id,
+                      after=lambda kept: self.os.pop_to_type(ApplicationsScreen))

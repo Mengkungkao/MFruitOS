@@ -28,6 +28,7 @@ class RuntimeEndToEndTests(TempHomeTestCase):
                             {"app_id": app_id, "display_name": app_id.title(),
                              "launch_command": "./run.sh", "cwd": self.tmp})
         self.daemon.behaviour["crashy"] = "crash"
+        open(os.path.join(self.tmp, "run.sh"), "a").close()   # the apps' files exist
         self.rt = Runtime(self.paths, ROOT, socket_path=self.daemon.socket_path,
                           input_dir=helpers.NO_INPUT_DEVICES)
         self.rt.settings.set("button.click_gap_ms", 150)

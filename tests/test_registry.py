@@ -25,6 +25,8 @@ class RegistryTests(TempHomeTestCase):
     def daemon_app(self, app_id, cwd=None, command="python3 main.py", **extra):
         data = {"app_id": app_id, "display_name": app_id.upper(), "icon": "X",
                 "launch_command": command, "cwd": cwd or self.tmp, "priority": 0}
+        if command == "python3 main.py" and os.path.isdir(data["cwd"]):
+            open(os.path.join(data["cwd"], "main.py"), "a").close()   # the app's files exist
         data.update(extra)
         self.write_json(os.path.join(self.paths.daemon_apps_dir, f"{app_id}.json"), data)
 
@@ -130,6 +132,38 @@ class RegistryTests(TempHomeTestCase):
         self.assertEqual(self.registry.get("nocmd").broken, "No launch command")
         self.assertEqual(self.registry.get("nocwd").broken, "Working directory missing")
         self.assertIn("missing", self.registry.get("orphan").broken)
+
+    def test_daemon_app_whose_script_is_gone_is_broken(self):
+        # WiFi Config on the Pi: registered long ago; the Whisplay example it
+        # ran (wifi_config_app.py) no longer exists in the checkout.
+        self.daemon_app("wifi", command="python3 wifi_config_app.py")
+        self.daemon_app("module", command="python3 -m app.main")
+        self.daemon_app("script", command="./run.sh")
+        self.registry.refresh(None)
+        self.assertEqual(self.registry.get("wifi").broken, "App files missing (wifi_config_app.py)")
+        self.assertEqual(self.registry.get("module").broken, "")
+        self.assertEqual(self.registry.get("script").broken, "App files missing (./run.sh)")
+        open(os.path.join(self.tmp, "wifi_config_app.py"), "w").close()
+        self.registry.refresh(None)
+        self.assertEqual(self.registry.get("wifi").broken, "")
+
+    def test_a_removed_registration_a_plain_daemon_still_lists_is_hidden(self):
+        live = [{"app_id": "gone", "display_name": "Gone (removed)", "priority": -1000}]
+        self.registry.refresh(live)
+        self.assertIsNone(self.registry.get("gone"))
+
+    def test_an_uninstalled_adopted_daemon_app_is_a_leftover_until_deleted(self):
+        adopted = os.path.join(self.paths.home, "adopted", "wifi")
+        self.write_json(os.path.join(adopted, "registration.json"),
+                        {"app_id": "wifi", "display_name": "WiFi Config"})
+        self.daemon_app("wifi")
+        self.registry.refresh(None)
+        self.assertEqual(self.registry.leftovers(), [], "still registered: an app")
+        os.remove(os.path.join(self.paths.daemon_apps_dir, "wifi.json"))
+        self.registry.refresh(None)
+        self.assertIsNone(self.registry.get("wifi"))
+        self.assertEqual([(i.id, i.name, i.kind) for i in self.registry.leftovers()],
+                         [("wifi", "WiFi Config", "daemon")])
 
     def test_duplicate_daemon_files_first_wins(self):
         self.write_json(os.path.join(self.paths.daemon_apps_dir, "a1.json"),

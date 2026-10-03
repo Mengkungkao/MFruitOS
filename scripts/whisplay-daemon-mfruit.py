@@ -179,6 +179,8 @@ def apply(module, lock_path: str, log=print, startup_grace: float = 0) -> list[s
         def handle_command(self, request, conn):
             if request.get("cmd") == "mfruit.app.key":
                 return app_key(self, request)
+            if request.get("cmd") == "mfruit.app.unregister":
+                return app_unregister(self, request)
             if request.get("cmd") != "mfruit.page.key":
                 return original_command(self, request, conn)
             payload = request.get("payload") or {}
@@ -230,6 +232,32 @@ def apply(module, lock_path: str, log=print, startup_grace: float = 0) -> list[s
                 else:
                     return {"ok": False, "error": "unsupported key"}, False
                 return {"ok": True, "payload": {}}, False
+        def app_unregister(self, request):
+            """Forget an app registration (whisplay-daemon has no command for it).
+
+            MFruit OS's uninstall uses this: the app leaves the daemon's list at
+            once and its JSON file is removed by the daemon's own ``_save_app``.
+            Refused for MFruit OS itself, the daemon's built-in pages and an app
+            that is running, starting or on screen.
+            """
+            payload = request.get("payload") or {}
+            if request.get("version", 1) != 1 or not isinstance(payload, dict):
+                return {"ok": False, "error": "invalid unregister request"}, False
+            app_id = payload.get("app_id")
+            with self.state_lock:
+                app = self.apps.get(app_id) if isinstance(app_id, str) else None
+                if app is None:
+                    return {"ok": False, "error": f"unknown app: {app_id}"}, False
+                if app_id == OS_APP_ID or self.internal_apps.is_internal_app(app_id):
+                    return {"ok": False, "error": f"{app_id} cannot be unregistered"}, False
+                if (app.is_running() or self.foreground_app_id == app_id
+                        or getattr(self, "pending_launch_app_id", None) == app_id):
+                    return {"ok": False, "error": f"{app_id} is running"}, False
+                del self.apps[app_id]
+                app.persist = False
+                self._save_app(app)
+            log(f"[mfruit] unregistered {app_id}")
+            return {"ok": True, "payload": {"app_id": app_id}}, False
         cls.handle_command = handle_command
         patched.append("handle_command")
     return patched

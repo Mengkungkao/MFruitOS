@@ -12,6 +12,10 @@ Three sources are merged (never hard-coded):
 
 A broken app is reported with ``broken`` set; it never prevents other apps
 from loading.
+
+An app uninstalled with its data kept is not an app any more: it is listed
+by ``leftovers()`` (an OS package folder holding ``uninstalled.json`` and its
+data, or an adopted daemon app's record) until its data is deleted.
 """
 
 from __future__ import annotations
@@ -19,6 +23,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shlex
 from dataclasses import dataclass, field
 
 from mfruitos import OS_APP_ID
@@ -38,6 +43,8 @@ SYSTEM_PAGES = {
 
 RUN_WRAPPER_NAME = "mfruit-run"
 SETTINGS_APPS = frozenset({"connectwifi"})
+UNINSTALLED_FILE = "uninstalled.json"   # in apps/<id>/ once uninstalled with data kept
+REMOVED_SUFFIX = " (removed)"           # name of a registration a plain daemon cannot drop
 
 
 @dataclass
@@ -114,12 +121,44 @@ def is_wrapper_command(command: str, app_id: str) -> bool:
     return RUN_WRAPPER_NAME in command and command.rstrip().endswith(app_id)
 
 
+def missing_script(command: str, cwd: str) -> str:
+    """The script a ``python3 x.py`` / ``bash x.sh`` / ``./x`` command runs, if
+    it does not exist (relative to ``cwd``); "" when present or not knowable."""
+    try:
+        words = shlex.split(command)
+    except ValueError:
+        return ""
+    if not words:
+        return ""
+    script = ""
+    if os.path.basename(words[0]).startswith(("python", "bash", "sh")) and len(words) > 1:
+        if not words[1].startswith("-"):
+            script = words[1]
+    elif "/" in words[0]:
+        script = words[0]
+    if not script:
+        return ""
+    path = script if os.path.isabs(script) else os.path.join(cwd or "", script)
+    return "" if os.path.exists(path) else script
+
+
+@dataclass
+class Leftover:
+    """An uninstalled app whose data MFruit OS still keeps."""
+    id: str
+    name: str
+    kind: str                      # "os" | "daemon"
+    version: str = ""
+    uninstalled_at: str = ""
+
+
 class AppRegistry:
     def __init__(self, paths: Paths, settings: Settings, os_version: str):
         self.paths = paths
         self.settings = settings
         self.os_version = os_version
         self._entries: dict[str, AppEntry] = {}
+        self._leftovers: dict[str, Leftover] = {}
         self._latest: dict[str, str] = {}
         self.daemon_online = False
 
@@ -140,6 +179,8 @@ class AppRegistry:
                 continue
             info = live.get(app_id, {})
             config = daemon_files.get(app_id, {})
+            if not config and str(info.get("display_name", "")).endswith(REMOVED_SUFFIX):
+                continue  # uninstalled; a plain daemon keeps it in memory until it restarts
             existing = entries.get(app_id)
             if existing is not None:
                 existing.registered = app_id in live
@@ -171,6 +212,7 @@ class AppRegistry:
             entry.latest_version = latest if entry.kind == "os" else ""
 
         self._entries = entries
+        self._leftovers = self._scan_leftovers(entries, daemon_files)
         log.info("Registry: %d apps (%d OS-managed, daemon %s)", len(entries),
                  sum(1 for e in entries.values() if e.kind == "os"),
                  "online" if self.daemon_online else "offline")
@@ -182,6 +224,35 @@ class AppRegistry:
 
     def _adopted_registration(self, app_id: str) -> dict | None:
         return _read_json(os.path.join(self.paths.home, "adopted", app_id, "registration.json"))
+
+    def _scan_leftovers(self, entries: dict, daemon_files: dict) -> dict[str, Leftover]:
+        found: dict[str, Leftover] = {}
+        for app_id in self._uninstalled_os_ids():
+            record = _read_json(os.path.join(self.paths.app_root(app_id), UNINSTALLED_FILE)) or {}
+            found[app_id] = Leftover(app_id, str(record.get("name") or app_id), "os",
+                                     str(record.get("version") or ""),
+                                     str(record.get("uninstalled_at") or ""))
+        adopted = os.path.join(self.paths.home, "adopted")
+        try:
+            names = sorted(os.listdir(adopted))
+        except OSError:
+            names = []
+        for app_id in names:
+            if app_id in found or app_id in entries or app_id in daemon_files \
+                    or not is_valid_app_id(app_id):
+                continue
+            record = self._adopted_registration(app_id) or {}
+            found[app_id] = Leftover(app_id, str(record.get("display_name") or app_id), "daemon")
+        return found
+
+    def _uninstalled_os_ids(self) -> list[str]:
+        try:
+            names = sorted(os.listdir(self.paths.apps_dir))
+        except OSError:
+            return []
+        return [name for name in names if is_valid_app_id(name)
+                and os.path.isfile(os.path.join(self.paths.apps_dir, name, UNINSTALLED_FILE))
+                and not os.path.lexists(os.path.join(self.paths.apps_dir, name, "current"))]
 
     def _scan_daemon_files(self) -> dict[str, dict]:
         result: dict[str, dict] = {}
@@ -235,6 +306,8 @@ class AppRegistry:
                 entry.broken = "Working directory missing"
             elif is_wrapper_command(entry.launch_command, app_id):
                 entry.broken = "App files missing (uninstalled?)"
+            elif missing_script(entry.launch_command, entry.cwd):
+                entry.broken = f"App files missing ({missing_script(entry.launch_command, entry.cwd)})"
         # Optional: a legacy app that ships an MFruit manifest gets richer metadata.
         if entry.cwd and os.path.isfile(os.path.join(entry.cwd, "manifest.json")):
             try:
@@ -261,6 +334,9 @@ class AppRegistry:
             root = os.path.join(self.paths.apps_dir, name)
             if name.startswith(".") or not os.path.isdir(root):
                 continue
+            if os.path.isfile(os.path.join(root, UNINSTALLED_FILE)) and \
+                    not os.path.lexists(os.path.join(root, "current")):
+                continue  # uninstalled, data kept: a leftover, not an app
             if not is_valid_app_id(name):
                 log.warning("Ignoring app directory with invalid id: %s", name)
                 continue
@@ -314,6 +390,13 @@ class AppRegistry:
 
     def get(self, app_id: str) -> AppEntry | None:
         return self._entries.get(app_id)
+
+    def leftovers(self) -> list[Leftover]:
+        """Uninstalled apps whose data is still kept, by name."""
+        return sorted(self._leftovers.values(), key=lambda item: item.name.lower())
+
+    def leftover(self, app_id: str) -> Leftover | None:
+        return self._leftovers.get(app_id)
 
     def apps(self) -> list[AppEntry]:
         """Installed applications (excludes daemon system pages)."""

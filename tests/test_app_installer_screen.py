@@ -9,6 +9,7 @@ from mfruitos.launcher.services import ScreenServices
 from mfruitos.launcher.ui.screens.apps import AppDetailScreen
 from mfruitos.launcher.ui.screens.home import HomeScreen
 from mfruitos.launcher.ui.screens.settings import WifiScreen
+from mfruitos.launcher.ui.screens.store import StoreAppScreen
 from mfruitos.launcher.ui.screens.updater import InstallAppScreen, UpdaterScreen
 from mfruitos.system.settings import Settings
 
@@ -110,7 +111,7 @@ class AppInstallerScreenTests(TempHomeTestCase):
         row = self.rows()[0]
         self.assertEqual(row.value, "Installed")
         row.action()
-        self.assertIsInstance(self.os.push.call_args.args[0], AppDetailScreen)
+        self.assertIsInstance(self.os.push.call_args.args[0], StoreAppScreen)
         self.os.start_job.assert_not_called()
 
     def test_restore_rechecks_missing_or_broken_files(self):
@@ -122,14 +123,23 @@ class AppInstallerScreenTests(TempHomeTestCase):
         self.os.flush_settings.assert_not_called()
         self.os.start_job.assert_not_called()
 
-    def test_catalogue_keeps_saved_apps_and_hides_internal_helpers(self):
+    def test_store_lists_every_app_on_the_device_except_settings_apps(self):
+        # No app IDs are special-cased: a leftover daemon app (WiFi Config) or a
+        # broken one is listed, so it can be uninstalled from its page.
         self.saved("custom")
-        for app_id in ("connectwifi", "whisplay-wifi-config", "whisplay-run-test"):
+        for app_id in ("connectwifi", "whisplay-wifi-config"):
             self.saved(app_id)
-        self.saved("broken", broken="Missing files")
-        labels = [i.label for i in self.rows()]
-        self.assertEqual(labels, ["Demo", "Custom", "More sources", "Local packages", "Updates", "Back"])
-        next(i for i in self.rows() if i.label == "Updates").action()
+        self.saved("broken", broken="App files missing (wifi_config_app.py)")
+        rows = self.rows()
+        labels = [i.label for i in rows]
+        self.assertEqual(labels, ["Demo", "Broken", "Custom", "Whisplay-Wifi-Config",
+                                  "Update apps", "More sources", "Local packages", "Back"])
+        broken = rows[labels.index("Broken")]
+        self.assertEqual((broken.value, broken.subtitle),
+                         ("Problem", "App files missing (wifi_config_app.py)"))
+        broken.action()
+        self.assertIsInstance(self.os.push.call_args.args[0], StoreAppScreen)
+        next(i for i in self.rows() if i.label == "Update apps").action()
         self.assertIsInstance(self.os.push.call_args.args[0], UpdaterScreen)
 
     def test_wifi_uses_connectwifi_or_reports_missing_install(self):

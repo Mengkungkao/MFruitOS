@@ -8,9 +8,9 @@ to autostart.
 
 | Path | Start from | Result |
 |---|---|---|
-| Curated catalogue | *Home → App installer*, or `mfruitctl catalog [<id>]` | checksum-pinned source snapshot, prepared as a managed package |
-| Local package | `~/.whisplay-os/inbox/` → *App installer → Local packages*, or `mfruitctl sideload <path>` | native package from an archive or folder |
-| GitHub release | *App installer → More sources*, or `mfruitctl install github.com/owner/repo` | native package from a release |
+| Curated catalogue | *Home → Fruit Store*, or `mfruitctl catalog [<id>]` | checksum-pinned source snapshot, prepared as a managed package |
+| Local package | `~/.whisplay-os/inbox/` → *Fruit Store → Local packages*, or `mfruitctl sideload <path>` | native package from an archive or folder |
+| GitHub release | *Fruit Store → More sources*, or `mfruitctl install github.com/owner/repo` | native package from a release |
 | Git checkout | an app cloned and registered by its own installer | adopted app with commit-tracking updates |
 | Adopted daemon app | any app registered directly with whisplay-daemon | launchable through the gate; not a native package |
 
@@ -48,7 +48,7 @@ the menu can be restored with **Add** (files and data kept, autostart off).
 
 Copy a `.tar.gz`, `.tgz`, `.tar` or `.zip` archive, or a package folder with
 `manifest.json` at its root, into `~/.whisplay-os/inbox/`, then choose it in
-*App installer → Local packages*, or run `mfruitctl sideload /absolute/path`.
+*Fruit Store → Local packages*, or run `mfruitctl sideload /absolute/path`.
 Installing a lower version downgrades the app; the same version reinstalls it.
 Archives and folders go through the same safety checks
 ([Security](../platform/SECURITY.md#implemented-protections)).

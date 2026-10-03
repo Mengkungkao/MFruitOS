@@ -56,6 +56,23 @@ Messenger read `../WalkieTalkie/config.yaml` (breaks under managed installs);
 WalkieTalkie Device ID is assigned and stored, Messenger's is crc32(hostname).
 Only one radio (the Pi) is reachable, so no over-the-air test between two radios.
 
+## Fruit Store (started 2026-10-03, user request)
+
+User: WiFi Config appeared on the menu (a Sep 30 daemon registration whose
+Whisplay example `wifi_config_app.py` no longer exists); add uninstall and
+delete (two functions, two confirmations) and turn the App installer into
+the **Fruit Store** (install, update, roll back, reset, uninstall, delete).
+Then: a new project merging Messenger and WalkieTalkie into one app.
+
+| Step | Work | Status |
+|---|---|---|
+| S1 | Installer: `uninstall` keeps data (`uninstalled.json`), `delete_data`, `reset_data`; failed reinstall never deletes kept data | DONE (6 tests, negative control) |
+| S2 | Registry: `leftovers()`, hide "(removed)" ghosts, daemon app with a missing script is broken | DONE (3 tests) |
+| S3 | Wrapper `mfruit.app.unregister` + client + lifecycle fallback | DONE (3 real-daemon tests, local + upstream 1066486) |
+| S4 | Services `uninstall_app`/`delete_app_data`/`reset_app`; Fruit Store screens (`store.py`); Settings > Apps uninstall uses the same flow; `mfruitctl uninstall/delete/reset/rollback` | DONE (9 store + ctl tests) |
+| S5 | Docs, check.sh, deploy to Pi, uninstall WiFi Config there | DONE: check.sh 422 OK; WiFi Config uninstalled + data deleted on the Pi through the Fruit Store ([record](docs/quality/records/2026-10-03-fruit-store.md)) |
+| P1 | New project **RadioConnect** (`/home/meng/RadioConnect`): Messenger + WalkieTalkie in one app (user: WalkieTalkie v3 + SOS protocol; keep the old apps) | R0 + R1 (Chats) DONE, sideloaded and launched on the Pi; R2 SOS next — see RadioConnect/CONTINUE.md |
+
 ## Next steps (in order)
 
 1. User decision: commit and push (CI then runs for the first time; check

@@ -6,7 +6,7 @@ How to release an app so MFruit OS can discover, install and update it.
 
 1. Push the package to a public GitHub repository with `manifest.json` at the
    root and add the topic **`whisplay-app`** (the default
-   `updater.discovery_topic`; *App installer → More sources → Discover* finds
+   `updater.discovery_topic`; *Fruit Store → More sources → Discover* finds
    it).
 2. Create a release whose tag is the manifest version: tag `v1.2.0` ↔
    `"version": "1.2.0"`. The installer refuses a release whose manifest version
@@ -35,7 +35,7 @@ automated suite passes ([Part I §30](../platform/DEVELOPMENT_RULES.md#30-releas
 
 ## The curated catalogue
 
-The App installer's curated list (`config/catalog.json` in MFruit OS) pins a
+The Fruit Store's curated list (`config/catalog.json` in MFruit OS) pins a
 reviewed commit and its archive SHA-256. Adding or updating an entry is an
 MFruit OS change: open a pull request with the new `ref`, `url`, `sha256`,
 `entry` and `dependencies`, after the archive was downloaded and its checksum

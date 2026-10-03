@@ -34,7 +34,7 @@ decision:
    all. Writes are atomic, 0600, under an exclusive lock; readers notice
    another app's changes.
 3. **Catalogue requirements.** Catalogue entries list `requires: ["radio"]`; the
-   App installer and `mfruitctl catalog` show what is missing before install.
+   Fruit Store and `mfruitctl catalog` show what is missing before install.
    (`catalog.json` is platform data, so no manifest field was added; a manifest
    field for native packages is a later decision.)
 4. Apps keep their own transport (send/receive) for now.

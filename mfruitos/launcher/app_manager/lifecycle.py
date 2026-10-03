@@ -30,8 +30,8 @@ import signal
 import time
 
 from mfruitos import OS_APP_ID, OS_NAME
-from mfruitos.apps.registry import RUN_WRAPPER_NAME, AppEntry, is_wrapper_command
-from mfruitos.daemon.client import DaemonError, WhisplayDaemonClient
+from mfruitos.apps.registry import REMOVED_SUFFIX, RUN_WRAPPER_NAME, AppEntry, is_wrapper_command
+from mfruitos.daemon.client import DaemonError, DaemonRequestError, WhisplayDaemonClient
 from mfruitos.logs import rotate_if_large
 from mfruitos.paths import Paths
 
@@ -78,15 +78,32 @@ class AppLifecycle:
         log.info("Registered %s with whisplay-daemon", entry.id)
         return True
 
-    def unregister(self, app_id: str, name: str) -> None:
-        """The daemon has no unregister command. ``persist: false`` makes it delete
-        its JSON file, and an empty launch command makes a stale in-memory entry
-        harmless until the daemon restarts."""
+    def unregister(self, app_id: str, name: str) -> bool:
+        """Remove ``app_id`` from whisplay-daemon. True if it is gone.
+
+        With MFruit OS's daemon wrapper this is ``mfruit.app.unregister``. A
+        plain daemon has no such command: ``persist: false`` makes it delete its
+        JSON file, and an empty launch command makes the stale in-memory entry
+        (named "<name> (removed)", hidden by the registry) harmless until the
+        daemon restarts."""
         try:
-            self.client.register_app(app_id, f"{name} (removed)", launch_command="",
+            self.client.unregister_app(app_id)
+            log.info("Unregistered %s from whisplay-daemon", app_id)
+            return True
+        except DaemonRequestError as exc:
+            if not str(exc).startswith("unknown command"):
+                log.warning("Could not unregister %s: %s", app_id, exc)
+                return False
+        except DaemonError as exc:
+            log.warning("Could not unregister %s: %s", app_id, exc)
+            return False
+        try:
+            self.client.register_app(app_id, f"{name}{REMOVED_SUFFIX}", launch_command="",
                                      persist=False, priority=-1000)
         except DaemonError as exc:
             log.warning("Could not unregister %s: %s", app_id, exc)
+            return False
+        return True
 
     def sync_registrations(self, managed: list[AppEntry]) -> int:
         """Make sure every healthy OS-managed app is known to the daemon."""

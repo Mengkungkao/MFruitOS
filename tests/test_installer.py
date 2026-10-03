@@ -27,7 +27,7 @@ class FakeGitHub:
         return len(data), hashlib.sha256(data).hexdigest()
 
 
-class InstallerTests(TempHomeTestCase):
+class InstallerTestBase(TempHomeTestCase):
     def setUp(self):
         super().setUp()
         self.settings = Settings(None)
@@ -60,6 +60,8 @@ class InstallerTests(TempHomeTestCase):
         with open(os.path.join(rollback.current_target(root), "manifest.json")) as fp:
             return json.load(fp)["version"]
 
+
+class InstallerTests(InstallerTestBase):
     def test_fresh_install_layout_and_registration(self):
         result = self.install("1.0.0")
         self.assertEqual(result.version, "1.0.0")
@@ -288,6 +290,90 @@ class InstallerTests(TempHomeTestCase):
             self.installer.uninstall("../../etc")
         with self.assertRaises(InstallError):
             self.installer.uninstall("mfruit-os")
+
+
+class UninstallDeleteResetTests(InstallerTestBase):
+    """Fruit Store: uninstall keeps data, delete removes it, reset empties it."""
+
+    def write_data(self, name="notes.txt", text="mine"):
+        path = os.path.join(self.paths.app_root("weather"), "data", name)
+        with open(path, "w") as fp:
+            fp.write(text)
+        return path
+
+    def registry(self):
+        registry = AppRegistry(self.paths, self.settings, "1.0.0")
+        registry.refresh([])
+        return registry
+
+    def test_uninstall_keeps_data_and_lists_it_as_a_leftover(self):
+        self.install("1.0.0")
+        self.write_data()
+        with open(self.paths.app_log("weather"), "w") as fp:
+            fp.write("log")
+        self.assertTrue(self.installer.uninstall("weather"))
+        root = self.paths.app_root("weather")
+        self.assertEqual(sorted(os.listdir(root)), ["data", "uninstalled.json"])
+        registry = self.registry()
+        self.assertIsNone(registry.get("weather"), "no longer an app")
+        self.assertEqual([(i.id, i.kind, i.version) for i in registry.leftovers()],
+                         [("weather", "os", "1.0.0")])
+
+    def test_reinstall_finds_the_kept_data(self):
+        self.install("1.0.0")
+        data = self.write_data()
+        self.installer.uninstall("weather")
+        self.install("1.0.0")
+        with open(data) as fp:
+            self.assertEqual(fp.read(), "mine")
+        root = self.paths.app_root("weather")
+        self.assertFalse(os.path.exists(os.path.join(root, "uninstalled.json")))
+        self.assertIsNotNone(self.registry().get("weather"))
+        self.assertEqual(self.registry().leftovers(), [])
+
+    def test_failed_reinstall_never_deletes_kept_data(self):
+        self.install("1.0.0")
+        data = self.write_data()
+        self.installer.uninstall("weather")
+        with self.assertRaises(InstallError):
+            self.install("1.0.0", test_sh="#!/bin/sh\necho changed > \"$WHISPLAY_OS_APP_DATA/notes.txt\"\nexit 1\n")
+        with open(data) as fp:
+            self.assertEqual(fp.read(), "mine", "kept data restored after the failed install")
+        self.assertEqual([i.id for i in self.registry().leftovers()], ["weather"])
+
+    def test_an_app_without_data_is_removed_completely(self):
+        self.install("1.0.0")
+        self.assertFalse(self.installer.uninstall("weather"))
+        self.assertFalse(os.path.exists(self.paths.app_root("weather")))
+
+    def test_delete_is_refused_while_installed_then_removes_everything(self):
+        self.install("1.0.0")
+        self.write_data()
+        with self.assertRaises(InstallError):
+            self.installer.delete_data("weather")
+        self.installer.uninstall("weather")
+        adopted = os.path.join(self.paths.home, "adopted", "weather")
+        os.makedirs(adopted)
+        with open(self.paths.app_log("weather"), "w") as fp:
+            fp.write("log")
+        removed = self.installer.delete_data("weather")
+        self.assertIn(self.paths.app_root("weather"), removed)
+        for path in (self.paths.app_root("weather"), adopted, self.paths.app_log("weather")):
+            self.assertFalse(os.path.exists(path), path)
+        self.assertEqual(self.registry().leftovers(), [])
+        with self.assertRaises(InstallError):
+            self.installer.delete_data("../../etc")
+
+    def test_reset_empties_the_data_and_keeps_the_app(self):
+        self.install("1.0.0")
+        self.write_data()
+        os.makedirs(os.path.join(self.paths.app_root("weather"), "data", "cache"))
+        self.assertEqual(self.installer.reset_data("weather"), 2)
+        root = self.paths.app_root("weather")
+        self.assertEqual(os.listdir(os.path.join(root, "data")), [])
+        self.assertEqual(self.current_version(), "1.0.0")
+        with self.assertRaises(InstallError):
+            self.installer.reset_data("mfruit-os")
 
 
 class SafeDeleteTests(TempHomeTestCase):

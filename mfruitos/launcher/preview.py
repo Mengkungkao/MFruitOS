@@ -145,6 +145,10 @@ def run_preview(outdir: str | None) -> int:
         shot("31-app-update", updater.AppUpdateScreen(rt, "weather"))
         shot("32-git-update", updater.AppUpdateScreen(rt, "whisplay-lora-walkie"))
         shot("37-install-app", updater.InstallAppScreen(rt))
+        from mfruitos.launcher.ui.screens import store
+        shot("37b-store-app", store.StoreAppScreen(rt, "weather"))
+        store.ask_uninstall(rt, "weather")
+        shot("37c-store-uninstall", rt.router.top)
         shot("38-local-packages", updater.LocalPackagesScreen(rt))
         versions = updater.VersionListScreen(rt, "weather")
         versions.releases = [Release(v, f"v{v}", published_at=f"2026-0{i + 1}-01")

@@ -6,6 +6,7 @@ import os as filesystem
 import time
 
 from mfruitos import OS_APP_ID, OS_NAME, __version__
+from mfruitos.apps.registry import SETTINGS_APPS
 from mfruitos.launcher.ui.components import Item, back_item
 from mfruitos.launcher.ui.screens.base import ListScreen
 from mfruitos.launcher.ui.screens.dialogs import confirm
@@ -243,7 +244,9 @@ class VersionListScreen(ListScreen):
 
 
 class InstallAppScreen(ListScreen):
-    title = "App installer"
+    """The Fruit Store: install, update, roll back, reset, uninstall and
+    delete apps (each app's page is ``store.StoreAppScreen``)."""
+    title = "Fruit Store"
 
     def __init__(self, os):
         super().__init__(os)
@@ -269,15 +272,29 @@ class InstallAppScreen(ListScreen):
         os = self.os
         installed = {a.id for a in os.registry.apps()}
         local = {a.id: a for a in os.registry.all() if a.kind != "system"
-                 and a.id not in {"connectwifi", "whisplay-wifi-config", "whisplay-run-test"}}
-        entries = {item['id']: item for item in catalog.entries()}
+                 and a.id not in SETTINGS_APPS}
+        catalogue = {item['id']: item for item in catalog.entries()}
+        entries = dict(catalogue)
         for app in local.values():
-            if not app.broken:
-                entries.setdefault(app.id, dict(id=app.id, name=app.name,
-                                               description="Saved on this device"))
+            entries.setdefault(app.id, dict(id=app.id, name=app.name,
+                                           description=app.broken or "Saved on this device"))
+        leftovers = {item.id: item for item in os.registry.leftovers()}
         rows = []
         for app_id, item in entries.items():
+            leftover = leftovers.pop(app_id, None)
+            if leftover is not None and app_id not in local:
+                rows.append(self._leftover_row(leftover, catalogue.get(app_id)))
+                continue
             saved = local.get(app_id)
+            if saved is not None and app_id not in catalogue:
+                # Not in the catalogue (sideloaded, adopted daemon apps, ...):
+                # its page still offers uninstall and delete.
+                rows.append(Item(saved.name, lambda a=saved.id: self._open(a), icon="package",
+                                 value="Problem" if saved.broken else
+                                 "Installed" if app_id in installed else "On device",
+                                 subtitle=saved.broken or saved.description or item['description'],
+                                 tone="warning" if saved.broken else "success"))
+                continue
             # Only catalogue apps reach here broken (saved apps are listed when intact).
             broken = saved is not None and bool(saved.broken)
             present = saved is not None and not broken
@@ -291,19 +308,31 @@ class InstallAppScreen(ListScreen):
                 "Needs radio setup first" if self.missing.get(app_id) and not added else
                 item['description'],
                 tone="success" if added else "warning" if broken else None))
+        for leftover in leftovers.values():
+            rows.append(self._leftover_row(leftover, None))
+        count = os.updates_available_count()
         rows += [
+            Item("Update apps", lambda: os.push(UpdaterScreen(os)), kind="nav", icon="updater",
+                 value=f"{count} available" if count else None, tone="accent" if count else None),
             Item("More sources", lambda: os.push(DiscoverScreen(os)), kind="nav", icon="search"),
             Item("Local packages", lambda: os.push(LocalPackagesScreen(os)), kind="nav", icon="package"),
-            Item("Updates", lambda: os.push(UpdaterScreen(os)), kind="nav", icon="updater"),
             back_item(),
         ]
         return rows
 
+    def _leftover_row(self, leftover, item: dict | None) -> Item:
+        return Item(leftover.name, lambda: self._open(leftover.id, item), icon="package",
+                    value="Data kept", tone="muted",
+                    subtitle="Uninstalled; install again or delete its data")
+
+    def _open(self, app_id: str, item: dict | None = None) -> None:
+        from mfruitos.launcher.ui.screens.store import StoreAppScreen
+        self.os.push(StoreAppScreen(self.os, app_id, item))
+
     def _pick(self, item: dict, saved: bool, installed: bool, broken: bool = False) -> None:
         os = self.os
         if installed:
-            from mfruitos.launcher.ui.screens.apps import AppDetailScreen
-            os.push(AppDetailScreen(os, item['id']))
+            self._open(item['id'], item)
             return
         needs = (" It needs the LoRa radio, which is not set up yet: run "
                  "setup-radio.sh once over SSH (you can do it afterwards)."

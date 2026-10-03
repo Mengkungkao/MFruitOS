@@ -115,6 +115,11 @@ class WhisplayDaemonClient:
         payload.update({k: v for k, v in fields.items() if v is not None})
         return self.request("app.register", payload)
 
+    def unregister_app(self, app_id: str) -> dict:
+        """Remove a registration. Needs MFruit OS's daemon wrapper
+        (``mfruit.app.unregister``); a plain daemon answers "unknown command"."""
+        return self.request("mfruit.app.unregister", {"app_id": app_id})
+
     def list_apps(self) -> list[dict]:
         apps = self.request("app.list").get("apps", [])
         if not isinstance(apps, list):

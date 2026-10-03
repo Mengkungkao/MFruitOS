@@ -1,6 +1,6 @@
 """Is the LoRa radio ready for apps? Read-only and unprivileged.
 
-Used by the App installer, ``mfruitctl catalog`` and the radio setup's
+Used by the Fruit Store, ``mfruitctl catalog`` and the radio setup's
 final check. ``find_library`` may run ``ldconfig``; call this off the UI
 thread.
 """

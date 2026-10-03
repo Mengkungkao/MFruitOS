@@ -26,6 +26,19 @@ the OS version.
   group/world-write bits are removed. Previously an escaping symlink or a
   set-uid file in a folder was installed as is.
 
+### Fruit Store
+- **The App installer is now the Fruit Store:** each app has a page to open,
+  update, roll back, reset, uninstall and delete it.
+- **Uninstall and delete are two steps, each confirmed:** Uninstall removes the
+  app and keeps its data (installing it again brings it back); Delete data
+  removes what MFruit OS still keeps. Reset app empties an installed app's data.
+  Also `mfruitctl uninstall|delete|reset|rollback <app_id>`.
+- **Daemon apps can be removed:** apps registered directly with whisplay-daemon
+  (such as the leftover *WiFi Config*) can be uninstalled; their own files stay.
+- **Leftover daemon apps are shown as broken:** an app whose script no longer
+  exists (WiFi Config's `wifi_config_app.py`) says *App files missing*.
+- A failed reinstall over kept data restores that data instead of deleting it.
+
 ### Radio
 - **Radio no longer deaf behind the Whisplay LCD:** the daemon wrapper parks the
   LCD's DC line low after each frame. With the LoRa HAT's stock jumpers that line

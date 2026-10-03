@@ -41,7 +41,7 @@ class HomeScreen(Screen):
             for page in self.os.registry.system_pages():
                 label, icon, _ = SYSTEM_PAGES[page.id]
                 entries.append(HomeEntry(page.id, label, "system", icon=icon, app=page))
-        entries.append(HomeEntry("os.installer", "App installer", "builtin", icon="package"))
+        entries.append(HomeEntry("os.installer", "Fruit Store", "builtin", icon="package"))
         entries.append(HomeEntry("os.settings", "Settings", "builtin", icon="settings"))
         return entries
 

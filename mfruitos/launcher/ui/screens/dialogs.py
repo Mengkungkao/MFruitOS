@@ -53,11 +53,12 @@ class MessageScreen(ListScreen):
 
 
 def confirm(os, title: str, message: str, confirm_label: str, on_confirm: Callable[[], None],
-            danger: bool = True) -> MessageScreen:
+            danger: bool = True, cancel_label: str = "Cancel") -> MessageScreen:
+    """Ask before acting. The safe choice is first, so a stray select cancels."""
     def accept():
         os.pop()
         on_confirm()
-    actions = [Item("Cancel", kind="back", icon="back"),
+    actions = [Item(cancel_label, kind="back", icon="back"),
                Item(confirm_label, accept, kind="danger" if danger else "action",
                     icon="trash" if danger else "check")]
     return MessageScreen(os, title, message, actions, tone="warning" if danger else "",
