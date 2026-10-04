@@ -149,7 +149,11 @@ SCHEMA: dict[str, tuple[Any, Callable[[Any], Any]]] = {
     "apps.default_app": ("", _app_id_or_empty),
 }
 
-APP_FLAGS = {"enabled": True, "hidden": False, "autostart": False, "background": False}
+# screen_bright: while the app keeps running in the background, MFruit OS holds
+# the backlight at 100% (no dimming or screen-off). On a LoRa HAT with stock
+# jumpers the backlight pin is the radio's M0, and dimming deafens it (KI-11).
+APP_FLAGS = {"enabled": True, "hidden": False, "autostart": False, "background": False,
+             "screen_bright": False}
 
 
 def defaults_tree() -> dict:

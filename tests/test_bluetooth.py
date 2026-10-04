@@ -1,11 +1,127 @@
+import os
 import queue
+import shutil
+import struct
 import sys
+import tempfile
 import threading
 import types
 import unittest
 from unittest.mock import Mock, patch
 
+from mfruitos.system import bluetooth as bt_module
 from mfruitos.system.bluetooth import Bluetooth, BtDevice, named, parse_info, sort_key
+
+
+class FakeRfkill:
+    """A /sys/class/rfkill tree and a /dev/rfkill stand-in that applies written events."""
+
+    def __init__(self, test, bluetooth_soft="1", bluetooth_hard="0", writable=True):
+        self.root = tempfile.mkdtemp(prefix="mfruit-rfkill-")
+        test.addCleanup(shutil.rmtree, self.root, True)
+        self.sysfs = os.path.join(self.root, "sys")
+        for name, kind, soft, hard in (("rfkill0", "bluetooth", bluetooth_soft, bluetooth_hard),
+                                       ("rfkill1", "wlan", "0", "0")):
+            os.makedirs(os.path.join(self.sysfs, name))
+            for field, value in (("type", kind), ("soft", soft), ("hard", hard)):
+                with open(os.path.join(self.sysfs, name, field), "w") as fp:
+                    fp.write(value + "\n")
+        self.device = os.path.join(self.root, "rfkill")
+        open(self.device, "wb").close()
+        if not writable:
+            os.chmod(self.device, 0o444)
+        patches = [patch.object(bt_module, "RFKILL_SYSFS", self.sysfs),
+                   patch.object(bt_module, "RFKILL_DEVICE", self.device),
+                   patch.object(bt_module, "rfkill_unblock", side_effect=self.unblock)]
+        for p in patches:
+            p.start()
+            test.addCleanup(p.stop)
+        self.events = []
+
+    def unblock(self, device=None):
+        ok = _real_rfkill_unblock(self.device)
+        if ok:
+            with open(self.device, "rb") as fp:
+                self.events.append(fp.read())
+            # The kernel would clear the soft block of every Bluetooth radio.
+            with open(os.path.join(self.sysfs, "rfkill0", "soft"), "w") as fp:
+                fp.write("0\n")
+        return ok
+
+
+_real_rfkill_unblock = bt_module.rfkill_unblock
+
+
+class RfkillTests(unittest.TestCase):
+    def service(self, powers_itself=False):
+        self.commands = []
+
+        def run(args, timeout):
+            self.commands.append(tuple(args[1:]))
+            if args[1:] == ["show"]:
+                return "Powered: yes" if powers_itself else "Powered: no"
+            return "Changing power on succeeded"
+        with patch("mfruitos.system.bluetooth._load_dbus", return_value=None), \
+                patch.object(bt_module, "POWER_SETTLE_SEC", 0.2):
+            bt = Bluetooth(run=run)
+        patcher = patch.object(bt_module, "POWER_SETTLE_SEC", 0.2)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        return bt
+
+    def test_after_an_unblock_bluez_powering_on_itself_is_not_raced(self):
+        # Pi Zero 2 W, 2026-10-04: asking BlueZ to power on while it was already
+        # doing so after the unblock answered org.bluez.Error.Busy.
+        FakeRfkill(self, bluetooth_soft="1")
+        self.service(powers_itself=True).set_powered(True)
+        self.assertNotIn(("power", "on"), self.commands)
+
+    def test_after_an_unblock_power_is_requested_if_bluez_does_not(self):
+        FakeRfkill(self, bluetooth_soft="1")
+        self.service(powers_itself=False).set_powered(True)
+        self.assertIn(("power", "on"), self.commands)
+
+    def test_state_reads_only_bluetooth_radios(self):
+        fake = FakeRfkill(self, bluetooth_soft="1")
+        self.assertEqual(bt_module.rfkill_blocked(), (True, False))
+        with open(os.path.join(fake.sysfs, "rfkill0", "soft"), "w") as fp:
+            fp.write("0\n")
+        self.assertEqual(bt_module.rfkill_blocked(), (False, False))
+        self.assertEqual(bt_module.rfkill_blocked(os.path.join(fake.root, "missing")), (False, False))
+
+    def test_turning_on_lifts_a_soft_block_first(self):
+        fake = FakeRfkill(self, bluetooth_soft="1")
+        self.service().set_powered(True)
+        # rfkill_event: idx 0, type BLUETOOTH (2), op CHANGE_ALL (3), soft 0, hard 0.
+        self.assertEqual(fake.events, [struct.pack("=IBBBB", 0, 2, 3, 0, 0)])
+        self.assertEqual(bt_module.rfkill_blocked(), (False, False))
+
+    def test_not_blocked_writes_nothing(self):
+        fake = FakeRfkill(self, bluetooth_soft="0")
+        self.service().set_powered(True)
+        self.assertEqual(fake.events, [])
+
+    def test_turning_off_never_touches_rfkill(self):
+        fake = FakeRfkill(self, bluetooth_soft="1")
+        bt = self.service()
+        bt._run = lambda args, timeout: "Changing power off succeeded"
+        bt.set_powered(False)
+        self.assertEqual(fake.events, [])
+
+    def test_no_permission_explains_what_to_do(self):
+        if os.geteuid() == 0:
+            self.skipTest("root can write anything")
+        FakeRfkill(self, bluetooth_soft="1", writable=False)
+        with self.assertRaises(RuntimeError) as caught:
+            self.service().set_powered(True)
+        self.assertIn("rfkill unblock bluetooth", str(caught.exception))
+
+    def test_hard_block_is_reported_as_such(self):
+        fake = FakeRfkill(self, bluetooth_soft="0", bluetooth_hard="1")
+        with self.assertRaises(RuntimeError) as caught:
+            self.service().set_powered(True)
+        self.assertIn("hardware switch", str(caught.exception))
+        self.assertEqual(fake.events, [])
 
 
 class BluetoothTests(unittest.TestCase):

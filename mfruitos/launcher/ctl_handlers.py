@@ -4,9 +4,14 @@ from __future__ import annotations
 
 import base64
 import io
+import logging
 import os
 
 from mfruitos import __version__
+
+log = logging.getLogger("mfruitos.control")
+# app.background: the per-app flags an app may change for itself, by request name.
+APP_BACKGROUND_FLAGS = {"keep_running": "background", "screen_bright": "screen_bright"}
 
 GESTURES = ("single_click", "double_click", "triple_click", "long_press", "quad_click")
 ACTIONS = ("next", "previous", "select", "back", "home")
@@ -27,7 +32,8 @@ def _status(rt, args):
     return {"ok": True, "version": __version__, "focus": rt.focus.describe(),
             "screens": [type(s).__name__ for s in rt.router],
             "title": getattr(rt.router.top, "title", ""),
-            "backlight": rt.backlight.state, "apps": len(rt.registry.apps()),
+            "backlight": rt.backlight.state, "backlight_hold": rt.backlight.hold,
+            "apps": len(rt.registry.apps()),
             "updates": rt.updater.update_count(), "direct_display": rt.direct is not None,
             "stats": dict(rt.stats, loop_wakeups=rt.loop.wakeups),
             "session": rt.apps.describe(), "keyboards": rt.keyboard.devices}
@@ -195,6 +201,34 @@ def _package_action(rt, args, action: str):
                                    "'mfruitctl apps'"}
 
 
+def _app_background(rt, args):
+    """An app reads or changes its own *Keep running* and *Keep screen bright*
+    (SDK ``background``, ADR 0009). No other flag, no other effect.
+
+    The control socket is the user's own (mode 0600); MFruit OS cannot tell
+    which of the user's processes asks, so this is a convenience contract, not
+    a permission boundary (docs/platform/SECURITY.md)."""
+    app_id = args.get("app_id")
+    entry = rt.registry.get(app_id) if isinstance(app_id, str) else None
+    if entry is None or entry.kind == "system":
+        return {"ok": False, "error": f"unknown app {app_id!r}"}
+    changes = {}
+    for name, flag in APP_BACKGROUND_FLAGS.items():
+        if name in args:
+            if not isinstance(args[name], bool):
+                return {"ok": False, "error": f"{name} must be true or false"}
+            changes[flag] = args[name]
+    if changes:
+        for flag, value in changes.items():
+            rt.settings.set_app_flag(app_id, flag, value)
+        log.info("APP_BACKGROUND app=%s %s (requested by the app)", app_id,
+                 " ".join(f"{k}={v}" for k, v in changes.items()))
+        rt.refresh_registry(query_daemon=False)
+        entry = rt.registry.get(app_id) or entry
+    return {"ok": True, "app_id": app_id, "keep_running": entry.background,
+            "screen_bright": entry.screen_bright}
+
+
 def _jobs(rt, args):
     return {"ok": True, "active": dict(rt.tasks.active)}
 
@@ -210,6 +244,7 @@ COMMANDS = {
     "apps": _apps,
     "launch": _launch, "reload": _reload, "check-updates": _check, "install": _install,
     "sideload": _sideload, "catalog": _catalog, "jobs": _jobs, "restart": _restart,
+    "app.background": _app_background,
     "uninstall": lambda rt, args: _package_action(rt, args, "uninstall"),
     "delete": lambda rt, args: _package_action(rt, args, "delete"),
     "reset": lambda rt, args: _package_action(rt, args, "reset"),

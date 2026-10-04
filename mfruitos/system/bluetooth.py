@@ -14,10 +14,13 @@ Every call blocks (up to tens of seconds for pairing): run them on a worker
 from __future__ import annotations
 
 import logging
+import os
 import re
 import shutil
+import struct
 import subprocess
 import threading
+import time
 from dataclasses import dataclass
 from typing import Callable, Optional
 
@@ -28,6 +31,19 @@ PAIR_TIMEOUT_SEC = 60
 CONFIRM_TIMEOUT_SEC = 30
 ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]|\x01|\x02")
 ADDRESS = re.compile(r"^[0-9A-F]{2}(:[0-9A-F]{2}){5}$", re.IGNORECASE)
+
+# rfkill: the kernel's radio switch. Fresh Raspberry Pi OS images can start
+# with Bluetooth soft-blocked; BlueZ then refuses to power on with a bare
+# org.bluez.Error.Failure (seen on a Pi Zero 2 W, 2026-10-04).
+RFKILL_SYSFS = "/sys/class/rfkill"
+RFKILL_DEVICE = "/dev/rfkill"
+RFKILL_TYPE_BLUETOOTH = 2
+RFKILL_OP_CHANGE_ALL = 3
+RFKILL_SETTLE_SEC = 2.0
+POWER_SETTLE_SEC = 5.0     # BlueZ powers an adapter on by itself once it is unblocked
+BLOCKED_SOFT = ("Bluetooth is switched off by the system (rfkill). Run scripts/install.sh "
+                "again, or: sudo rfkill unblock bluetooth")
+BLOCKED_HARD = "Bluetooth is switched off by a hardware switch (rfkill hard block)"
 
 # BlueZ's "Icon" property -> the kind shown on screen.
 KINDS = {"input-keyboard": "Keyboard", "input-mouse": "Mouse", "input-gaming": "Controller",
@@ -67,6 +83,50 @@ def named(device: BtDevice) -> bool:
 def sort_key(device: BtDevice):
     return (not device.connected, not device.paired,
             -(device.rssi if device.rssi is not None else -200), device.name.lower())
+
+
+def rfkill_blocked(sysfs: str | None = None) -> tuple[bool, bool]:
+    """(soft, hard): is any Bluetooth radio blocked? (False, False) if unknown."""
+    sysfs = sysfs or RFKILL_SYSFS
+    soft = hard = False
+    try:
+        names = os.listdir(sysfs)
+    except OSError:
+        return False, False
+    for name in names:
+        base = os.path.join(sysfs, name)
+        try:
+            with open(os.path.join(base, "type")) as fp:
+                if fp.read().strip() != "bluetooth":
+                    continue
+            with open(os.path.join(base, "soft")) as fp:
+                soft = soft or fp.read().strip() == "1"
+            with open(os.path.join(base, "hard")) as fp:
+                hard = hard or fp.read().strip() == "1"
+        except OSError:
+            continue
+    return soft, hard
+
+
+def rfkill_unblock(device: str | None = None) -> bool:
+    """Lift the soft block of every Bluetooth radio, as ``rfkill unblock bluetooth``.
+
+    Needs write access to /dev/rfkill (root, or the local session's ACL);
+    systemd-rfkill keeps the new state across reboots.
+    """
+    device = device or RFKILL_DEVICE
+    event = struct.pack("=IBBBB", 0, RFKILL_TYPE_BLUETOOTH, RFKILL_OP_CHANGE_ALL, 0, 0)
+    try:
+        fd = os.open(device, os.O_WRONLY)
+        try:
+            os.write(fd, event)
+        finally:
+            os.close(fd)
+    except OSError as exc:
+        log.warning("Cannot unblock Bluetooth through %s: %s", device, exc)
+        return False
+    log.info("Bluetooth rfkill soft block lifted")
+    return True
 
 
 class Bluetooth:
@@ -132,6 +192,8 @@ class Bluetooth:
 
     # ----------------------------------------------------------- actions
     def set_powered(self, on: bool) -> None:
+        if on and self._unblock() and self._wait_powered():
+            return  # BlueZ turned it on itself; asking as well races it (org.bluez.Error.Busy)
         if self._dbus is not None:
             self._set_adapter("Powered", self._dbus.Boolean(on))
         else:
@@ -139,10 +201,41 @@ class Bluetooth:
             if "succeeded" not in output.lower():
                 raise RuntimeError(_reason(output) or "Could not change Bluetooth power")
 
+    def _unblock(self) -> bool:
+        """Turning Bluetooth on also lifts an rfkill soft block, or says why it cannot.
+
+        True if a block was lifted."""
+        soft, hard = rfkill_blocked()
+        if hard:
+            raise RuntimeError(BLOCKED_HARD)
+        if not soft:
+            return False
+        if not rfkill_unblock():
+            raise RuntimeError(BLOCKED_SOFT)
+        # The kernel applies it at once; wait (bounded) until sysfs shows it.
+        deadline = time.monotonic() + RFKILL_SETTLE_SEC
+        while rfkill_blocked()[0]:
+            if time.monotonic() > deadline:
+                raise RuntimeError(BLOCKED_SOFT)
+            time.sleep(0.05)
+        return True
+
+    def _wait_powered(self) -> bool:
+        """Wait (bounded) until BlueZ reports the adapter powered."""
+        deadline = time.monotonic() + POWER_SETTLE_SEC
+        while True:
+            try:
+                if self.powered():
+                    return True
+            except Exception as exc:  # the adapter may be re-appearing; keep observing
+                log.debug("Waiting for Bluetooth power: %s", exc)
+            if time.monotonic() > deadline:
+                return False
+            time.sleep(0.1)
+
     def search(self, seconds: float = 8.0) -> None:
         """Listen for devices for ``seconds`` (they then appear in ``devices``)."""
         if self._dbus is not None:
-            import time
             adapter = self._interface(self._adapter_path(), "org.bluez.Adapter1")
             started = False
             try:

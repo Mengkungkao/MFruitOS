@@ -142,6 +142,34 @@ class ProvisionTests(TempHomeTestCase):
                 location.rmdir()
         self.install.assert_not_called()
 
+    def test_wifi_registration_whose_folder_is_gone_gets_the_bundled_app(self):
+        # Orange Pi, 2026-10-04: adopted ConnectWifi checkout removed, Wi-Fi app broken.
+        gone = os.path.join(self.tmp, 'ConnectWifi')
+        registration = Path(self.write_json(os.path.join(self.paths.daemon_apps_dir, 'connectwifi.json'), {
+            'app_id': 'connectwifi', 'display_name': 'Connect WiFi', 'cwd': gone,
+            'launch_command': '/home/user/.whisplay-os/bin/mfruit-run connectwifi'}))
+        adopted = Path(self.paths.home) / 'adopted/connectwifi'
+        adopted.mkdir(parents=True)
+        (adopted / 'cwd').write_text(gone, encoding='utf-8')
+        (adopted / 'registration.json').write_text('{"cwd": "%s"}' % gone, encoding='utf-8')
+        provision(self.paths, str(self.whisplay))
+        self.assertEqual(self.install.call_count, 1)
+        # The records themselves are left alone (uninstall restores them; KI-8).
+        self.assertTrue(registration.is_file())
+        self.assertTrue((adopted / 'registration.json').is_file())
+
+    def test_wifi_registration_whose_folder_exists_is_kept(self):
+        folder = os.path.join(self.tmp, 'ConnectWifi')
+        os.makedirs(folder)
+        self.write_json(os.path.join(self.paths.daemon_apps_dir, 'connectwifi.json'), {
+            'app_id': 'connectwifi', 'display_name': 'Connect WiFi', 'cwd': folder,
+            'launch_command': folder + '/run.sh'})
+        adopted = Path(self.paths.home) / 'adopted/connectwifi'
+        adopted.mkdir(parents=True)
+        (adopted / 'cwd').write_text(folder, encoding='utf-8')
+        provision(self.paths, str(self.whisplay))
+        self.install.assert_not_called()
+
     def test_first_install_preserves_existing_starter_registration(self):
         self.template(STARTER_APPS[0])
         registration = Path(self.registration(STARTER_APPS[0], 'adopted-game.json'))

@@ -231,6 +231,41 @@ class AdoptionTests(unittest.TestCase):
             daemon.stop()
             shutil.rmtree(tmp, ignore_errors=True)
 
+    def test_managed_app_registered_in_an_old_folder_is_registered_again(self):
+        # Orange Pi, 2026-10-04: the adopted Wi-Fi registration kept the wrapper
+        # command but the removed ~/ConnectWifi folder, so the daemon could not
+        # start the newly installed managed copy ("No such file or directory").
+        import json
+        import os
+        import shutil
+        import tempfile
+        from mfruitos.apps.registry import AppEntry
+        from mfruitos.launcher.app_manager.lifecycle import AppLifecycle
+        from mfruitos.paths import Paths
+        tmp = tempfile.mkdtemp()
+        daemon = FakeDaemon().start()
+        try:
+            paths = Paths(os.path.join(tmp, "os"), os.path.join(tmp, "d"))
+            paths.ensure()
+            life = AppLifecycle(WhisplayDaemonClient(daemon.socket_path), paths)
+            entry = AppEntry("connectwifi", "Wi-Fi", "os", registered=True)
+            os.makedirs(paths.daemon_apps_dir, exist_ok=True)
+            record = os.path.join(paths.daemon_apps_dir, "connectwifi.json")
+            stale = {"app_id": "connectwifi", "launch_command": life.wrapper_command("connectwifi"),
+                     "cwd": os.path.join(tmp, "ConnectWifi")}
+            with open(record, "w") as fp:
+                json.dump(stale, fp)
+            self.assertEqual(life.sync_registrations([entry]), 1)
+            managed = os.path.join(paths.app_root("connectwifi"), "current")
+            self.assertEqual(daemon.apps["connectwifi"]["cwd"], managed)
+            # Once the daemon has saved the new registration, nothing more is sent.
+            with open(record, "w") as fp:
+                json.dump(dict(stale, cwd=managed), fp)
+            self.assertEqual(life.sync_registrations([entry]), 0)
+        finally:
+            daemon.stop()
+            shutil.rmtree(tmp, ignore_errors=True)
+
 
 if __name__ == "__main__":
     unittest.main()

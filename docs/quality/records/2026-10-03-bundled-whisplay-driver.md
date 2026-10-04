@@ -102,6 +102,17 @@ Not covered by the rehearsal: the reboot, a real device tree, the LCD, loading
 the modules and the sound card on the board (fresh install on hardware is
 still to do).
 
+## Reinstalled boards (2026-10-04)
+
+| Board | Finding | Result |
+|---|---|---|
+| Pi Zero 2 W, fresh trixie (kernel 6.18.50), MFruit OS from GitHub `0629edf` | DEVICE: `install.sh --check` all OK (SPI, sound card built and loaded, driver files, service); optional `i2c-tools` missing | first fresh install of the bundled driver on hardware works |
+| Pi | Settings > Bluetooth: `org.bluez.Error.Failure`. Cause: rfkill soft block restored at every boot by systemd-rfkill (`soc-amba-3f201000.serial:bluetooth` = 1); BlueZ cannot power on | fixed: Settings lifts the soft block (through `/dev/rfkill`, the session ACL allows the user) and waits for BlueZ, which powers on by itself (asking as well gave `org.bluez.Error.Busy`). DEVICE: from the blocked state `set_powered(True)` returned in 0.1 s, `PowerState: on`. Tests with negative controls |
+| Orange Pi | Wi-Fi app broken ("Working directory missing"): its registration and adopted record pointed to the removed `~/ConnectWifi`; provisioning skipped the bundled app because a registration existed, and the launcher kept the stale `cwd` because only the command was compared | fixed in provisioning and in `sync_registrations`. DEVICE: bundled Wi-Fi app 1.1.0 installed, registration `cwd` → `apps/connectwifi/current`, the app opened (RUNNING) and closed (`SESSION_END outcome=exited`). Connecting to a new network NOT VERIFIED (needs the user at the board) |
+
+Both boards were updated with `install.sh --no-service` and the launcher
+restarted through its sudoers rule; `scripts/check.sh` 475 tests.
+
 ## Skipped and not verified
 
 - The changeover above is the only privileged run. NOT VERIFIED: a fresh

@@ -6,6 +6,25 @@ the OS version.
 
 ## Unreleased
 
+### Added (2026-10-04)
+- **Apps can keep running in the background with the screen held bright.**
+  New per-app *Keep screen bright* in Settings > Apps, and SDK 1.4.0
+  `mfruit_sdk.background`, so an app can offer the switch itself (RadioConnect
+  0.5.0: *Listen in background*). While such an app runs in the background,
+  the backlight stays at 100%: on the LoRa HAT the backlight pin is the
+  radio's mode pin, and dimming leaves the radio deaf.
+- `scripts/radio-link-test.py`: over-the-air link test between two boards.
+
+### Fixed (2026-10-04, found on the reinstalled boards)
+- **Bluetooth "org.bluez.Error.Failure"** on a fresh Raspberry Pi OS: Bluetooth
+  was soft-blocked (rfkill). Turning it on in Settings now lifts the block and
+  waits for BlueZ instead of racing it (`org.bluez.Error.Busy`); a hard block or
+  missing permission is explained. The first install also lifts the block.
+- **Wi-Fi app not working** when its registration pointed to a removed
+  checkout: provisioning now installs the bundled Wi-Fi app in that case, and
+  the launcher re-registers a managed app whose registration points to another
+  folder.
+
 ### Whisplay driver included
 - **No separate Whisplay installation.** MFruit OS now carries the Whisplay
   HAT driver in `drivers/whisplay`: the display, button and LED driver, the

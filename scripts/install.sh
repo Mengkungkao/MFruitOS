@@ -251,6 +251,17 @@ PYRULE
 sudo install -m 0644 "$POLKIT_TMP" /etc/polkit-1/rules.d/49-mfruit-wifi.rules
 rm -f "$POLKIT_TMP"
 
+# A fresh Raspberry Pi OS image can start with Bluetooth soft-blocked (rfkill),
+# and Settings > Bluetooth then fails with org.bluez.Error.Failure. Lift that on
+# the first install only (a later block is the user's choice); systemd-rfkill
+# keeps the state across reboots. Settings also lifts it when turning Bluetooth on.
+if [ "$FIRST_INSTALL" = 1 ]; then
+  for RFKILL in /sys/class/rfkill/rfkill*; do
+    [ "$(cat "$RFKILL/type" 2>/dev/null)" = bluetooth ] && [ "$(cat "$RFKILL/soft" 2>/dev/null)" = 1 ] || continue
+    echo 0 | sudo tee "$RFKILL/soft" >/dev/null && ok "Bluetooth unblocked ($(cat "$RFKILL/name"))"
+  done
+fi
+
 GROUPS_LIST=""
 for g in audio video gpio spi input; do getent group "$g" >/dev/null && GROUPS_LIST="$GROUPS_LIST $g"; done
 

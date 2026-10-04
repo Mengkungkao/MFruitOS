@@ -31,6 +31,15 @@ class BacklightController:
         self.settings = settings
         self.level: int | None = None
         self.state = "on"            # on | dim | off
+        # Held at 100% while an app set to keep the screen bright runs in the
+        # background: any lower level, or off, is not steady on the pin.
+        self.hold = False
+
+    def set_hold(self, hold: bool) -> bool:
+        """Start or end the hold. True if it changed."""
+        changed = bool(hold) != self.hold
+        self.hold = bool(hold)
+        return changed
 
     def _apply(self, level: int) -> None:
         if level == self.level:
@@ -44,14 +53,20 @@ class BacklightController:
 
     def wake(self) -> None:
         self.state = "on"
-        self._apply(self.settings.get("display.brightness"))
+        self._apply(100 if self.hold else self.settings.get("display.brightness"))
 
     def dim(self) -> None:
+        if self.hold:
+            self.wake()
+            return
         self.state = "dim"
         brightness = self.settings.get("display.brightness")
         self._apply(min(brightness, self.settings.get("display.dim_level")))
 
     def off(self) -> None:
+        if self.hold:
+            self.wake()
+            return
         self.state = "off"
         self._apply(0)
 

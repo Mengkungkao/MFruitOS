@@ -145,6 +145,7 @@ What the installer does, in order:
 | `/etc/sudoers.d/whisplay-os` | allows exactly `systemctl restart whisplay-daemon.service` and `systemctl restart whisplay-os.service` without a password (*Restart daemon* on the fallback screen), validated with `visudo -c` | yes |
 | `/etc/polkit-1/rules.d/49-mfruit-wifi.rules` | grants the target user the listed NetworkManager scan/control/settings actions, because the service has no interactive polkit session | yes |
 | `/usr/local/bin/mfruitctl` symlink | `mfruitctl` on the PATH | yes |
+| Bluetooth rfkill soft block lifted (first install only) | fresh Raspberry Pi OS images can start with Bluetooth blocked; Settings > Bluetooth needs it on. systemd-rfkill keeps the state | no (turn it off in Settings) |
 
 No other system files are changed by MFruit OS itself. Adopted daemon app registrations are
 changed only through the daemon's `app.register` API and are restored on

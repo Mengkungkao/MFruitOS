@@ -116,13 +116,20 @@ class AppLifecycle:
         return count
 
     def _registration_file_ok(self, entry: AppEntry) -> bool:
+        """The daemon starts the managed copy: our wrapper, in its own folder.
+
+        An adopted registration also uses the wrapper but keeps the old app
+        folder; once a managed copy replaces it, that folder may be gone and
+        the daemon could not start the app (Orange Pi, 2026-10-04).
+        """
         path = os.path.join(self.paths.daemon_apps_dir, f"{entry.id}.json")
         try:
             with open(path, "r", encoding="utf-8") as fp:
                 data = json.load(fp)
         except (OSError, ValueError):
             return False
-        return data.get("launch_command") == self.wrapper_command(entry.id)
+        return (data.get("launch_command") == self.wrapper_command(entry.id)
+                and data.get("cwd") == os.path.join(self.paths.app_root(entry.id), "current"))
 
     def register_os(self, package_dir: str) -> bool:
         """Register MFruit OS itself so the daemon desktop can summon it."""

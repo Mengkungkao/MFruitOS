@@ -70,6 +70,7 @@ class AppEntry:
     adopted: bool = False          # daemon app routed through the MFruit launch gate
     background: bool = False       # keep running after the user leaves it
     background_default: bool = False
+    screen_bright: bool = False    # backlight held at 100% while it runs in the background
     enabled: bool = True
     hidden: bool = False
     autostart: bool = False
@@ -208,6 +209,7 @@ class AppRegistry:
                 entry.autostart = False
             explicit = self.settings.app_flag_explicit(entry.id, "background")
             entry.background = explicit if explicit is not None else entry.background_default
+            entry.screen_bright = flags["screen_bright"]
             latest = self._latest.get(entry.id, "")
             entry.latest_version = latest if entry.kind == "os" else ""
 

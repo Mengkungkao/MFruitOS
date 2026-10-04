@@ -101,6 +101,7 @@ its default and stays distinguishable from an explicit choice.
 | `hidden` | false | hidden from Home |
 | `autostart` | false | launch once per boot; only one app may autostart |
 | `background` | false | *Keep running* after the user leaves (overrides the manifest default) |
+| `screen_bright` | false | *Keep screen bright*: while the app runs in the background, the backlight stays at 100% (no dimming or screen-off); set by the user or by the app through the SDK ([ADR 0009](ADR/0009-app-background-request.md)) |
 
 ### Secrets
 

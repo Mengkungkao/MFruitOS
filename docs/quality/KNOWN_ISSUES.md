@@ -66,6 +66,22 @@ entry except the Updater the Settings text. Seen in a screenshot on the
 Orange Pi, 2026-10-03. Cosmetic. Next: a subtitle for `os.installer`, with a
 test.
 
+### KI-11 Radio deaf while the screen is dimmed (stock LoRa HAT jumpers)
+
+With the SX126X HAT's stock jumpers the radio's M0 is the LCD backlight pin
+(header 15). Any brightness below 100% is PWM on that pin and screen-off holds
+it high: the module then hears nothing (measured 0/20 at 80% and 15%, 40/40
+at 100%: [record](records/2026-10-04-radio-over-the-air.md)). RadioConnect
+pins the backlight at 100% while it is open, and MFruit OS dims only while it
+is itself on screen, so today's use works. A radio app left running in the
+background (Keep running) would miss messages whenever MFruit OS dims or turns
+the screen off. Mitigated 2026-10-04: an app can turn on *Keep running* and
+*Keep screen bright* (SDK 1.4.0, [ADR 0009](../platform/ADR/0009-app-background-request.md));
+RadioConnect 0.5.0 offers this as **Settings → Listen in background**, and
+MFruit OS then holds the backlight at 100% while it runs in the background.
+Still open: the hardware conflict itself (rewire M0/M1 to free GPIOs), and
+the lit screen while listening.
+
 ## Physical checks outstanding
 
 Button feel and gestures, physical USB/Bluetooth key routing and hotplug,

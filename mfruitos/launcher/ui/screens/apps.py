@@ -89,6 +89,10 @@ class AppDetailScreen(ListScreen):
                          kind="toggle", value=app.background,
                          subtitle="Stays on when you leave it" if app.background
                          else "Closed completely when you leave it"))
+        rows.append(Item("Keep screen bright", lambda: self._flag("screen_bright", not app.screen_bright),
+                         kind="toggle", value=app.screen_bright,
+                         subtitle="100% while it runs in background" if app.screen_bright
+                         else "Dims as usual in background"))
         rows.append(Item("Move up", lambda: self._move(-1), icon="up"))
         rows.append(Item("Move down", lambda: self._move(1), icon="down"))
         if app.running:

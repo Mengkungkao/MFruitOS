@@ -314,6 +314,7 @@ class Runtime(ScreenServices):
         self.keyboard.set_grab(True)          # back from the daemon desktop, if there
         self._last_frame = None
         self.backlight.forget()
+        self._update_backlight_hold()
         self.backlight.wake()
         self.led.forget()
         self.led.show(self.led.state if self.led.state in ("update", "error") else "idle", force=True)
@@ -723,7 +724,23 @@ class Runtime(ScreenServices):
             if self.lifecycle.adopt_all(self.registry.daemon_registrations()):
                 self.registry.refresh(self._daemon_apps)
         self.registry.set_latest_versions(self.updater.latest_map())
+        self._update_backlight_hold()
         self.request_render()
+
+    def _update_backlight_hold(self) -> None:
+        """Hold the backlight at 100% while an app with *Keep screen bright*
+        keeps running in the background (the per-app ``screen_bright`` flag,
+        set by the user or by the app through the SDK). Only while MFruit OS
+        owns the screen does this matter; an app on screen sets its own."""
+        holders = [e.id for e in self.registry.all()
+                   if e.kind != "system" and e.running and e.background and e.screen_bright
+                   and not e.foreground]
+        if self.backlight.set_hold(bool(holders)):
+            log.info("Backlight %s", f"held at 100% for {', '.join(holders)}" if holders
+                     else "follows the display settings again")
+            if self.focus.has_focus:
+                self.backlight.wake()      # to 100%, or back to the user's level
+                self._arm_idle_timers()
 
     # ============================================================== fallback
     def _check_fallback(self) -> None:

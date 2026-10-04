@@ -7,7 +7,7 @@ It needs Python 3.9+ and Pillow (UI only), imports only itself, the standard
 library and Pillow, and uses relative imports so the copy works under its new
 package name.
 
-Current version: **1.3.0** (`SDK_VERSION` in `mfruitos/sdk/__init__.py`).
+Current version: **1.4.0** (`SDK_VERSION` in `mfruitos/sdk/__init__.py`).
 
 ## Modules
 
@@ -20,6 +20,7 @@ Current version: **1.3.0** (`SDK_VERSION` in `mfruitos/sdk/__init__.py`).
 | `mfruit_sdk.ui.theme` | geometry constants (`CONTENT_TOP`, `FOOTER_Y`, …) and colour tokens |
 | `mfruit_sdk.status` | `StatusMonitor`, `read_status()`, `wifi_level()`, `read_battery()` |
 | `mfruit_sdk.daemon` | `own_escape_key(app_id)`, `request(cmd, payload)` (Whisplay-specific) |
+| `mfruit_sdk.background` | `get()`, `set(keep_running=, screen_bright=)`: this app's *Keep running* and *Keep screen bright* ([below](#keep-running-in-the-background-mfruit_sdkbackground)) |
 | `mfruit_sdk.radio` | the shared LoRa radio store: `settings` (`load_radio`, `load_device`, `radio_dir`), `contacts.Contacts`, `keyring.Keyring`, `crypto` — keyring/crypto need `cryptography` |
 
 ## Controls
@@ -125,6 +126,31 @@ older `keys.json`) and names in `contacts.Contacts()`. Encrypt with
 `crypto.seal_with`/`open_with` (any header: a 4-byte per-packet context plus
 authenticated header bytes). Never copy `keys.json` between devices.
 
+## Keep running in the background (`mfruit_sdk.background`)
+
+An app that must keep working after the user leaves it (receiving radio
+messages, for example) can offer its own switch for MFruit OS's per-app
+*Keep running* and *Keep screen bright* ([ADR 0009](../platform/ADR/0009-app-background-request.md)):
+
+```python
+from mfruit_sdk import background
+
+state = background.get()          # State(keep_running, screen_bright), or None
+background.set(keep_running=True, screen_bright=True)
+```
+
+With *Keep running*, leaving the app must **release the screen and stay
+quiet** instead of exiting ([app contract](APP_CONTRACT.md)); MFruit OS hands
+the screen back when the user opens the app from Home. With *Keep screen
+bright*, MFruit OS holds the backlight at 100% while the app runs in the
+background: ask for it only when the hardware needs it (a LoRa HAT whose M0 is
+the backlight pin, [KI-11](../quality/KNOWN_ISSUES.md#ki-11-radio-deaf-while-the-screen-is-dimmed-stock-lora-hat-jumpers)),
+and say on screen that the display stays lit. `None` means MFruit OS is not
+running or is older than SDK 1.4.0: show the switch as unavailable. The user
+sees and can change both in Settings > Apps; read `get()` again before acting
+on them. This is a convenience contract on the user's own control socket, not
+a permission.
+
 ## Vendoring and drift checks
 
 ```bash
@@ -144,6 +170,7 @@ Never edit the copy; change `mfruitos/sdk/`, run `tests/test_sdk.py`, bump
 | 1.1.0 | MFruit OS 1.3.0 | first release: input controller, keyboard reader, chrome, status | apps read keyboards directly |
 | 1.2.0 | MFruit OS 1.4.0 | keys through the launcher's key hub; exclusive grab | **requires MFruit OS 1.4.0** for keyboard input while the launcher runs; older direct-input apps receive no keys under 1.4.0. Deploy the OS and keyboard apps together |
 | 1.3.0 | MFruit OS 1.4 (unreleased) | adds `radio` (shared radio store, pairing keys, crypto) | additive: apps on 1.2.0 keep working; `check-app.py` reports their copies as stale until synced. `radio.keyring`/`crypto` need `cryptography` |
+| 1.4.0 | MFruit OS 1.4 (unreleased, 2026-10-04) | adds `background` (an app's own *Keep running* / *Keep screen bright*, control command `app.background`) | additive: apps on 1.3.0 keep working; with an MFruit OS that lacks `app.background`, `get()`/`set()` return None. Affected: RadioConnect 0.5.0 (uses it), the template (synced). Tests: `tests/test_background_screen.py` |
 
 Every SDK change records: the version, a compatibility statement, the sync and
 check procedure above, the affected apps and the regression tests

@@ -37,9 +37,16 @@ def provision(paths: Paths, whisplay: str, first_install: bool = False) -> None:
     registrations = AppRegistry(paths, settings, __version__).daemon_registrations()
     # Preserve managed versions, app data, and adopted/local Wi-Fi installations.
     # Even an incomplete app directory may contain data that needs recovery.
+    # A registration or adopted record whose folder is gone has nothing left to
+    # keep, so it does not count: otherwise the device has no working Wi-Fi app
+    # (an Orange Pi whose ~/ConnectWifi checkout was removed, 2026-10-04).
+    adopted = Path(paths.home) / 'adopted/connectwifi'
     existing_wifi = (os.path.lexists(paths.app_root('connectwifi'))
-                     or 'connectwifi' in registrations
-                     or os.path.lexists(Path(paths.home) / 'adopted/connectwifi'))
+                     or ('connectwifi' in registrations
+                         and not _folder_gone(registrations['connectwifi'].get('cwd')))
+                     or (os.path.lexists(adopted) and not _folder_gone(_read_text(adopted / 'cwd'))))
+    if not existing_wifi and ('connectwifi' in registrations or os.path.lexists(adopted)):
+        print('Wi-Fi app: its folder is missing; installing the bundled Wi-Fi app')
     if not existing_wifi:
         source = Path(package_root()) / 'bundled/connectwifi'
         with tempfile.TemporaryDirectory(prefix='mfruit-wifi-') as temp:
@@ -98,6 +105,18 @@ def provision(paths: Paths, whisplay: str, first_install: bool = False) -> None:
     if not os.path.lexists(marker):
         atomic_write_json(str(marker), {'schema': 1})
     print('Offline Wi-Fi provisioning complete; existing apps and preferences preserved.')
+
+
+def _folder_gone(path) -> bool:
+    """A recorded folder that no longer exists (an empty record is not gone)."""
+    return isinstance(path, str) and bool(path.strip()) and not os.path.isdir(path.strip())
+
+
+def _read_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding='utf-8').strip()
+    except OSError:
+        return ''
 
 
 if __name__ == '__main__':
