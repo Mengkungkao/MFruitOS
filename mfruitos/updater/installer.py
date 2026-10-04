@@ -387,7 +387,7 @@ class _Job:
             self.package_dir = safe_extract(self.archive, os.path.join(self.work, "pkg"))
         if self.req.catalog_id:
             from mfruitos.updater import catalog
-            item = catalog.get(self.req.catalog_id)
+            item = catalog.get(self.req.catalog_id, self.i.paths.home)
             if (self.req.expected_sha256 != item['sha256'] or not self.verified
                     or self.req.repository != item['repository']):
                 raise InstallError('verify', 'Catalogue source verification failed')

@@ -280,9 +280,24 @@ class UpdateService:
         raise InstallError("check", last_error or "No compatible release found")
 
     # ============================================================ actions
+    def refresh_catalog(self, force: bool = False) -> bool:
+        """Download the Fruit Store list from ``system.repository``'s default
+        branch (or drop the downloaded one when turned off). True when the
+        list changed. Network: call it off the UI thread."""
+        from mfruitos.updater import catalog
+        repository = self.settings.get("system.repository")
+        if not self.settings.get("updater.online_catalog") or not repository:
+            return catalog.forget(self.paths.home)
+        owner, repo = repository_parts(repository)
+        return catalog.refresh(
+            self.paths.home,
+            lambda: self.github.raw_file(owner, repo, "HEAD", catalog.CATALOG_PATH,
+                                         max_bytes=catalog.MAX_BYTES),
+            max_age=0 if force else catalog.ONLINE_MAX_AGE)
+
     def install_catalog(self, app_id: str, progress=None) -> InstallResult:
         from mfruitos.updater import catalog
-        item = catalog.get(app_id)
+        item = catalog.get(app_id, self.paths.home)
         return self.installer.run(InstallRequest(
             repository=item['repository'], version=item.get('version', '1.0.0'),
             ref=item['ref'], url=item['url'],

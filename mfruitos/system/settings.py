@@ -135,6 +135,7 @@ SCHEMA: dict[str, tuple[Any, Callable[[Any], Any]]] = {
     "updater.max_download_mb": (100, _int_range(5, 1024)),
     "updater.github_token": ("", _string(200)),
     "updater.discovery_topic": ("whisplay-app", _string(50)),
+    "updater.online_catalog": (True, _boolean),
     "updater.sources": ([], _repo_list),
     "system.repository": ("https://github.com/Mengkungkao/MFruitOS", _repo_or_empty),
     "system.show_system_pages_on_home": (False, _boolean),

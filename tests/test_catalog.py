@@ -1,4 +1,5 @@
 import copy
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -10,6 +11,7 @@ from helpers import ROOT, TempHomeTestCase, make_package
 from mfruitos.apps.manifest import load_manifest
 from mfruitos.system.settings import Settings
 from mfruitos.updater import catalog, rollback
+from mfruitos.updater.github import OfflineError
 from mfruitos.updater.installer import InstallError, Installer, InstallRequest
 from mfruitos.updater.service import UpdateService
 from mfruitos.updater.verifier import sha256_file
@@ -293,6 +295,125 @@ class CatalogInstallerTests(TempHomeTestCase):
         self.assertEqual(config.read_text(), 'radio: user-choice\n')
         self.assertEqual(self.installer.read_record(root), record)
         self.assertEqual(len(os.listdir(os.path.join(root, 'versions'))), 1)
+
+
+def online_item(app_id='weather', **changes):
+    item = dict(id=app_id, name=app_id.title(), description='From the online list',
+                repository=f'https://github.com/example/{app_id}', ref='b' * 40,
+                url=f'https://api.github.com/repos/example/{app_id}/tarball/' + 'b' * 40,
+                sha256='c' * 64, native=True, version='1.0.0')
+    item.update(changes)
+    return item
+
+
+class OnlineCatalogTests(TempHomeTestCase):
+    """New apps reach the Fruit Store without an OS update (2026-10-05:
+    ai-chatbot was missing on a freshly installed OS)."""
+
+    def refresh(self, data, **kwargs):
+        raw = data if isinstance(data, bytes) else json.dumps(data).encode()
+        return catalog.refresh(self.paths.home, lambda: raw, **dict(dict(max_age=0), **kwargs))
+
+    def ids(self):
+        return [item['id'] for item in catalog.entries(self.paths.home)]
+
+    def test_without_a_download_the_bundled_list_is_used(self):
+        self.assertEqual(catalog.entries(self.paths.home), catalog.bundled())
+        self.assertEqual(catalog.source(self.paths.home), 'bundled')
+
+    def test_a_downloaded_list_replaces_the_bundled_one(self):
+        self.assertTrue(self.refresh(catalog.bundled() + [online_item()]))
+        self.assertIn('weather', self.ids())
+        self.assertEqual(catalog.get('weather', self.paths.home)['version'], '1.0.0')
+        self.assertEqual(catalog.source(self.paths.home), 'online')
+        self.assertNotIn('weather', [i['id'] for i in catalog.entries()], 'no home: bundled only')
+        # An app removed from the online list leaves the Store list too.
+        self.assertTrue(self.refresh([online_item()]))
+        self.assertEqual(self.ids(), ['weather'])
+        self.assertFalse(self.refresh([online_item()]), 'unchanged list')
+
+    def test_entries_this_os_cannot_use_are_left_out(self):
+        newer = online_item('future', min_os_version='99.0.0')
+        unknown = online_item('jetpack', requires=['jetpack'])
+        broken = online_item('broken', sha256='not-a-digest')
+        outside = online_item('outside', url='https://example.com/app.tar.gz')
+        adopted = online_item('adopted', native=False, entry='main.py', dependencies=['Pillow>=9'])
+        with self.assertLogs('mfruitos.updater.catalog', 'WARNING') as logs:
+            self.refresh([newer, unknown, broken, outside, adopted, online_item(),
+                          online_item(name='Duplicate')])
+        self.assertEqual(self.ids(), ['adopted', 'weather'])
+        self.assertEqual(catalog.get('weather', self.paths.home)['name'], 'Weather')
+        self.assertEqual(len(logs.output), 5)
+        self.assertIn('needs MFruit OS 99.0.0', '\n'.join(logs.output))
+
+    def test_a_failed_download_keeps_the_previous_list(self):
+        self.refresh([online_item()])
+        before = catalog.entries(self.paths.home)
+
+        def offline():
+            raise OfflineError('cannot reach GitHub')
+        with self.assertRaises(OfflineError):
+            catalog.refresh(self.paths.home, offline, max_age=0)
+        for bad in (b'<html>', b'{"id": "x"}', json.dumps([online_item(sha256='x')]).encode(),
+                    b'[' + b' ' * catalog.MAX_BYTES + b']'):
+            with self.subTest(bad=bad[:20]), self.assertRaises(catalog.CatalogError):
+                self.refresh(bad)
+        self.assertEqual(catalog.entries(self.paths.home), before)
+
+    def test_a_corrupt_stored_list_falls_back_to_the_bundled_one(self):
+        self.refresh([online_item()])
+        Path(catalog.online_file(self.paths.home)).write_text('{not json', encoding='utf-8')
+        with self.assertLogs('mfruitos.updater.catalog', 'WARNING'):
+            self.assertEqual(catalog.entries(self.paths.home), catalog.bundled())
+
+    def test_a_recent_download_is_reused(self):
+        self.refresh([online_item()])
+        fetch = Mock(return_value=json.dumps([online_item('other')]).encode())
+        self.assertFalse(catalog.refresh(self.paths.home, fetch))
+        fetch.assert_not_called()
+        self.assertTrue(catalog.refresh(self.paths.home, fetch, max_age=0))
+        self.assertEqual(self.ids(), ['other'])
+
+    def test_service_downloads_from_the_system_repository_or_forgets_when_off(self):
+        settings = Settings(None)
+        github = Mock()
+        github.raw_file.return_value = json.dumps([online_item()]).encode()
+        service = UpdateService(self.paths, settings, github, Mock(), '1.4.0')
+        self.assertTrue(service.refresh_catalog(force=True))
+        github.raw_file.assert_called_once_with('Mengkungkao', 'MFruitOS', 'HEAD',
+                                                'config/catalog.json',
+                                                max_bytes=catalog.MAX_BYTES)
+        self.assertEqual(self.ids(), ['weather'])
+        settings.set('updater.online_catalog', False)
+        self.assertTrue(service.refresh_catalog())
+        self.assertEqual(catalog.entries(self.paths.home), catalog.bundled())
+        self.assertEqual(github.raw_file.call_count, 1)
+
+    @unittest.skipUnless(os.name == 'posix', 'installer activation requires POSIX symlinks')
+    def test_an_app_only_in_the_downloaded_list_installs_with_its_pin(self):
+        source = Path(make_package(os.path.join(self.tmp, 'source'), app_id='weather',
+                                   version='1.0.0'))
+        archive = Path(self.tmp) / 'package.tar.gz'
+        with tarfile.open(archive, 'w:gz') as tar:
+            tar.add(source, arcname='example-weather-commit')
+        item = online_item(sha256=sha256_file(str(archive)),
+                           repository='https://github.com/example/whisplay-weather')
+        self.refresh([item])
+        installer = Installer(self.paths, '1.4.0', Settings(None))
+        installer.register = Mock()
+        request = dict(repository=item['repository'], local_path=str(archive), app_id='weather',
+                       catalog_id='weather')
+        with patch('mfruitos.updater.installer._run_script'):
+            with self.assertRaisesRegex(InstallError, 'Unknown catalogue app'):
+                installer.run(InstallRequest(**dict(request, expected_sha256=item['sha256'],
+                                                    app_id='radioconnect',
+                                                    catalog_id='radioconnect')))
+            with self.assertRaisesRegex(InstallError, 'Catalogue source verification failed'):
+                installer.run(InstallRequest(**dict(request, expected_sha256=item['sha256'],
+                                                    repository='https://github.com/other/weather')))
+            result = installer.run(InstallRequest(expected_sha256=item['sha256'], **request))
+        self.assertTrue(result.verified)
+        installer.register.assert_called_once()
 
 
 if __name__ == '__main__':

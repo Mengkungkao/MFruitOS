@@ -18,6 +18,17 @@ to autostart.
 
 `config/catalog.json` lists reviewed apps with a pinned commit (`ref`), the
 archive `url`, its `sha256`, the Python `entry` and pip `dependencies`.
+
+The Fruit Store downloads the same file from the default branch of
+`system.repository` when it is opened (and when `mfruitctl catalog` lists),
+at most every 5 minutes, so a new app appears without an OS update. A usable
+download replaces the list shipped with the OS (an app removed online leaves
+the Store list; installed apps stay) and is kept in `cache/catalog.json`.
+Offline, the last downloaded list, or the shipped one, is shown. Entries this
+OS version cannot use (unknown `requires`, a newer `min_os_version`, a
+malformed pin) are left out and logged. `updater.online_catalog: false` turns
+this off ([ADR 0010](../platform/ADR/0010-online-fruit-store-catalogue.md)).
+
 Installing one:
 
 1. downloads the archive over HTTPS and refuses it unless the SHA-256 matches;
@@ -39,7 +50,8 @@ app.
 
 A catalogue app that is registered but whose files are missing shows
 **Repair**; it runs the same installation. From a shell, `mfruitctl catalog`
-lists each entry as `available`, `installed` or `broken`, and
+lists each entry as `available`, `installed` or `broken` (with `source`:
+`online` or `bundled`), and
 `mfruitctl catalog <id>` installs or repairs it (follow it with
 `mfruitctl jobs`).
 

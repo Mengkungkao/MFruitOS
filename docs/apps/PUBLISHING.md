@@ -39,6 +39,10 @@ The Fruit Store's curated list (`config/catalog.json` in MFruit OS) pins a
 reviewed commit and its archive SHA-256. Adding or updating an entry is an
 MFruit OS change: open a pull request with the new `ref`, `url`, `sha256`,
 `entry` and `dependencies`, after the archive was downloaded and its checksum
-and entry verified. Catalogue installs replace the app's own hooks
+and entry verified. Devices running MFruit OS with the online list see the
+entry once it is on the default branch, the next time the Fruit Store opens,
+without an OS update ([Installation](INSTALLATION.md#curated-catalogue)); so
+commit an entry only when its pin is verified. Add `min_os_version` when the
+app needs a newer MFruit OS than the devices may run. Catalogue installs replace the app's own hooks
 ([Installation](INSTALLATION.md#curated-catalogue)), so a catalogue entry is not
 a substitute for a native release.

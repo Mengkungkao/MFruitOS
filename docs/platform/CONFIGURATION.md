@@ -63,6 +63,7 @@ python3 -m mfruitos.system.settings --dump-defaults > config/default.json
 | `updater.max_download_mb` | 100 | 5–1024 | download size limit |
 | `updater.github_token` | `""` | string ≤200 | optional GitHub token (raises the API rate limit) |
 | `updater.discovery_topic` | `whisplay-app` | string ≤50 | GitHub topic used by *Discover* |
+| `updater.online_catalog` | true | bool | download the Fruit Store list from `system.repository` so new apps appear without an OS update ([ADR 0010](ADR/0010-online-fruit-store-catalogue.md)) |
 | `updater.sources` | `[]` | list of GitHub repositories | extra repositories listed in *More sources* |
 | `system.repository` | `https://github.com/Mengkungkao/MFruitOS` | GitHub repository or empty | where system updates come from |
 | `system.show_system_pages_on_home` | false | bool | list daemon pages on Home |
@@ -145,5 +146,5 @@ PNGs. `mfruitctl help` lists the control commands.
 | File | Purpose |
 |---|---|
 | `config/default.json` | generated defaults reference (see above) |
-| `config/catalog.json` | curated Fruit Store catalogue: per app `id`, `name`, `description`, `repository`, pinned `ref`, archive `url`, `sha256`, Python `entry`, `dependencies` and optional `requires` (device capabilities, e.g. `radio`); a native package instead has `"native": true` and its `version` ([App installation](../apps/INSTALLATION.md#curated-catalogue)) |
+| `config/catalog.json` | curated Fruit Store catalogue: per app `id`, `name`, `description`, `repository`, pinned `ref`, archive `url`, `sha256`, Python `entry`, `dependencies` and optional `requires` (device capabilities, e.g. `radio`) and `min_os_version`; a native package instead has `"native": true` and its `version`. The same file on the default branch of `system.repository` is the online list ([App installation](../apps/INSTALLATION.md#curated-catalogue)) |
 | `manifest.json` | MFruit OS's own system package manifest (`type: system`) |

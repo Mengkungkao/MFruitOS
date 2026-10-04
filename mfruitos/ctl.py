@@ -5,7 +5,8 @@
     mfruitctl launch <app_id>         open an app
     mfruitctl install <github repo>   install an app from GitHub (progress on the device)
     mfruitctl sideload <path>         install a local package (.tar.gz/.zip/folder)
-    mfruitctl catalog                 list the curated catalogue (available/installed/broken)
+    mfruitctl catalog                 list the Fruit Store catalogue (available/installed/broken;
+                                      also downloads the online list in the background)
     mfruitctl catalog <app_id>        install or repair a catalogue app
     mfruitctl uninstall <app_id>      remove an app; its data is kept
     mfruitctl delete <app_id>         delete the data kept for an uninstalled app

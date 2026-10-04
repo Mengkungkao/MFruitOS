@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os as filesystem
 import time
 
@@ -11,6 +12,8 @@ from mfruitos.launcher.ui.components import Item, back_item
 from mfruitos.launcher.ui.screens.base import ListScreen
 from mfruitos.launcher.ui.screens.dialogs import confirm
 from mfruitos.updater.version import parse_version
+
+log = logging.getLogger(__name__)
 
 
 def when(timestamp: float) -> str:
@@ -252,12 +255,31 @@ class InstallAppScreen(ListScreen):
         super().__init__(os)
         self.missing: dict = {}          # app id -> device requirements still missing
 
+    def _home(self):
+        return getattr(getattr(self.os, "paths", None), "home", None)
+
     def on_show(self) -> None:
+        self._check_requirements()
+        updater = getattr(self.os, "updater", None)
+        if updater is None or not hasattr(updater, "refresh_catalog"):
+            return
+
+        def refreshed(changed):
+            if changed:
+                self._check_requirements()
+                self.redraw()
+
+        def failed(exc):
+            # Offline or GitHub unavailable: the last list (or the bundled one) stays.
+            log.info("Fruit Store list not refreshed: %s", exc)
+        self.os.run_task("catalog-refresh", updater.refresh_catalog, refreshed, failed)
+
+    def _check_requirements(self) -> None:
         from mfruitos.updater import catalog
-        needing = [item for item in catalog.entries() if item.get("requires")]
+        home = self._home()
+        needing = [item for item in catalog.entries(home) if item.get("requires")]
         if not needing:
             return
-        home = getattr(getattr(self.os, "paths", None), "home", None)
 
         def check():
             return {item["id"]: catalog.missing_requirements(item, home) for item in needing}
@@ -273,7 +295,7 @@ class InstallAppScreen(ListScreen):
         installed = {a.id for a in os.registry.apps()}
         local = {a.id: a for a in os.registry.all() if a.kind != "system"
                  and a.id not in SETTINGS_APPS}
-        catalogue = {item['id']: item for item in catalog.entries()}
+        catalogue = {item['id']: item for item in catalog.entries(self._home())}
         entries = dict(catalogue)
         for app in local.values():
             entries.setdefault(app.id, dict(id=app.id, name=app.name,

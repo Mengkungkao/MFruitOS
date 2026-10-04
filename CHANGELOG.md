@@ -6,6 +6,13 @@ the OS version.
 
 ## Unreleased
 
+### Added (2026-10-05)
+- **New apps appear in the Fruit Store without an OS update.** The Store
+  downloads its list from MFruit OS's GitHub repository when it opens
+  (setting `updater.online_catalog`, on by default) and falls back to the
+  list shipped with the OS when offline. Entries this OS version cannot
+  install are left out; entries can declare `min_os_version`.
+
 ### Fixed (2026-10-05)
 - **RadioConnect failed to install from the Fruit Store on a freshly
   installed device** ("RadioConnect needs: serial") because the LoRa radio

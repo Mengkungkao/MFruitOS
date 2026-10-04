@@ -139,22 +139,27 @@ def _sideload(rt, args):
 
 def _catalog(rt, args):
     """List the curated catalogue, or install/repair one entry (the App
-    installer's Install and Repair, from a shell)."""
+    installer's Install and Repair, from a shell). Listing also starts a
+    download of the online list, as opening the Fruit Store does."""
     from mfruitos.updater import catalog
     app_id = args.get("app_id", "")
+    home = getattr(getattr(rt, "paths", None), "home", None)
     if not app_id:
         rows = []
-        home = getattr(getattr(rt, "paths", None), "home", None)
-        for item in catalog.entries():
+        rt.run_task("catalog-refresh", rt.updater.refresh_catalog, None,
+                    lambda exc: log.info("Fruit Store list not refreshed: %s", exc))
+        for item in catalog.entries(home):
             entry = rt.registry.get(item["id"])
             status = "available" if entry is None else "broken" if entry.broken else "installed"
             rows.append({"id": item["id"], "name": item["name"], "status": status,
                          "detail": entry.broken if entry is not None and entry.broken else "",
                          "requires": catalog.requirements(item),
                          "missing": catalog.missing_requirements(item, home)})
-        return {"ok": True, "catalog": rows}
+        downloaded = catalog.online(home)
+        return {"ok": True, "catalog": rows, "source": catalog.source(home),
+                "fetched_at": downloaded["fetched_at"] if downloaded else None}
     try:
-        catalog.get(app_id)
+        catalog.get(app_id, home)
     except catalog.CatalogError as exc:
         return {"ok": False, "error": str(exc)}
     entry = rt.registry.get(app_id)

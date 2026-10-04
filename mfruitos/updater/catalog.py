@@ -8,33 +8,207 @@ Two kinds of entry:
 * **native** (``"native": true``): an MFruit OS package with its own manifest
   and hooks, installed exactly as published. The pinned source must carry
   the entry's ``id`` and ``version``; nothing in it is rewritten.
+
+The list itself comes from two places. ``config/catalog.json`` ships with
+this OS version; the Fruit Store also downloads the same file from the
+default branch of ``system.repository`` (``updater.online_catalog``) and keeps
+it in ``<home>/cache/catalog.json``, so new apps appear without an OS update.
+Every entry is validated on load; one this OS version cannot install (unknown
+requirement, newer ``min_os_version``, malformed) is left out and logged.
 """
 from __future__ import annotations
 
 from functools import lru_cache
 import json
+import logging
+import os
 from pathlib import Path
 import re
 import shlex
 import shutil
+import threading
+import time
 
-from mfruitos.apps.manifest import is_safe_relative_path
-from mfruitos.paths import package_root
+from mfruitos import __version__
+from mfruitos.apps.manifest import ManifestError, is_safe_relative_path, normalize_repository
+from mfruitos.paths import is_valid_app_id, package_root
+from mfruitos.system.settings import atomic_write_json
 from mfruitos.updater import rollback
+from mfruitos.updater.github import GitHubError, check_url
+from mfruitos.updater.version import parse_version
+
+log = logging.getLogger(__name__)
+
+CATALOG_PATH = "config/catalog.json"     # in the package and in the online repository
+ONLINE_MAX_AGE = 300.0                   # seconds before the Store downloads it again
+MAX_BYTES = 256 * 1024
 
 
 class CatalogError(ValueError):
     pass
 
 
-@lru_cache(maxsize=1)
-def entries() -> list[dict]:
-    with open(Path(package_root()) / 'config/catalog.json', encoding='utf-8') as fp:
-        return json.load(fp)
-
-
 # Device capabilities a catalogue app can need, and who sets them up.
 REQUIREMENTS = {"radio": "LoRa radio (scripts/setup-radio.sh)"}
+
+_HEX40 = re.compile(r"[0-9a-f]{40}")
+_HEX64 = re.compile(r"[0-9a-f]{64}")
+
+
+def check_entry(item: object) -> dict:
+    """Raise CatalogError unless this OS version can list and install ``item``."""
+    if not isinstance(item, dict):
+        raise CatalogError("entry is not an object")
+    if not is_valid_app_id(item.get("id")):
+        raise CatalogError(f"invalid id {item.get('id')!r}")
+    for key, limit, required in (("name", 60, True), ("description", 200, False)):
+        value = item.get(key, "")
+        if not isinstance(value, str) or len(value) > limit or (required and not value):
+            raise CatalogError(f"invalid {key}")
+    try:
+        normalize_repository(item.get("repository"))
+        check_url(item.get("url") if isinstance(item.get("url"), str) else "")
+    except (ManifestError, GitHubError, TypeError) as exc:
+        raise CatalogError(str(exc)) from exc
+    if not isinstance(item.get("ref"), str) or not _HEX40.fullmatch(item["ref"]):
+        raise CatalogError("ref must be a full commit id")
+    if not isinstance(item.get("sha256"), str) or not _HEX64.fullmatch(item["sha256"]):
+        raise CatalogError("sha256 must be 64 hex digits")
+    if not isinstance(item.get("native", False), bool):
+        raise CatalogError("native must be true or false")
+    if is_native(item):
+        if parse_version(item.get("version")) is None:
+            raise CatalogError("a native entry needs a semantic version")
+    else:
+        dependencies = item.get("dependencies")
+        if not isinstance(item.get("entry"), str) or not isinstance(dependencies, list) or \
+                not all(isinstance(d, str) and 0 < len(d) <= 200 for d in dependencies):
+            raise CatalogError("an adopted entry needs entry and dependencies")
+    needs = item.get("requires", [])
+    if not isinstance(needs, list) or not all(isinstance(n, str) for n in needs):
+        raise CatalogError("requires must be a list of names")
+    unknown = [n for n in needs if n not in REQUIREMENTS]
+    if unknown:
+        raise CatalogError(f"needs {unknown!r}, unknown to MFruit OS {__version__}")
+    min_os = item.get("min_os_version")
+    if min_os is not None:
+        required = parse_version(min_os)
+        if required is None:
+            raise CatalogError(f"min_os_version {min_os!r} is not a semantic version")
+        if required > parse_version(__version__):
+            raise CatalogError(f"needs MFruit OS {min_os} (running {__version__})")
+    return item
+
+
+def valid_entries(data: object, source: str, report: bool = True) -> list[dict]:
+    """The entries of ``data`` this OS version can use; the others are logged."""
+    if not isinstance(data, list):
+        raise CatalogError(f"{source} is not a list")
+    items, seen = [], set()
+    for item in data:
+        try:
+            check_entry(item)
+            if item["id"] in seen:
+                raise CatalogError("duplicate id")
+        except CatalogError as exc:
+            name = item.get("id") if isinstance(item, dict) else None
+            if report:
+                log.warning("%s: leaving out %r: %s", source, name, exc)
+            continue
+        seen.add(item["id"])
+        items.append(item)
+    return items
+
+
+@lru_cache(maxsize=1)
+def bundled() -> list[dict]:
+    """The list that ships with this OS version."""
+    with open(Path(package_root()) / CATALOG_PATH, encoding='utf-8') as fp:
+        return valid_entries(json.load(fp), "bundled catalogue")
+
+
+def online_file(home: str) -> str:
+    return os.path.join(home, "cache", "catalog.json")
+
+
+_online_lock = threading.Lock()
+_online_cache: dict = {}        # path -> ((mtime_ns, size), entries or None)
+
+
+def online(home: str | None) -> dict | None:
+    """The downloaded list as {"fetched_at", "entries"}, or None."""
+    if not home:
+        return None
+    path = online_file(home)
+    try:
+        stat = os.stat(path)
+    except OSError:
+        return None
+    key = (stat.st_mtime_ns, stat.st_size)
+    with _online_lock:
+        cached = _online_cache.get(path)
+        if cached is not None and cached[0] == key:
+            return cached[1]
+    try:
+        with open(path, encoding="utf-8") as fp:
+            data = json.load(fp)
+        result = {"fetched_at": float(data.get("fetched_at", 0)),
+                  "entries": valid_entries(data.get("entries"), "online catalogue")}
+    except (OSError, ValueError, TypeError, AttributeError) as exc:
+        log.warning("Ignoring the downloaded catalogue %s: %s", path, exc)
+        result = None
+    with _online_lock:
+        _online_cache[path] = (key, result)
+    return result
+
+
+def entries(home: str | None = None) -> list[dict]:
+    """The Fruit Store list: the one last downloaded when there is one,
+    otherwise the one shipped with this OS version."""
+    downloaded = online(home)
+    return bundled() if downloaded is None else downloaded["entries"]
+
+
+def source(home: str | None = None) -> str:
+    return "bundled" if online(home) is None else "online"
+
+
+def refresh(home: str, fetch, max_age: float = ONLINE_MAX_AGE) -> bool:
+    """Download the online list with ``fetch()`` (bytes) and keep it when it
+    is usable; a failure keeps the previous list. True when the list changed.
+    Network and disk: call it off the UI thread."""
+    path = online_file(home)
+    try:
+        if max_age and time.time() - os.stat(path).st_mtime < max_age:
+            return False
+    except OSError:
+        pass
+    raw = fetch()
+    if len(raw) > MAX_BYTES:
+        raise CatalogError("online catalogue is too large")
+    try:
+        data = json.loads(raw.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise CatalogError(f"online catalogue is not JSON: {exc}") from exc
+    if not isinstance(data, list):
+        raise CatalogError("online catalogue is not a list")
+    if data and not valid_entries(data, "online catalogue", report=False):
+        raise CatalogError("online catalogue has no entry this MFruit OS can use")
+    previous = online(home)
+    atomic_write_json(path, {"fetched_at": time.time(), "entries": data})
+    changed = previous is None or previous["entries"] != entries(home)
+    if changed:
+        log.info("Fruit Store list updated from the online catalogue (%d apps)", len(entries(home)))
+    return changed
+
+
+def forget(home: str) -> bool:
+    """Drop the downloaded list (online catalogue turned off). True when one existed."""
+    try:
+        os.remove(online_file(home))
+    except FileNotFoundError:
+        return False
+    return True
 
 
 def requirements(item: dict) -> list:
@@ -70,8 +244,8 @@ def _check_native(root: Path, item: dict) -> None:
                                f"expected {item.get(key)!r}")
 
 
-def get(app_id: str) -> dict:
-    for item in entries():
+def get(app_id: str, home: str | None = None) -> dict:
+    for item in entries(home):
         if item['id'] == app_id:
             return item
     raise CatalogError(f"Unknown catalogue app: {app_id!r}")

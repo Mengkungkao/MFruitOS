@@ -30,6 +30,7 @@ class AppInstallerScreenTests(TempHomeTestCase):
         self.os.home_screen = HomeScreen(self.os)
         self.os.home_screen.focus_key = Mock()
         self.os.start_job = Mock()
+        self.os.run_task = Mock()
         self.item = dict(id="demo", name="Demo", description="Example app")
         self.catalog = patch("mfruitos.updater.catalog.entries", return_value=[self.item])
         self.catalog.start()
@@ -42,6 +43,23 @@ class AppInstallerScreenTests(TempHomeTestCase):
 
     def rows(self):
         return InstallAppScreen(self.os).items()
+
+    def test_opening_the_store_downloads_the_list_in_the_background(self):
+        tasks = []
+        self.os.run_task = lambda name, fn, done, error=None, lane="quick": tasks.append(
+            (name, fn, done, error, lane))
+        screen = InstallAppScreen(self.os)
+        screen.redraw = Mock()
+        screen.on_show()
+        name, fn, done, error, lane = next(t for t in tasks if t[0] == "catalog-refresh")
+        self.assertEqual((name, fn, lane), ("catalog-refresh", self.os.updater.refresh_catalog,
+                                            "quick"))
+        done(False)
+        screen.redraw.assert_not_called()
+        done(True)
+        screen.redraw.assert_called_once()
+        error(OSError("offline"))          # the last list stays, no error toast
+        self.os.toast.assert_not_called()
 
     def test_home_opens_installer_without_starting_an_install(self):
         entry = next(e for e in self.os.home_screen.entries() if e.key == "os.installer")
@@ -165,7 +183,7 @@ class CatalogControlTests(TempHomeTestCase):
         from mfruitos.launcher import ctl_handlers
         self.handle = ctl_handlers.handle
         self.rt = SimpleNamespace(registry=Mock(), tasks=Mock(), router=Mock(),
-                                  install_catalog_app=Mock())
+                                  install_catalog_app=Mock(), run_task=Mock(), updater=Mock())
         self.rt.tasks.busy.return_value = False
         self.rt.tasks.active = {}
         items = [dict(id="demo", name="Demo", description=""), dict(id="other", name="Other", description="")]
@@ -230,7 +248,7 @@ class RadioRequirementTests(AppInstallerScreenTests):
         from mfruitos.updater import catalog
         self.catalog.stop()
         try:
-            catalog.entries.cache_clear()
+            catalog.bundled.cache_clear()
             needs = {item["id"]: catalog.requirements(item) for item in catalog.entries()}
         finally:
             self.catalog.start()

@@ -57,6 +57,7 @@
     "include_prereleases": false,
     "keep_versions": 2,
     "max_download_mb": 100,
+    "online_catalog": true,
     "require_checksum": false,
     "sources": []
   }

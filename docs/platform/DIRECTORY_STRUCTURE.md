@@ -102,7 +102,7 @@ Physical device validation (level 5) is a recorded procedure, not a test file
 ├── adopted/<id>/               original registrations of adopted daemon apps
 ├── shared/radio/  (0700)       radio.json, device.json, keys.json, contacts.json (radio apps)
 ├── bin/                        mfruit-run, mfruitctl, boot-guard.sh, whisplay-daemon-mfruit.py
-├── cache/                      GitHub metadata, downloads/
+├── cache/                      GitHub metadata, catalog.json (downloaded Fruit Store list), downloads/
 ├── config/settings.json        settings ([Configuration](CONFIGURATION.md))
 ├── inbox/                      local packages offered by Fruit Store → Local packages
 ├── logs/                       launcher.log, updater.log, launch-gate.log, <app>.log
