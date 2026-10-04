@@ -109,6 +109,7 @@ bash scripts/install.sh            # or: bash scripts/setup-device.sh --install
 | `--no-service` | install files only (no driver, no systemd changes); start manually with `PYTHONPATH=~/.whisplay-os/system/current python3 -m mfruitos` |
 | `--no-driver` | do not install or update the Whisplay driver |
 | `--reboot` | reboot without asking when the driver needs it (otherwise it asks; with `--yes` it only says so) |
+| `--radio` / `--no-radio` | set up a LoRa radio HAT for RadioConnect as part of the install, or do not offer it (otherwise it asks; with `--yes` it is skipped); see [Radio setup](#radio-setup-lora-apps) |
 | `--no-background-daemon` | keep whisplay-daemon's own desktop visible between apps |
 | `--dev` | run directly from the checkout (development; keep the directory in place) |
 | `--yes` | non-interactive; does not bypass sudo authorization |
@@ -242,8 +243,15 @@ bash ~/.whisplay-os/system/current/scripts/setup-radio.sh --check   # report onl
 bash ~/.whisplay-os/system/current/scripts/setup-radio.sh           # asks before each change
 ```
 
+`bash scripts/install.sh --radio` (or answering yes to its radio question)
+runs the same script at the end of the install. When the UART needs a reboot,
+the installer includes it in its own reboot and says to run `setup-radio.sh`
+once more afterwards; that run writes the module settings. Without the radio
+set up, RadioConnect's install from the Fruit Store fails cleanly and is
+rolled back.
+
 Options: `--band au915|eu868|us915` (default `au915`, 920 MHz), `--frequency`,
-`--air-speed` (default 2400), `--yes`. Use a band that is legal where you
+`--air-speed` (default 2400), `--yes`, `--no-reboot` (never reboot; exit code 3 when a reboot is due). Use a band that is legal where you
 are, and the same band, frequency and air rate on every radio.
 
 | Change | Why | Undo |

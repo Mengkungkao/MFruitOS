@@ -10,6 +10,10 @@
 #   bash scripts/install.sh --no-driver  do not install or update the Whisplay driver
 #   bash scripts/install.sh --reboot     reboot by itself when the driver needs it
 #                                        (otherwise it asks, or with --yes only says so)
+#   bash scripts/install.sh --radio      also set up a LoRa radio HAT (scripts/setup-radio.sh:
+#                                        packages, UART, dialout; RadioConnect needs it)
+#   bash scripts/install.sh --no-radio   do not offer the radio setup
+#                                        (otherwise it asks; with --yes it is skipped)
 #
 # Run as your normal user (the one whisplay-daemon runs as). sudo is used for
 # the Whisplay driver (drivers/whisplay/install.sh: packages, SPI/I2C/I2S
@@ -32,6 +36,7 @@ INSTALL_SERVICE=1
 BACKGROUND_DAEMON=1
 INSTALL_DRIVER=1
 REBOOT_NOW=0
+RADIO=ask
 DEV=0
 ASSUME_YES=0
 for arg in "$@"; do
@@ -40,9 +45,11 @@ for arg in "$@"; do
     --no-background-daemon) BACKGROUND_DAEMON=0 ;;
     --no-driver) INSTALL_DRIVER=0 ;;
     --reboot) REBOOT_NOW=1 ;;
+    --radio) RADIO=1 ;;
+    --no-radio) RADIO=0 ;;
     --dev) DEV=1 ;;
     --yes|-y) ASSUME_YES=1 ;;
-    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,24p' "$0"; exit 0 ;;
     *) echo "Unknown option: $arg" >&2; exit 2 ;;
   esac
 done
@@ -222,6 +229,7 @@ fi
 if [ "$INSTALL_SERVICE" = 0 ]; then
   say "Done (no service installed). Start manually with:"
   echo "    PYTHONPATH=$OS_HOME/system/current python3 -m mfruitos"
+  [ "$RADIO" != 1 ] || warn "--radio is skipped with --no-service; run: bash $OS_HOME/system/current/scripts/setup-radio.sh"
   exit 0
 fi
 
@@ -337,12 +345,41 @@ elif [ -f "$DROPIN_DIR/mfruit-os.conf" ]; then
 fi
 sudo systemctl daemon-reload
 sudo systemctl enable "$SERVICE" >/dev/null 2>&1
+
+# Radio apps need a LoRa HAT set up (packages, UART, dialout, module settings).
+# setup-radio.sh owns that; it stops before provisioning when a reboot is due.
+RADIO_SCRIPT="$OS_HOME/system/current/scripts/setup-radio.sh"
+[ -f "$RADIO_SCRIPT" ] || RADIO_SCRIPT="$SRC/scripts/setup-radio.sh"
+RADIO_PENDING=0
+if [ "$RADIO" = ask ]; then
+  RADIO=0
+  if [ "$ASSUME_YES" = 0 ] && [ -t 0 ]; then
+    read -r -p "    Set up a LoRa radio HAT (needed by RadioConnect)? [y/N] " answer || answer=n
+    case "$answer" in [yY]*) RADIO=1 ;; esac
+  fi
+fi
+if [ "$RADIO" = 1 ]; then
+  say "LoRa radio"
+  RADIO_ARGS=(--no-reboot)
+  [ "$ASSUME_YES" = 0 ] || RADIO_ARGS+=(--yes)
+  radio_status=0
+  as_user bash "$RADIO_SCRIPT" "${RADIO_ARGS[@]}" || radio_status=$?
+  case "$radio_status" in
+    0) ok "radio set up" ;;
+    3) REBOOT_REQUIRED=1; RADIO_PENDING=1 ;;
+    *) warn "radio setup incomplete; run it again later: bash $RADIO_SCRIPT" ;;
+  esac
+else
+  echo "    LoRa radio not set up; for RadioConnect run: bash $RADIO_SCRIPT"
+fi
+
 if [ "$REBOOT_REQUIRED" = 1 ]; then
   # The display bus and sound card appear only after a reboot; both services
   # are enabled and start then.
-  say "MFruit OS $VERSION installed; reboot to finish the Whisplay driver"
+  say "MFruit OS $VERSION installed; reboot to finish the setup"
   [ "$AUDIO_FAILED" = 0 ] || warn "no sound card yet: rerun this installer with internet or an offline pack (docs/WHISPLAY_DRIVER.md)"
   echo "    After the reboot MFruit OS starts by itself. To check it: bash $SRC/scripts/setup-device.sh --check"
+  [ "$RADIO_PENDING" = 0 ] || echo "    After the reboot finish the radio (writes the module settings): bash $RADIO_SCRIPT"
   if [ "$REBOOT_NOW" = 0 ] && [ "$ASSUME_YES" = 0 ] && [ -t 0 ]; then
     read -r -p "    Reboot now? [Y/n] " answer || answer=n
     case "$answer" in [nN]*) ;; *) REBOOT_NOW=1 ;; esac

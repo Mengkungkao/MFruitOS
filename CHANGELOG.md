@@ -6,6 +6,13 @@ the OS version.
 
 ## Unreleased
 
+### Fixed (2026-10-05)
+- **RadioConnect failed to install from the Fruit Store on a freshly
+  installed device** ("RadioConnect needs: serial") because the LoRa radio
+  was never set up. `scripts/install.sh` now offers the radio setup
+  (`--radio`, `--no-radio`), and `setup-radio.sh` has `--no-reboot` so the
+  installer handles the reboot.
+
 ### Added (2026-10-04)
 - **Apps can keep running in the background with the screen held bright.**
   New per-app *Keep screen bright* in Settings > Apps, and SDK 1.4.0

@@ -5,6 +5,7 @@
 #   bash setup-radio.sh                 check, then fix what is missing (asks first)
 #   bash setup-radio.sh --check         report only; change nothing
 #   bash setup-radio.sh --yes           accept every prompt
+#   bash setup-radio.sh --no-reboot     never reboot; exit 3 when a reboot is due
 #   bash setup-radio.sh --band au915    au915 (default), eu868 or us915
 #   bash setup-radio.sh --frequency 920 MHz inside the band (default: its middle)
 #   bash setup-radio.sh --air-speed 2400
@@ -27,6 +28,7 @@ AIR_SPEED=2400
 BOARD=""
 CHECK_ONLY=0
 ASSUME_YES=0
+NO_REBOOT=0
 NEED_REBOOT=0
 FAILED=0
 
@@ -34,11 +36,12 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --check) CHECK_ONLY=1 ;;
     --yes|-y) ASSUME_YES=1 ;;
+    --no-reboot) NO_REBOOT=1 ;;
     --band) BAND="${2:-}"; shift ;;
     --frequency) FREQUENCY="${2:-}"; shift ;;
     --air-speed) AIR_SPEED="${2:-}"; shift ;;
     --board) BOARD="${2:-}"; shift ;;
-    -h|--help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
   shift
@@ -197,7 +200,7 @@ if [ "$NEED_REBOOT" = 1 ]; then
   say "Reboot required"
   info "The UART/console changes take effect after a reboot. Reboot, then run"
   info "this script again to provision the radio module."
-  if ask "reboot now?"; then sudo reboot; fi
+  if [ "$NO_REBOOT" = 0 ] && ask "reboot now?"; then sudo reboot; fi
   exit 3
 fi
 
