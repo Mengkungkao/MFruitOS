@@ -6,6 +6,15 @@ the OS version.
 
 ## Unreleased
 
+### Fixed (2026-10-06, AI Chatbot 1.0.2)
+- **AI Chatbot no longer loses the microphone after a quick press.** A
+  recording stopped within about a second of starting kept running and held
+  the microphone, so every later press failed (seen on the Orange Pi).
+- **AI Chatbot shows configuration problems on its screen**: an unknown
+  ASR/LLM/TTS server in `.env`, Piper selected but not installed, or OpenAI
+  rejecting a setting such as the voice model or the key. Before, the
+  chatbot silently did not listen or did not speak.
+
 ### Changed (2026-10-05, AI Chatbot 1.0.1)
 - **AI Chatbot 1.0.1 in the Fruit Store.** Installing it downloads only its
   release archive from github.com/Mengkungkao/ai-chatbot: the font, the emoji
