@@ -153,6 +153,8 @@ def _catalog(rt, args):
             status = "available" if entry is None else "broken" if entry.broken else "installed"
             rows.append({"id": item["id"], "name": item["name"], "status": status,
                          "detail": entry.broken if entry is not None and entry.broken else "",
+                         "update": catalog.newer_version(item, entry.version)
+                         if entry is not None and not entry.broken else None,
                          "requires": catalog.requirements(item),
                          "missing": catalog.missing_requirements(item, home)})
         downloaded = catalog.online(home)

@@ -19,4 +19,5 @@ rewritten to change its decision; a later record supersedes it.
 | [0008](0008-bundled-whisplay-driver.md) | MFruit OS ships the Whisplay driver | Accepted 2026-10-03 |
 | [0009](0009-app-background-request.md) | Apps can ask to keep running with the screen held bright | Accepted 2026-10-04 |
 | [0010](0010-online-fruit-store-catalogue.md) | The Fruit Store list is downloaded, the bundled list is the fallback | Accepted 2026-10-05 |
+| [0011](0011-catalogue-system-packages.md) | Fruit Store entries declare system packages; setup-app.sh installs them | Accepted 2026-10-05 |
 | [0006](0006-settings-provider-apps.md) | Settings provider apps instead of a hard-coded Wi-Fi app | **Proposed** — awaiting the owner's decision |

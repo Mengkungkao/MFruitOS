@@ -277,7 +277,8 @@ class InstallAppScreen(ListScreen):
     def _check_requirements(self) -> None:
         from mfruitos.updater import catalog
         home = self._home()
-        needing = [item for item in catalog.entries(home) if item.get("requires")]
+        needing = [item for item in catalog.entries(home)
+                   if item.get("requires") or item.get("system_packages")]
         if not needing:
             return
 
@@ -321,15 +322,18 @@ class InstallAppScreen(ListScreen):
             broken = saved is not None and bool(saved.broken)
             present = saved is not None and not broken
             added = app_id in installed and not broken
+            newer = catalog.newer_version(item, saved.version) if present else None
             rows.append(Item(item['name'],
                 lambda i=item, p=present, a=added, b=broken: self._pick(i, p, a, b),
                 icon="package",
-                value="Installed" if added else "On device" if present else
-                "Repair" if broken else "Download",
+                value="Update" if added and newer else "Installed" if added else
+                "On device" if present else "Repair" if broken else "Download",
                 subtitle="App files are missing" if broken else
-                "Needs radio setup first" if self.missing.get(app_id) and not added else
+                f"Version {newer} available" if added and newer else
+                self._needs_label(app_id) if self.missing.get(app_id) and not added else
                 item['description'],
-                tone="success" if added else "warning" if broken else None))
+                tone="accent" if added and newer else "success" if added else
+                "warning" if broken else None))
         for leftover in leftovers.values():
             rows.append(self._leftover_row(leftover, None))
         count = os.updates_available_count()
@@ -341,6 +345,13 @@ class InstallAppScreen(ListScreen):
             back_item(),
         ]
         return rows
+
+    def _packages_missing(self, app_id: str) -> bool:
+        from mfruitos.updater import catalog
+        return any(p.startswith(catalog.PACKAGES_MISSING) for p in self.missing.get(app_id, []))
+
+    def _needs_label(self, app_id: str) -> str:
+        return "Needs setup first" if self._packages_missing(app_id) else "Needs radio setup first"
 
     def _leftover_row(self, leftover, item: dict | None) -> Item:
         return Item(leftover.name, lambda: self._open(leftover.id, item), icon="package",
@@ -359,6 +370,10 @@ class InstallAppScreen(ListScreen):
         from mfruitos.updater import catalog
         if not self.missing.get(item['id']):
             needs = ""
+        elif self._packages_missing(item['id']):
+            # The app's own install check stops until they are installed.
+            needs = (f" It needs system packages first: run setup-app.sh {item['id']} once "
+                     "over SSH, then install.")
         elif catalog.is_native(item):
             # A native package checks its own dependencies and stops if the
             # radio setup (which installs them) has not run.

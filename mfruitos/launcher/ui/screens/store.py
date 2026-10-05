@@ -114,10 +114,20 @@ class StoreAppScreen(ListScreen):
                          enabled=app.launchable,
                          data={"disabled_reason": app.broken or "App is disabled"}))
         if app.kind == "os":
+            from mfruitos.updater import catalog
+            newer = catalog.newer_version(self.catalog_item, app.version)
             if info and info.update_available and info.latest:
                 rows.append(Item(f"Update to {info.latest}",
                                  lambda: os.install_app_version(app.id, info.latest),
                                  icon="download", tone="accent"))
+            elif newer:
+                # A newer pinned version in the Fruit Store list (apps without
+                # GitHub releases are updated this way).
+                rows.append(Item(f"Update to {newer}", lambda: os.push(confirm(
+                    os, f"Update to {newer}?", f"Install {app.name} {newer} from the Fruit "
+                    "Store. Its data stays, and the current version is restored if "
+                    "anything fails.", "Update", lambda: os.install_catalog_app(app.id),
+                    danger=False)), icon="download", tone="accent"))
             if app.previous_version:
                 rows.append(Item(f"Roll back to {app.previous_version}", lambda: os.push(confirm(
                     os, "Roll back?", f"Switch {app.name} back to {app.previous_version}. "

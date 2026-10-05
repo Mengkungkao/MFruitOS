@@ -46,7 +46,11 @@ An entry marked `"native": true` (RadioConnect) is a native MFruit OS package
 and is installed exactly as published: steps 2–4 are skipped. Only its
 `manifest.json` `id` and `version` must match the entry's `id` and `version`.
 Its own hooks run, and it updates from its GitHub releases like any native
-app.
+app. When the Fruit Store list names a newer `version` than the installed one,
+the Store row shows **Update** and the app's page offers **Update to
+<version>** (the same pinned install; data kept, previous version restored on
+failure), so an app without GitHub releases, such as RadioConnect, still gets
+new versions. `mfruitctl catalog` reports it as `update`.
 
 A catalogue app that is registered but whose files are missing shows
 **Repair**; it runs the same installation. From a shell, `mfruitctl catalog`
@@ -58,6 +62,29 @@ lists each entry as `available`, `installed` or `broken` (with `source`:
 `scripts/install.sh --radio` queues the entries with `requires: ["radio"]`;
 the launcher installs them through the same job once the radio is ready
 ([radio setup](../platform/INSTALLATION.md#radio-setup-lora-apps)).
+
+### Apps that need system packages
+
+An entry may list `system_packages`: Debian packages the app needs from the
+system (AI Chatbot: sox, mpg123, python3-cairosvg, …). The Store never runs
+sudo, so until they are installed the entry shows **Needs setup first** and
+its install dialog names the command. Install them once over SSH:
+
+```bash
+bash ~/.whisplay-os/system/current/scripts/setup-app.sh whisplay-ai-chatbot          # asks first
+bash ~/.whisplay-os/system/current/scripts/setup-app.sh --check whisplay-ai-chatbot  # report only
+```
+
+It installs only the missing packages, with sudo through `scripts/offline.sh`
+(an offline pack when there is one, otherwise apt-get), then queues the app;
+the launcher installs it by itself, through the same job as the Store's
+Install. `scripts/install.sh --app <id>` does the same while installing MFruit
+OS, and without `--app` the installer offers such apps. The app's own
+`install.sh` still checks what it needs and stops with the same instruction.
+
+AI Chatbot keeps its API keys out of the package: copy your `.env` to
+`~/.whisplay-os/apps/whisplay-ai-chatbot/data/.env`. Until then the app shows
+"Add your API keys".
 
 Entries with `requires: ["radio"]` (RadioConnect) show **Needs
 radio setup first** until the LoRa radio is set up

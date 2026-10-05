@@ -109,6 +109,7 @@ bash scripts/install.sh            # or: bash scripts/setup-device.sh --install
 | `--no-service` | install files only (no driver, no systemd changes); start manually with `PYTHONPATH=~/.whisplay-os/system/current python3 -m mfruitos` |
 | `--no-driver` | do not install or update the Whisplay driver |
 | `--reboot` | reboot without asking when the driver needs it (otherwise it asks; with `--yes` it only says so) |
+| `--app ID` | also install this Fruit Store app and the system packages it needs (`scripts/setup-app.sh`; e.g. `whisplay-ai-chatbot`); repeatable. Without it the installer offers such apps (with `--yes` it skips them) ([App installation](../apps/INSTALLATION.md#apps-that-need-system-packages)) |
 | `--radio` / `--no-radio` | set up a LoRa radio HAT for RadioConnect as part of the install, or do not offer it (otherwise it asks; with `--yes` it is skipped); see [Radio setup](#radio-setup-lora-apps) |
 | `--no-background-daemon` | keep whisplay-daemon's own desktop visible between apps |
 | `--dev` | run directly from the checkout (development; keep the directory in place) |

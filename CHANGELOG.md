@@ -6,6 +6,22 @@ the OS version.
 
 ## Unreleased
 
+### Added (2026-10-05, AI Chatbot)
+- **AI Chatbot is in the Fruit Store** (1.0.0, a release package built by the
+  ai-chatbot repository). Fruit Store entries can list `system_packages`;
+  `scripts/setup-app.sh <id>` (or `install.sh --app <id>`) installs them once
+  with sudo and the device then installs the app by itself. The Store shows
+  *Needs setup first* until then. Copy your `.env` to the app's data folder
+  (`~/.whisplay-os/apps/whisplay-ai-chatbot/data/.env`).
+
+### Changed (2026-10-05, Fruit Store versions)
+- **RadioConnect 0.5.0 in the Fruit Store** (Listen in background); it was
+  pinned at 0.4.0.
+- **Installed Fruit Store apps get newer versions from the Store list.** When
+  the list names a newer version of a native app than the installed one, the
+  Store shows *Update* and the app's page *Update to <version>*. Apps without
+  GitHub releases (RadioConnect) had no update path before.
+
 ### Added (2026-10-05, radio)
 - **`install.sh --radio` now finishes the radio by itself.** When the UART
   needs a reboot, a one-time `mfruit-radio-setup.service` writes the module

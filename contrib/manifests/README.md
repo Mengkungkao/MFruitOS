@@ -10,7 +10,7 @@ and updatable through the MFruit OS Updater.
 | Mengkungkao/Messenger | `whisplay-lora-messenger` | Keeps `.venv` and `config.yaml` across updates. `disable_esc_exit_key` preserved. |
 | Mengkungkao/WalkieTalkie | `whisplay-lora-walkie` | Its `install.sh` preflight fails if Python modules are missing — an install then rolls back cleanly. Run `setup.sh` once for codec2/serial setup. |
 | Mengkungkao/whisplay-crypto-dashboard | `whisplay-crypto-dashboard` | Keeps `.venv`, `config.yaml` and `.env` (API keys). |
-| Mengkungkao/ai-chatbot | `whisplay-ai-chatbot` | **Needs work:** the app is built with Node/yarn and the repo root has no `install.sh`. Publish a release asset containing the built app, or add a root `install.sh` that runs the build (slow on a Pi Zero 2 W). |
+| Mengkungkao/ai-chatbot | `whisplay-ai-chatbot` | **Native package since 1.0.0** (`whisplay-ai-chatbot/manifest.json`, release asset built by its release workflow); in the Fruit Store. The draft in this folder is superseded. |
 | ConnectWifi | — | Repository not public, not drafted. |
 
 ## Publishing a version

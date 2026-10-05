@@ -35,13 +35,24 @@ class CatalogTests(TempHomeTestCase):
                 self.assertRegex(item['sha256'], r'^[0-9a-f]{64}$')
                 self.assertRegex(item['ref'], r'^[0-9a-f]{40}$')
                 owner_repo = item['repository'].removeprefix('https://github.com/')
-                self.assertEqual(item['url'],
-                                 f"https://api.github.com/repos/{owner_repo}/tarball/{item['ref']}")
+                # A source snapshot of the pinned commit, or a release asset
+                # built from it (AI Chatbot: a compiled package).
+                self.assertTrue(item['url'] == f"https://api.github.com/repos/{owner_repo}/tarball/"
+                                f"{item['ref']}" or item['url'].startswith(
+                                    f"https://github.com/{owner_repo}/releases/download/"),
+                                item['url'])
                 if catalog.is_native(item):
                     self.assertRegex(item['version'], r'^\d+\.\d+\.\d+$')
                 else:
                     self.assertTrue(item['dependencies'])
                 self.assertEqual(catalog.get(item['id']), item)
+
+    def test_ai_chatbot_is_a_native_release_package_with_system_packages(self):
+        item = catalog.get('whisplay-ai-chatbot')
+        self.assertTrue(catalog.is_native(item))
+        self.assertIn('mpg123', catalog.system_packages(item))
+        self.assertTrue(item['url'].endswith(f"/v{item['version']}/whisplay-ai-chatbot-"
+                                             f"{item['version']}-linux-arm64.tar.gz"))
 
     def test_radioconnect_replaces_messenger_and_walkietalkie(self):
         ids = [item['id'] for item in catalog.entries()]

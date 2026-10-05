@@ -16,6 +16,10 @@
 #                                        apps that need it (RadioConnect)
 #   bash scripts/install.sh --no-radio   do not offer the radio setup
 #                                        (otherwise it asks; with --yes it is skipped)
+#   bash scripts/install.sh --app ID     also install this Fruit Store app and the system
+#                                        packages it needs (scripts/setup-app.sh, e.g.
+#                                        whisplay-ai-chatbot); repeatable. Without it the
+#                                        installer offers such apps (with --yes: skipped)
 #
 # Run as your normal user (the one whisplay-daemon runs as). sudo is used for
 # the Whisplay driver (drivers/whisplay/install.sh: packages, SPI/I2C/I2S
@@ -41,8 +45,12 @@ REBOOT_NOW=0
 RADIO=ask
 DEV=0
 ASSUME_YES=0
-for arg in "$@"; do
+APPS=()
+while [ $# -gt 0 ]; do
+  arg="$1"
   case "$arg" in
+    --app) [ -n "${2:-}" ] || { echo "--app needs an app id" >&2; exit 2; }; APPS+=("$2"); shift ;;
+    --app=*) APPS+=("${arg#--app=}") ;;
     --no-service) INSTALL_SERVICE=0 ;;
     --no-background-daemon) BACKGROUND_DAEMON=0 ;;
     --no-driver) INSTALL_DRIVER=0 ;;
@@ -51,9 +59,10 @@ for arg in "$@"; do
     --no-radio) RADIO=0 ;;
     --dev) DEV=1 ;;
     --yes|-y) ASSUME_YES=1 ;;
-    -h|--help) sed -n '2,26p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,28p' "$0"; exit 0 ;;
     *) echo "Unknown option: $arg" >&2; exit 2 ;;
   esac
+  shift
 done
 
 say()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
@@ -353,9 +362,10 @@ sudo systemctl enable "$SERVICE" >/dev/null 2>&1
 RADIO_SCRIPT="$OS_HOME/system/current/scripts/setup-radio.sh"
 [ -f "$RADIO_SCRIPT" ] || RADIO_SCRIPT="$SRC/scripts/setup-radio.sh"
 RADIO_PENDING=0
+# Python with the installed MFruit OS (Fruit Store list, install queue).
+os_py() { as_user env PYTHONPATH="$OS_HOME/system/current" python3 "$@"; }
 # Fruit Store apps that need the radio, e.g. "RadioConnect" (updater/autoinstall.py).
-radio_py() { as_user env PYTHONPATH="$OS_HOME/system/current" python3 "$@"; }
-RADIO_APPS="$(radio_py -c 'from mfruitos.updater import autoinstall, catalog
+RADIO_APPS="$(os_py -c 'from mfruitos.updater import autoinstall, catalog
 ids = autoinstall.needing("radio")
 print(", ".join(i["name"] for i in catalog.entries() if i["id"] in ids))' 2>/dev/null || true)"
 if [ "$RADIO" = ask ]; then
@@ -378,7 +388,7 @@ if [ "$RADIO" = 1 ]; then
   esac
   if [ -n "$RADIO_APPS" ]; then
     # The launcher installs them once the radio is ready and the network is up.
-    if queued="$(radio_py -m mfruitos.updater.autoinstall add --requires radio --home "$OS_HOME")"; then
+    if queued="$(os_py -m mfruitos.updater.autoinstall add --requires radio --home "$OS_HOME")"; then
       ok "queued for installation: $queued (the device installs them by itself)"
     else
       warn "could not queue $RADIO_APPS; install from the Fruit Store"
@@ -386,6 +396,32 @@ if [ "$RADIO" = 1 ]; then
   fi
 else
   echo "    LoRa radio not set up; for RadioConnect run: bash $RADIO_SCRIPT"
+fi
+
+# Fruit Store apps that need system packages (e.g. AI Chatbot): setup-app.sh
+# installs the packages with sudo and queues the apps; the launcher installs them.
+APP_SCRIPT="$OS_HOME/system/current/scripts/setup-app.sh"
+[ -f "$APP_SCRIPT" ] || APP_SCRIPT="$SRC/scripts/setup-app.sh"
+if [ "${#APPS[@]}" -eq 0 ] && [ "$ASSUME_YES" = 0 ] && [ -t 0 ]; then
+  while IFS=$'\t' read -r app_id app_name; do
+    [ -n "$app_id" ] || continue
+    read -r -p "    Install $app_name (needs system packages)? [y/N] " answer </dev/tty || answer=n
+    case "$answer" in [yY]*) APPS+=("$app_id") ;; esac
+  done < <(os_py - "$OS_HOME" <<'PY' 2>/dev/null || true
+import os, sys
+from mfruitos.updater import catalog
+home = sys.argv[1]
+for item in catalog.entries(home):
+    if catalog.system_packages(item) and \
+            not os.path.exists(os.path.join(home, "apps", item["id"], "current")):
+        print(f"{item['id']}\t{item['name']}")
+PY
+)
+fi
+if [ "${#APPS[@]}" -gt 0 ]; then
+  say "Fruit Store apps: ${APPS[*]}"
+  as_user bash "$APP_SCRIPT" --yes "${APPS[@]}" \
+    || warn "app setup incomplete; run it again later: bash $APP_SCRIPT ${APPS[*]}"
 fi
 
 if [ "$REBOOT_REQUIRED" = 1 ]; then

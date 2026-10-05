@@ -26,6 +26,7 @@ from pathlib import Path
 import re
 import shlex
 import shutil
+import subprocess
 import threading
 import time
 
@@ -53,6 +54,9 @@ REQUIREMENTS = {"radio": "LoRa radio (scripts/setup-radio.sh)"}
 
 _HEX40 = re.compile(r"[0-9a-f]{40}")
 _HEX64 = re.compile(r"[0-9a-f]{64}")
+_PACKAGE = re.compile(r"[a-z0-9][a-z0-9+.-]{1,62}")    # a Debian package name
+SETUP_APP = "~/.whisplay-os/system/current/scripts/setup-app.sh"
+PACKAGES_MISSING = "System packages missing"
 
 
 def check_entry(item: object) -> dict:
@@ -84,6 +88,10 @@ def check_entry(item: object) -> dict:
         if not isinstance(item.get("entry"), str) or not isinstance(dependencies, list) or \
                 not all(isinstance(d, str) and 0 < len(d) <= 200 for d in dependencies):
             raise CatalogError("an adopted entry needs entry and dependencies")
+    packages = item.get("system_packages", [])
+    if not isinstance(packages, list) or len(packages) > 40 or \
+            not all(isinstance(p, str) and _PACKAGE.fullmatch(p) for p in packages):
+        raise CatalogError("system_packages must be a list of Debian package names")
     needs = item.get("requires", [])
     if not isinstance(needs, list) or not all(isinstance(n, str) for n in needs):
         raise CatalogError("requires must be a list of names")
@@ -219,18 +227,57 @@ def requirements(item: dict) -> list:
     return list(needs)
 
 
+def system_packages(item: dict) -> list:
+    """Debian packages the app needs from the system (``system_packages``):
+    installed once with sudo by scripts/setup-app.sh, never by the Store."""
+    return list(item.get("system_packages") or [])
+
+
+def missing_packages(packages) -> list:
+    """The packages in ``packages`` that dpkg does not report installed.
+    Runs dpkg-query: call it off the UI thread."""
+    packages = list(packages)
+    if not packages:
+        return []
+    try:
+        result = subprocess.run(["dpkg-query", "-W", "-f=${Package} ${Status}\n", *packages],
+                                capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.SubprocessError) as exc:
+        log.warning("Cannot ask dpkg about %s: %s", " ".join(packages), exc)
+        return packages
+    installed = {line.split()[0].split(":")[0] for line in result.stdout.splitlines()
+                 if line.endswith(" installed")}
+    return [p for p in packages if p not in installed]
+
+
 def missing_requirements(item: dict, home: str | None = None) -> list:
     """What the device still lacks for ``item`` (empty when ready). The
-    radio check may run ldconfig: call it off the UI thread."""
+    radio check may run ldconfig and the package check dpkg-query: call it
+    off the UI thread."""
     problems = []
     if "radio" in requirements(item):
         from mfruitos.hosts.lora.readiness import radio_status
         problems += radio_status(home)["problems"]
+    absent = missing_packages(system_packages(item))
+    if absent:
+        problems.append(f"{PACKAGES_MISSING}: {' '.join(absent)} "
+                        f"(run 'bash {SETUP_APP} {item['id']}' once over SSH)")
     return problems
 
 
 def is_native(item: dict) -> bool:
     return bool(item.get("native"))
+
+
+def newer_version(item: dict | None, installed: str | None) -> str | None:
+    """The entry's version when it is newer than ``installed``. Only native
+    entries carry their own version; an adopted entry is always 1.0.0."""
+    if not item or not is_native(item):
+        return None
+    offered, current = parse_version(item.get("version")), parse_version(installed)
+    if offered is None or current is None or not offered > current:
+        return None
+    return item["version"]
 
 
 def _check_native(root: Path, item: dict) -> None:

@@ -132,6 +132,40 @@ class AppInstallerScreenTests(TempHomeTestCase):
         self.assertIsInstance(self.os.push.call_args.args[0], StoreAppScreen)
         self.os.start_job.assert_not_called()
 
+    def test_a_newer_store_version_is_offered_as_an_update(self):
+        """RadioConnect 0.4.0 stayed on the Pi after the Store list moved to
+        0.5.0: an app without GitHub releases had no way to update (2026-10-05)."""
+        self.item.update(native=True, version="0.5.0")
+        self.saved(version="0.4.0")
+        self.os.registry._entries["demo"].kind = "os"
+        self.os.settings.set("apps.installed_ids", ["demo"])
+        self.os.updater.info.return_value = None
+        row = self.rows()[0]
+        self.assertEqual((row.value, row.subtitle), ("Update", "Version 0.5.0 available"))
+        row.action()
+        page = self.os.push.call_args.args[0]
+        self.assertIsInstance(page, StoreAppScreen)
+        update = next(i for i in page.items() if i.label == "Update to 0.5.0")
+        update.action()
+        dialog = self.os.push.call_args.args[0]
+        self.assertEqual([i.label for i in dialog.items()], ["Cancel", "Update"])
+        self.os.start_job.assert_not_called()
+        dialog.items()[1].action()
+        self.assertEqual(self.os.start_job.call_args.args[0], "Install app")
+
+    def test_same_or_older_store_version_is_no_update(self):
+        self.os.settings.set("apps.installed_ids", ["demo"])
+        self.os.updater.info.return_value = None
+        for version, native in (("0.5.0", True), ("0.6.0", True), ("0.4.0", False)):
+            with self.subTest(installed=version, native=native):
+                self.item.update(native=native, version="0.5.0")
+                self.saved(version=version)
+                self.os.registry._entries["demo"].kind = "os"
+                row = self.rows()[0]
+                self.assertEqual(row.value, "Installed")
+                page = StoreAppScreen(self.os, "demo", self.item)
+                self.assertFalse([i for i in page.items() if i.label.startswith("Update to")])
+
     def test_restore_rechecks_missing_or_broken_files(self):
         for entry in (None, self.saved(broken="Working directory missing")):
             with self.subTest(entry=entry):

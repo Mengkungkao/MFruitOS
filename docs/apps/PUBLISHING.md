@@ -43,6 +43,16 @@ and entry verified. Devices running MFruit OS with the online list see the
 entry once it is on the default branch, the next time the Fruit Store opens,
 without an OS update ([Installation](INSTALLATION.md#curated-catalogue)); so
 commit an entry only when its pin is verified. Add `min_os_version` when the
-app needs a newer MFruit OS than the devices may run. Catalogue installs replace the app's own hooks
+app needs a newer MFruit OS than the devices may run. To ship a new version of
+a native entry, change its `ref`, `url`, `sha256` and `version` together;
+devices that have the app installed are offered the update.
+
+An app that has to be built (AI Chatbot: TypeScript and `node_modules`) is
+pinned as a **release asset** instead of a source snapshot: `url` is the
+asset's download URL, `ref` the commit it was built from, `sha256` the
+asset's digest; the archive holds one folder with the native package.
+System packages the app needs go in `system_packages` (Debian names; installed
+once by `scripts/setup-app.sh`, never by the Store); the app's own
+`install.sh` checks them and names the command when one is missing. Catalogue installs replace the app's own hooks
 ([Installation](INSTALLATION.md#curated-catalogue)), so a catalogue entry is not
 a substitute for a native release.

@@ -146,5 +146,5 @@ PNGs. `mfruitctl help` lists the control commands.
 | File | Purpose |
 |---|---|
 | `config/default.json` | generated defaults reference (see above) |
-| `config/catalog.json` | curated Fruit Store catalogue: per app `id`, `name`, `description`, `repository`, pinned `ref`, archive `url`, `sha256`, Python `entry`, `dependencies` and optional `requires` (device capabilities, e.g. `radio`) and `min_os_version`; a native package instead has `"native": true` and its `version`. The same file on the default branch of `system.repository` is the online list ([App installation](../apps/INSTALLATION.md#curated-catalogue)) |
+| `config/catalog.json` | curated Fruit Store catalogue: per app `id`, `name`, `description`, `repository`, pinned `ref`, archive `url`, `sha256`, Python `entry`, `dependencies` and optional `requires` (device capabilities, e.g. `radio`), `min_os_version` and `system_packages` (Debian packages installed once by `scripts/setup-app.sh`); a native package instead has `"native": true` and its `version`. The same file on the default branch of `system.repository` is the online list ([App installation](../apps/INSTALLATION.md#curated-catalogue)) |
 | `manifest.json` | MFruit OS's own system package manifest (`type: system`) |
