@@ -4,12 +4,18 @@
     sudo python3 -m mfruitos.hosts.lora check
     sudo python3 -m mfruitos.hosts.lora provision --band au915 [--frequency MHZ]
          [--air-speed BPS] [--power DBM] [--home DIR] [--owner USER]
+    python3 -m mfruitos.hosts.lora boot-unit --code DIR --home DIR --owner USER
+         [--band ...] [--frequency MHZ] [--air-speed BPS]
 
 ``check`` and ``provision`` need root: M0/M1 are also the Whisplay LCD's
 lines, so whisplay-daemon is stopped for a few seconds (which closes any
 running app, freeing the serial port) and started again afterwards.
 ``provision`` then records the settings in the shared radio directory,
 owned by ``--owner``, where every radio app reads them.
+
+``boot-unit`` prints the systemd unit setup-radio.sh installs when the UART
+first needs a reboot: it runs ``provision`` once at the next boot, before
+whisplay-daemon starts (so nothing has to be stopped), then disables itself.
 """
 
 from __future__ import annotations
@@ -27,6 +33,7 @@ from mfruitos.hosts.lora.readiness import radio_status
 from mfruitos.sdk.radio import settings as radio_settings
 
 DAEMON = "whisplay-daemon.service"
+BOOT_UNIT = "mfruit-radio-setup.service"
 
 
 def _systemctl(action: str) -> bool:
@@ -134,6 +141,37 @@ def provision(args) -> int:
     return 0
 
 
+def boot_unit(args) -> str:
+    """The one-shot unit that provisions the module at the next boot."""
+    for value in (args.code, args.home, args.owner, args.port):
+        if not value or any(c.isspace() or c in "\\\"'%$;" for c in value):
+            raise ValueError(f"unsafe value for a unit file: {value!r}")
+    frequency = args.frequency or radio_settings.BANDS[args.band][2]
+    command = (f"/usr/bin/python3 -m mfruitos.hosts.lora provision --band {args.band} "
+               f"--frequency {frequency} --air-speed {args.air_speed} --port {args.port} "
+               f"--home {args.home} --owner {args.owner}")
+    return f"""# Installed by MFruit OS scripts/setup-radio.sh: writes the LoRa radio
+# settings once after the reboot that enables the UART, then disables itself.
+# A failed attempt stays enabled and runs again at the next boot.
+# Undo: systemctl disable {BOOT_UNIT}; rm /etc/systemd/system/{BOOT_UNIT}
+[Unit]
+Description=MFruit OS: write the LoRa radio settings ({frequency} MHz, {args.band})
+After=local-fs.target
+Before={DAEMON} whisplay-os.service
+ConditionPathExists={args.port}
+
+[Service]
+Type=oneshot
+Environment=PYTHONPATH={args.code}
+ExecStart={command}
+ExecStartPost=/usr/bin/systemctl disable {BOOT_UNIT}
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target
+"""
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="python3 -m mfruitos.hosts.lora",
                                      description="MFruit OS LoRa radio setup steps")
@@ -150,7 +188,22 @@ def main(argv=None) -> int:
     prov.add_argument("--port", default="/dev/ttyS0")
     prov.add_argument("--home", help="MFruit OS home of the user the radio belongs to")
     prov.add_argument("--owner", help="user who owns the shared radio files")
+    unit = sub.add_parser("boot-unit", help="print the unit that provisions at the next boot")
+    unit.add_argument("--band", choices=sorted(radio_settings.BANDS), default="au915")
+    unit.add_argument("--frequency", type=int)
+    unit.add_argument("--air-speed", type=int, default=2400, choices=sorted(sx126x.AIR_SPEED))
+    unit.add_argument("--port", default="/dev/ttyS0")
+    unit.add_argument("--code", required=True, help="MFruit OS code directory (PYTHONPATH)")
+    unit.add_argument("--home", required=True)
+    unit.add_argument("--owner", required=True)
     args = parser.parse_args(argv)
+    if args.command == "boot-unit":
+        try:
+            sys.stdout.write(boot_unit(args))
+        except ValueError as exc:
+            print(f"! {exc}", file=sys.stderr)
+            return 2
+        return 0
     if args.command == "status":
         report = radio_status(args.home)
         print(json.dumps(report, indent=2))

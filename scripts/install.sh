@@ -11,7 +11,9 @@
 #   bash scripts/install.sh --reboot     reboot by itself when the driver needs it
 #                                        (otherwise it asks, or with --yes only says so)
 #   bash scripts/install.sh --radio      also set up a LoRa radio HAT (scripts/setup-radio.sh:
-#                                        packages, UART, dialout; RadioConnect needs it)
+#                                        packages, UART, dialout, module settings, after
+#                                        the reboot by itself) and install the Fruit Store
+#                                        apps that need it (RadioConnect)
 #   bash scripts/install.sh --no-radio   do not offer the radio setup
 #                                        (otherwise it asks; with --yes it is skipped)
 #
@@ -49,7 +51,7 @@ for arg in "$@"; do
     --no-radio) RADIO=0 ;;
     --dev) DEV=1 ;;
     --yes|-y) ASSUME_YES=1 ;;
-    -h|--help) sed -n '2,24p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,26p' "$0"; exit 0 ;;
     *) echo "Unknown option: $arg" >&2; exit 2 ;;
   esac
 done
@@ -351,10 +353,15 @@ sudo systemctl enable "$SERVICE" >/dev/null 2>&1
 RADIO_SCRIPT="$OS_HOME/system/current/scripts/setup-radio.sh"
 [ -f "$RADIO_SCRIPT" ] || RADIO_SCRIPT="$SRC/scripts/setup-radio.sh"
 RADIO_PENDING=0
+# Fruit Store apps that need the radio, e.g. "RadioConnect" (updater/autoinstall.py).
+radio_py() { as_user env PYTHONPATH="$OS_HOME/system/current" python3 "$@"; }
+RADIO_APPS="$(radio_py -c 'from mfruitos.updater import autoinstall, catalog
+ids = autoinstall.needing("radio")
+print(", ".join(i["name"] for i in catalog.entries() if i["id"] in ids))' 2>/dev/null || true)"
 if [ "$RADIO" = ask ]; then
   RADIO=0
   if [ "$ASSUME_YES" = 0 ] && [ -t 0 ]; then
-    read -r -p "    Set up a LoRa radio HAT (needed by RadioConnect)? [y/N] " answer || answer=n
+    read -r -p "    Set up a LoRa radio HAT${RADIO_APPS:+ and install $RADIO_APPS}? [y/N] " answer || answer=n
     case "$answer" in [yY]*) RADIO=1 ;; esac
   fi
 fi
@@ -369,6 +376,14 @@ if [ "$RADIO" = 1 ]; then
     3) REBOOT_REQUIRED=1; RADIO_PENDING=1 ;;
     *) warn "radio setup incomplete; run it again later: bash $RADIO_SCRIPT" ;;
   esac
+  if [ -n "$RADIO_APPS" ]; then
+    # The launcher installs them once the radio is ready and the network is up.
+    if queued="$(radio_py -m mfruitos.updater.autoinstall add --requires radio --home "$OS_HOME")"; then
+      ok "queued for installation: $queued (the device installs them by itself)"
+    else
+      warn "could not queue $RADIO_APPS; install from the Fruit Store"
+    fi
+  fi
 else
   echo "    LoRa radio not set up; for RadioConnect run: bash $RADIO_SCRIPT"
 fi
@@ -379,7 +394,11 @@ if [ "$REBOOT_REQUIRED" = 1 ]; then
   say "MFruit OS $VERSION installed; reboot to finish the setup"
   [ "$AUDIO_FAILED" = 0 ] || warn "no sound card yet: rerun this installer with internet or an offline pack (docs/WHISPLAY_DRIVER.md)"
   echo "    After the reboot MFruit OS starts by itself. To check it: bash $SRC/scripts/setup-device.sh --check"
-  [ "$RADIO_PENDING" = 0 ] || echo "    After the reboot finish the radio (writes the module settings): bash $RADIO_SCRIPT"
+  if [ "$RADIO_PENDING" = 1 ] && [ -f /etc/systemd/system/mfruit-radio-setup.service ]; then
+    echo "    After the reboot the radio settings are written by themselves${RADIO_APPS:+, then $RADIO_APPS installs}."
+  elif [ "$RADIO_PENDING" = 1 ]; then
+    echo "    After the reboot finish the radio (writes the module settings): bash $RADIO_SCRIPT"
+  fi
   if [ "$REBOOT_NOW" = 0 ] && [ "$ASSUME_YES" = 0 ] && [ -t 0 ]; then
     read -r -p "    Reboot now? [Y/n] " answer || answer=n
     case "$answer" in [nN]*) ;; *) REBOOT_NOW=1 ;; esac

@@ -244,11 +244,23 @@ bash ~/.whisplay-os/system/current/scripts/setup-radio.sh           # asks befor
 ```
 
 `bash scripts/install.sh --radio` (or answering yes to its radio question)
-runs the same script at the end of the install. When the UART needs a reboot,
-the installer includes it in its own reboot and says to run `setup-radio.sh`
-once more afterwards; that run writes the module settings. Without the radio
-set up, RadioConnect's install from the Fruit Store fails cleanly and is
-rolled back.
+runs the same script at the end of the install and needs nothing more:
+
+1. packages, UART, serial console and `dialout` are set up; when the UART
+   needs a reboot, the script installs the one-time `mfruit-radio-setup.service`
+   and the installer includes the reboot in its own;
+2. at the next boot that service writes the module settings before
+   whisplay-daemon starts (nothing has to be stopped), records them and
+   disables itself; a failed attempt runs again at the following boot;
+3. the Fruit Store apps that need the radio (`requires: ["radio"]`, today
+   RadioConnect) are queued in `state/pending-installs.json`; the launcher
+   installs them by itself once the radio is ready and the network is up
+   (after start-up, after each update check and every 10 minutes; at most
+   5 attempts per app; the progress screen shows on the device).
+
+Run by hand, `setup-radio.sh` offers the same next-boot service instead of a
+second run. Without the radio set up, RadioConnect's install from the Fruit
+Store fails cleanly and is rolled back.
 
 Options: `--band au915|eu868|us915` (default `au915`, 920 MHz), `--frequency`,
 `--air-speed` (default 2400), `--yes`, `--no-reboot` (never reboot; exit code 3 when a reboot is due). Use a band that is legal where you
@@ -262,9 +274,11 @@ are, and the same band, frequency and air rate on every radio.
 | user added to `dialout` | apps open the serial port | `sudo gpasswd -d $USER dialout` |
 | module registers written (persistent): band frequency, air rate, power | every radio must match | run the setup again with other values |
 | `~/.whisplay-os/shared/radio/radio.json` | the settings every radio app reads | written again by the next setup |
+| `/etc/systemd/system/mfruit-radio-setup.service` (only when a reboot is due; enabled once) | writes the module settings at the next boot, before whisplay-daemon | disables itself after success; the next successful `setup-radio.sh` run and `uninstall.sh` remove the file |
+| `~/.whisplay-os/state/pending-installs.json` (only with `install.sh --radio`) | radio apps the launcher installs by itself | removed when the apps are installed; delete it to cancel |
 
 UART and console changes need a reboot; the script stops, asks to reboot, and
-continues provisioning when run again. Provisioning stops whisplay-daemon for
+provisions at the next boot (the service above) or when run again. Provisioning stops whisplay-daemon for
 a few seconds (closing an open app). Afterwards the launcher is restarted
 unless an install job is running. `mfruitctl catalog` then shows the radio
 apps without missing requirements.

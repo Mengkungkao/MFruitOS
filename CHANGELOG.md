@@ -6,6 +6,14 @@ the OS version.
 
 ## Unreleased
 
+### Added (2026-10-05, radio)
+- **`install.sh --radio` now finishes the radio by itself.** When the UART
+  needs a reboot, a one-time `mfruit-radio-setup.service` writes the module
+  settings (e.g. 920 MHz) at the next boot, so `setup-radio.sh` no longer has
+  to be run a second time. The Fruit Store apps that need the radio
+  (RadioConnect) are queued and the device downloads and installs them once
+  the radio is ready.
+
 ### Added (2026-10-05)
 - **New apps appear in the Fruit Store without an OS update.** The Store
   downloads its list from MFruit OS's GitHub repository when it opens

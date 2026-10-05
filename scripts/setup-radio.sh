@@ -195,11 +195,36 @@ else
   bad "radio apps cannot open $PORT without the dialout group"
 fi
 
+WANT_FREQ="$FREQUENCY"
+[ -n "$WANT_FREQ" ] || WANT_FREQ=$(PY -c "from mfruitos.sdk.radio.settings import BANDS; print(BANDS['$BAND'][2])")
+# The radio settings written once at the next boot (mfruitos.hosts.lora boot-unit).
+BOOT_UNIT=mfruit-radio-setup.service
+BOOT_UNIT_FILE="/etc/systemd/system/$BOOT_UNIT"
+# Code path for the unit: the stable "current" link survives MFruit OS updates.
+UNIT_CODE="$OS_HOME/system/current"
+[ -f "$UNIT_CODE/mfruitos/hosts/lora/__main__.py" ] || UNIT_CODE="$ROOT"
+
 # ---------------------------------------------------------------- 5. reboot
 if [ "$NEED_REBOOT" = 1 ]; then
   say "Reboot required"
-  info "The UART/console changes take effect after a reboot. Reboot, then run"
-  info "this script again to provision the radio module."
+  info "The UART/console changes take effect after a reboot."
+  UNIT_TMP=$(mktemp)
+  if [ "$FAILED" = 0 ] && PY -m mfruitos.hosts.lora boot-unit --band "$BAND" --frequency "$WANT_FREQ" \
+       --air-speed "$AIR_SPEED" --port "$PORT" --code "$UNIT_CODE" --home "$OS_HOME" \
+       --owner "$USER" > "$UNIT_TMP" \
+     && ask "write the radio settings ($BAND, $WANT_FREQ MHz) automatically at the next boot?"; then
+    if sudo install -m 0644 "$UNIT_TMP" "$BOOT_UNIT_FILE" && sudo systemctl daemon-reload \
+         && sudo systemctl enable "$BOOT_UNIT" >/dev/null 2>&1; then
+      ok "$BOOT_UNIT enabled: after the reboot the module is set up by itself"
+      info "(check afterwards: bash $0 --check)"
+    else
+      bad "could not install $BOOT_UNIT_FILE"
+      info "after the reboot, run this script again to provision the radio module"
+    fi
+  else
+    info "After the reboot, run this script again to provision the radio module."
+  fi
+  rm -f "$UNIT_TMP"
   if [ "$NO_REBOOT" = 0 ] && ask "reboot now?"; then sudo reboot; fi
   exit 3
 fi
@@ -209,8 +234,6 @@ say "Radio module ($BAND${FREQUENCY:+, $FREQUENCY MHz}, $AIR_SPEED bps)"
 CURRENT=$(PY -c "from mfruitos.sdk.radio.settings import load_radio, radio_dir
 s = load_radio(radio_dir('$OS_HOME')); print(f'{s.band} {s.frequency_mhz} {s.air_speed}' if s else '')" 2>/dev/null)
 info "recorded now: ${CURRENT:-nothing (never provisioned by MFruit OS)}"
-WANT_FREQ="$FREQUENCY"
-[ -n "$WANT_FREQ" ] || WANT_FREQ=$(PY -c "from mfruitos.sdk.radio.settings import BANDS; print(BANDS['$BAND'][2])")
 if [ "$CURRENT" = "$BAND $WANT_FREQ $AIR_SPEED" ]; then
   ok "already provisioned for $BAND, $WANT_FREQ MHz, $AIR_SPEED bps"
 elif ask "write these settings into the module (stops whisplay-daemon for a few seconds, closing open apps)?"; then
@@ -223,6 +246,11 @@ elif ask "write these settings into the module (stops whisplay-daemon for a few 
   fi
 else
   [ "$CHECK_ONLY" = 1 ] && warn "not provisioned for $BAND, $WANT_FREQ MHz" || bad "the module is not provisioned"
+fi
+
+if [ "$CHECK_ONLY" = 0 ] && [ -f "$BOOT_UNIT_FILE" ] && [ "$FAILED" = 0 ]; then
+  sudo systemctl disable "$BOOT_UNIT" >/dev/null 2>&1
+  sudo rm -f "$BOOT_UNIT_FILE" && sudo systemctl daemon-reload && ok "removed $BOOT_UNIT (no longer needed)"
 fi
 
 # -------------------------------------------------------------- 7. services

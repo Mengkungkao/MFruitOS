@@ -60,11 +60,14 @@ class TaskRunner:
             result = fn()
         except Exception as exc:  # reported to the UI via on_error, never crashes the worker
             log.warning("Task %s failed: %s", name, exc, exc_info=log.isEnabledFor(logging.DEBUG))
+            # The lane is free before the callback runs, so it can start the next job.
+            self.active.pop(lane, None)
             if on_error is not None:
                 self._post(on_error, exc)
             else:
                 self._post(_log_unhandled, name, exc)
         else:
+            self.active.pop(lane, None)
             if on_done is not None:
                 self._post(on_done, result)
         finally:

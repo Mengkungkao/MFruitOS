@@ -82,6 +82,20 @@ MFruit OS then holds the backlight at 100% while it runs in the background.
 Still open: the hardware conflict itself (rewire M0/M1 to free GPIOs), and
 the lit screen while listening.
 
+### KI-12 Uninstall does not stop an app the launcher adopted after a restart
+
+Seen on the Pi Zero 2 W, 2026-10-05: RadioConnect was open, the launcher was
+restarted (`systemctl restart whisplay-os`), and the app kept running as an
+external session with no known pid (`mfruitctl status`: `"source":
+"external", "pid": null`). `mfruitctl uninstall radioconnect` then removed the
+code while the app kept running from the deleted directory; whisplay-daemon
+refused to unregister it ("radioconnect is running") and the Fruit Store showed
+it as broken. Stopping the process group and running Uninstall again cleaned
+up (data kept). Next: give the external session its process group (the
+daemon launched it under `mfruit-run <id>`) so `request_stop`/`force_stop`
+work, or refuse Uninstall while an app is running; regression test with an
+adopted session.
+
 ## Physical checks outstanding
 
 Button feel and gestures, physical USB/Bluetooth key routing and hotplug,

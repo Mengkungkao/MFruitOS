@@ -230,6 +230,7 @@ class Runtime(ScreenServices):
             self.toast("Settings had errors; defaults used", "error")
         self._check_system_update_state()
         self._maybe_autostart()
+        self.install_pending_apps()
         if self.settings.get("updater.auto_check") and self.updater.check_due():
             self.loop.call_later(20.0, lambda: self.check_updates(quiet=True))
         self._schedule_update_checks()
@@ -239,6 +240,8 @@ class Runtime(ScreenServices):
         def tick():
             if self.settings.get("updater.auto_check") and self.updater.check_due():
                 self.check_updates(quiet=True)
+            else:
+                self.install_pending_apps()
             self.loop.call_later(UPDATE_TICK_SEC, tick)
         self.loop.call_later(UPDATE_TICK_SEC, tick)
 

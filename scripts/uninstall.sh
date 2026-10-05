@@ -25,6 +25,12 @@ if systemctl list-unit-files "$SERVICE" >/dev/null 2>&1; then
 fi
 sudo rm -f /etc/sudoers.d/whisplay-os /usr/local/bin/mfruitctl \
   /etc/polkit-1/rules.d/49-mfruit-wifi.rules
+if [ -f /etc/systemd/system/mfruit-radio-setup.service ]; then
+  # Left by scripts/setup-radio.sh when the radio settings were never written.
+  sudo systemctl disable mfruit-radio-setup.service 2>/dev/null || true
+  sudo rm -f /etc/systemd/system/mfruit-radio-setup.service
+  sudo systemctl daemon-reload
+fi
 if [ -f /etc/systemd/system/whisplay-daemon.service.d/mfruit-os.conf ]; then
   say "Giving whisplay-daemon its own user interface back"
   sudo rm -f /etc/systemd/system/whisplay-daemon.service.d/mfruit-os.conf

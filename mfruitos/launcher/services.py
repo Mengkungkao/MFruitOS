@@ -234,6 +234,7 @@ class ScreenServices:
         def done(_):
             self.registry.set_latest_versions(self.updater.latest_map())
             self.request_render()
+            self.install_pending_apps()
             if quiet:
                 return
             if self.updater.online is False:
@@ -304,6 +305,47 @@ class ScreenServices:
         self.start_job("Install app", lambda progress: self.updater.install_catalog(app_id, progress),
                        lambda r: f"{r.name} installed",
                        on_success=lambda r: self._after_new_install(r.app_id, r.version))
+
+    def install_pending_apps(self) -> None:
+        """Install the next catalogue app queued by the device installer
+        (``install.sh --radio``; ``updater/autoinstall.py``), through the
+        same job as the Fruit Store's Install. Called after start-up, after
+        update checks and on the update timer; one app per call."""
+        from mfruitos.updater import autoinstall
+        from mfruitos.updater.github import OfflineError
+        home = self.paths.home
+        if not autoinstall.load(home) or self.tasks.busy("jobs"):
+            return
+        installed = {a.id for a in self.registry.all() if not a.broken}
+
+        def pick():
+            try:
+                self.updater.refresh_catalog()
+            except OfflineError as exc:
+                log.info("Queued apps wait for the network: %s", exc)
+                return None, []
+            except Exception as exc:  # any list problem: the last good list is used
+                log.info("Fruit Store list not refreshed: %s", exc)
+            return autoinstall.next_app(home, installed)
+
+        def start(result):
+            app_id, drop = result
+            for stale in drop:
+                autoinstall.remove(home, stale)
+            if app_id is None or self.tasks.busy("jobs"):
+                return
+            attempt = autoinstall.note_attempt(home, app_id)
+            log.info("Installing queued app %s (attempt %d of %d)", app_id, attempt,
+                     autoinstall.MAX_ATTEMPTS)
+
+            def installed_ok(result):
+                autoinstall.remove(home, result.app_id)
+                self._after_new_install(result.app_id, result.version)
+            self.start_job("Install app",
+                           lambda progress: self.updater.install_catalog(app_id, progress),
+                           lambda r: f"{r.name} installed", on_success=installed_ok)
+        self.run_task("pending-installs", pick, start,
+                      lambda exc: log.warning("Queued app check failed: %s", exc))
 
     def update_all(self) -> None:
         targets = [(a, self.updater.info(a.id)) for a in self.registry.apps()]

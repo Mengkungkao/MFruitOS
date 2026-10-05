@@ -55,6 +55,10 @@ lists each entry as `available`, `installed` or `broken` (with `source`:
 `mfruitctl catalog <id>` installs or repairs it (follow it with
 `mfruitctl jobs`).
 
+`scripts/install.sh --radio` queues the entries with `requires: ["radio"]`;
+the launcher installs them through the same job once the radio is ready
+([radio setup](../platform/INSTALLATION.md#radio-setup-lora-apps)).
+
 Entries with `requires: ["radio"]` (RadioConnect) show **Needs
 radio setup first** until the LoRa radio is set up
 ([radio setup](../platform/INSTALLATION.md#radio-setup-lora-apps)). An

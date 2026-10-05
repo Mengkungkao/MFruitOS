@@ -10,6 +10,7 @@ Name new records `YYYY-MM-DD-topic.md` and add them to the top of this list.
 
 | Date | Record | Scope |
 |---|---|---|
+| 2026-10-05 | [Radio auto-setup](2026-10-05-radio-autosetup.md) | Queued RadioConnect installed by the launcher on the Pi; next-boot radio service verified only with `systemd-analyze` |
 | 2026-10-05 | [Online Fruit Store list](2026-10-05-online-catalogue.md) | Store list downloaded from GitHub, bundled fallback; Pi Zero 2 W check with a simulated online-only entry |
 | 2026-10-04 | [Radio over the air](2026-10-04-radio-over-the-air.md) | Pi ↔ Orange Pi at 920 MHz: 100% delivery with the backlight at 100%, 0% when dimmed (radio M0 = backlight pin) |
 | 2026-10-03 | [Bundled Whisplay driver and offline installation](2026-10-03-bundled-whisplay-driver.md) | Whisplay driver in `drivers/whisplay`, offline packs; dev machine and Orange Pi (no privileged step run) |

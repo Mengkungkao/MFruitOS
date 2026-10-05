@@ -107,6 +107,7 @@ Physical device validation (level 5) is a recorded procedure, not a test file
 ├── inbox/                      local packages offered by Fruit Store → Local packages
 ├── logs/                       launcher.log, updater.log, launch-gate.log, <app>.log
 ├── state/  (0700)              launcher.lock, tickets/, runs/, launch-policy, control.sock,
+│                               pending-installs.json (apps queued by install.sh --radio),
 │                               keys.sock, boot and update markers
 └── system/
     ├── current -> versions/…   active MFruit OS version
