@@ -6,6 +6,13 @@ the OS version.
 
 ## Unreleased
 
+### Changed (2026-10-05, AI Chatbot 1.0.1)
+- **AI Chatbot 1.0.1 in the Fruit Store.** Installing it downloads only its
+  release archive from github.com/Mengkungkao/ai-chatbot: the font, the emoji
+  set and Node.js 20 are inside the package (nothing from PiSugar or
+  nodejs.org). A face emoji in a reply now shows the cat face. Devices with
+  1.0.0 are offered the update; the `.env` and chat data are kept.
+
 ### Added (2026-10-05, AI Chatbot)
 - **AI Chatbot is in the Fruit Store** (1.0.0, a release package built by the
   ai-chatbot repository). Fruit Store entries can list `system_packages`;
