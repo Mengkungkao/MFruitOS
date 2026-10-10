@@ -60,5 +60,10 @@
     "online_catalog": true,
     "require_checksum": false,
     "sources": []
+  },
+  "wifi_setup": {
+    "key": "",
+    "mode": "screen",
+    "name": ""
   }
 }

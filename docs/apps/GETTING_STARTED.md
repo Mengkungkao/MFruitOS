@@ -10,7 +10,7 @@ cp -r ~/MFruitOS/templates/whisplay-app-template ~/my-app
 cd ~/my-app
 ```
 
-The template is a complete MFruit app: SDK input and chrome, a counter that
+The template is a complete mFruit app: SDK input and chrome, a counter that
 persists in the data directory, lifecycle hooks, a smoke test and the app
 contract in `.claude/rules/mfruit-os-app.md`.
 

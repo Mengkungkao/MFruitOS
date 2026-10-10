@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run whisplay-daemon with its own user interface in the background.
 
-Installed by MFruit OS's install.sh as a systemd drop-in for
+Installed by mFruit OS's install.sh as a systemd drop-in for
 whisplay-daemon.service:
 
     python3 whisplay-daemon-mfruit.py --whisplay /usr/local/share/whisplay \\
@@ -9,17 +9,17 @@ whisplay-daemon.service:
 
 It starts the unmodified daemon from the Whisplay driver directory
 (/usr/local/share/whisplay, docs/WHISPLAY_DRIVER.md) and changes four
-behaviours *only while MFruit OS is running* (MFruit OS holds an flock on
+behaviours *only while mFruit OS is running* (mFruit OS holds an flock on
 ``--lock``; the check reads /proc/locks and never takes the lock itself):
 
 * the daemon does not draw its desktop or its "Opening app…" modal — the
-  screen keeps MFruit OS's last frame (its loading screen) until the app draws;
+  screen keeps mFruit OS's last frame (its loading screen) until the app draws;
 * the button and keyboard are ignored while no app owns the screen, so the
   daemon's desktop can no longer act as a second launcher;
-* when an app (or MFruit OS) gives up the screen, its final frame is drawn
+* when an app (or mFruit OS) gives up the screen, its final frame is drawn
   first, so what the user saw last stays up until the next owner draws.
 
-One hardware change applies always, MFruit OS running or not: after every
+One hardware change applies always, mFruit OS running or not: after every
 data transfer to the LCD the data/command line is parked low
 (``park_dc_low``). On a stacked SX126X LoRa HAT that line is the module's M1;
 upstream leaves it high, which parks the radio in configuration mode where it
@@ -27,7 +27,7 @@ neither sends nor hears. The display samples DC only while SPI clocks, so it
 cannot tell.
 
 Other hardware, app registration, focus, events and the daemon's own pages
-(WiFi, Bluetooth, Volume, Power) are untouched. When MFruit OS is not
+(WiFi, Bluetooth, Volume, Power) are untouched. When mFruit OS is not
 running — or the daemon code does not look as expected — the daemon behaves
 exactly as usual, so the device is never left without a user interface.
 """
@@ -45,10 +45,10 @@ CACHE_SEC = 0.3
 
 
 class MfruitProbe:
-    """Does MFruit OS own the user interface?
+    """Does mFruit OS own the user interface?
 
-    True while some process holds an flock on ``lock_path`` (MFruit OS running)
-    and MFruit OS has not handed the screen to the daemon's desktop on purpose
+    True while some process holds an flock on ``lock_path`` (mFruit OS running)
+    and mFruit OS has not handed the screen to the daemon's desktop on purpose
     (``launch-policy`` = ``open``, its "Daemon desktop" developer option).
     A bounded startup grace covers the first handoff and ends as soon as the
     launcher lock is observed, so an early launcher exit restores the desktop.
@@ -128,7 +128,7 @@ def apply(module, lock_path: str, log=print, startup_grace: float = 0) -> list[s
 
         def _on_button_pressed(self):
             if unowned(self):
-                return None  # MFruit OS is handing the screen over or taking it back
+                return None  # mFruit OS is handing the screen over or taking it back
             return original_pressed(self)
         cls._on_button_pressed = _on_button_pressed
         patched.append("_on_button_pressed")
@@ -205,9 +205,9 @@ def apply(module, lock_path: str, log=print, startup_grace: float = 0) -> list[s
                 return {"ok": True, "payload": {}}, False
 
         def app_key(self, request):
-            """A key for a foreground app that does not use MFruit OS's key hub.
+            """A key for a foreground app that does not use mFruit OS's key hub.
 
-            MFruit OS holds every keyboard, so such an app (for example the
+            mFruit OS holds every keyboard, so such an app (for example the
             Whisplay Jump and Flappy Bird examples, which read Space from
             /dev/input as their button) and the daemon's own Esc handling would
             receive nothing. Esc goes through the daemon's keyboard action
@@ -236,9 +236,9 @@ def apply(module, lock_path: str, log=print, startup_grace: float = 0) -> list[s
         def app_unregister(self, request):
             """Forget an app registration (whisplay-daemon has no command for it).
 
-            MFruit OS's uninstall uses this: the app leaves the daemon's list at
+            mFruit OS's uninstall uses this: the app leaves the daemon's list at
             once and its JSON file is removed by the daemon's own ``_save_app``.
-            Refused for MFruit OS itself, the daemon's built-in pages and an app
+            Refused for mFruit OS itself, the daemon's built-in pages and an app
             that is running, starting or on screen.
             """
             payload = request.get("payload") or {}
@@ -294,7 +294,7 @@ def park_dc_low(module) -> list[str]:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--whisplay", required=True, help="Whisplay driver directory (contains daemon/)")
-    parser.add_argument("--lock", required=True, help="MFruit OS launcher.lock")
+    parser.add_argument("--lock", required=True, help="mFruit OS launcher.lock")
     args, rest = parser.parse_known_args(argv)
     daemon_dir = os.path.join(os.path.abspath(args.whisplay), "daemon")
     sys.path.insert(0, daemon_dir)
@@ -310,7 +310,7 @@ def main(argv=None) -> int:
         return 0
     patched = apply(daemon, args.lock, startup_grace=30)
     patched += park_dc_low(sys.modules.get("whisplay"))
-    print(f"[mfruit] daemon user interface in the background while MFruit OS runs "
+    print(f"[mfruit] daemon user interface in the background while mFruit OS runs "
           f"(patched: {', '.join(patched)})", flush=True)
 
     # The same start-up as whisplay_daemon.py's own __main__ block.

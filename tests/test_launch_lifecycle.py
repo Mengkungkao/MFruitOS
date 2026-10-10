@@ -3,7 +3,7 @@
 The daemon runs from the bundled driver (drivers/whisplay, or WHISPLAY_SRC)
 with a simulated board; fake apps take the screen the
 way Whisplay clients do (subscribe, then acquire with retries) after a
-realistic start-up delay. MFruit OS runs in-process and is driven only by
+realistic start-up delay. mFruit OS runs in-process and is driven only by
 simulated physical button presses, exactly like on the device.
 
 Root causes covered (docs/platform/LIFECYCLE.md):
@@ -12,7 +12,7 @@ RC1  acting while the button was still held leaked the release to the next
      took it as "select", apps got a stray release)
 RC2  presses during an app's start-up reached the daemon's own desktop
 RC3  the daemon's single pending-launch slot
-RC4  no single-flight launch rule in MFruit OS
+RC4  no single-flight launch rule in mFruit OS
 """
 
 import contextlib
@@ -53,7 +53,7 @@ class RealDaemonLaunchTests(unittest.TestCase):
             self.daemon.add_app(app_id, priority, *flags)
         self.daemon.start(WHISPLAY_SRC)
         # As on a real device: the daemon's own desktop selection has been moved
-        # before (it is not on the MFruit OS entry).
+        # before (it is not on the mFruit OS entry).
         for _ in range(3):
             self.daemon.press()
             time.sleep(0.03)
@@ -67,7 +67,7 @@ class RealDaemonLaunchTests(unittest.TestCase):
         self.thread = threading.Thread(target=self.rt.run, daemon=True)
         self.thread.start()
         self.wait(lambda: self.rt.focus.has_focus and not self.rt._booting
-                  and self.rt.router.top is self.rt.home_screen, "MFruit OS home", 20)
+                  and self.rt.router.top is self.rt.home_screen, "mFruit OS home", 20)
         self.baseline = len(self.daemon.launched())
 
     def tearDown(self):
@@ -219,7 +219,7 @@ class RealDaemonLaunchTests(unittest.TestCase):
         self.assertEqual(self.daemon.state()["selected"], key)
         self.rt.loop.post(self.rt.lifecycle.set_gate, "gate")
         self.rt.loop.post(self.rt.focus.summon)
-        self.wait(lambda: self.rt.focus.has_focus, "MFruit OS back")
+        self.wait(lambda: self.rt.focus.has_focus, "mFruit OS back")
         self.baseline = len(self.daemon.launched())
 
     def select_on_daemon_desktop(self, key):
@@ -259,7 +259,7 @@ class RealDaemonLaunchTests(unittest.TestCase):
             self.assertIn("DENIED beta", fp.read())
 
     def wait_for_launch_window(self, app_id):
-        """Wait until the daemon desktop owns the button: MFruit OS has released
+        """Wait until the daemon desktop owns the button: mFruit OS has released
         the screen and ``app_id`` is the daemon's pending launch. Synchronize on
         this observed state, never on a fixed delay after the launching hold."""
         def window_open():
@@ -282,7 +282,7 @@ class RealDaemonLaunchTests(unittest.TestCase):
 
     def test_press_during_launch_window_page_is_closed(self):
         # RC2 for daemon pages: the daemon opens them without any launch command,
-        # so they cannot be gated; MFruit OS closes the intruder and the app wins.
+        # so they cannot be gated; mFruit OS closes the intruder and the app wins.
         # While a launch is pending, whisplay-daemon can turn a hold into a tap
         # (docs/platform/HOST_API.md, daemon fact 8): its monitor loop resets the
         # press start before the release callback runs, and the tap only moves the

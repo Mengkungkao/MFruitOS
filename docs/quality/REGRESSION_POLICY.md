@@ -31,7 +31,7 @@ Every confirmed bug fix gets a regression test when technically possible
 ## Example: launch-window page test (2026-10-02)
 
 The test failed in 25% of runs. A daemon trace showed the hold was recognized
-as a tap by whisplay-daemon (not an MFruit OS fault). The fix synchronized on
+as a tap by whisplay-daemon (not an mFruit OS fault). The fix synchronized on
 the observed launch window, retried while the desktop selection stays on a
 daemon page, and added a deterministic variant. Negative control: with
 intruder eviction patched out, both tests fail; with it, 20/20 iterations pass

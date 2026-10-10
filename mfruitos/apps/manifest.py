@@ -1,4 +1,4 @@
-"""Validation of MFruit OS app package manifests (``manifest.json``).
+"""Validation of mFruit OS app package manifests (``manifest.json``).
 
 A manifest is rejected — never partially trusted — if any required field is
 missing or unsafe. See docs/apps/MANIFEST.md for the specification.
@@ -164,7 +164,7 @@ def validate_manifest(data: object, package_dir: str | None = None,
             raise ManifestError(f"min_os_version '{min_os}' is not a semantic version")
         current = parse_version(os_version) if os_version else None
         if current is not None and required > current:
-            raise ManifestError(f"requires MFruit OS {min_os} or newer (running {os_version})")
+            raise ManifestError(f"requires mFruit OS {min_os} or newer (running {os_version})")
 
     repository = _optional_str(data, "repository", 300)
     if repository:

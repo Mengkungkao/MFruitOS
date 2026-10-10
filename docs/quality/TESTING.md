@@ -1,4 +1,4 @@
-# Testing MFruit OS
+# Testing mFruit OS
 
 How to test the platform. Testing an app is in [apps/TESTING.md](../apps/TESTING.md);
 physical validation and records are in [Validation](VALIDATION.md).
@@ -43,6 +43,25 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m mfruitos --preview /tmp/mfruit-preview # wr
 `--self-test` and `--preview` render offline; they are not an interactive
 headless launcher and not a physical test.
 
+### Power management without hardware
+
+The PiSugar drivers and the power service are tested against register-level
+fakes (`mfruitos/hosts/pisugar/fake.py`); nothing touches a real I2C bus. To
+try the service by hand on any Linux machine, run it against a simulated
+board in a scratch home (short path: Unix socket paths are limited to about
+107 bytes):
+
+```bash
+H=$(mktemp -d /tmp/mfp-XXXX)
+python3 -m mfruitos.power --home "$H" serve --fake pisugar3 &   # or pisugar2-2led, pisugar2-pro
+python3 -m mfruitos.power --home "$H" status --details
+printf 'get battery\n' | nc -U -q1 "$H/state/pisugar-server.sock"
+```
+
+With `--fake` nothing is powered off and the clock is not changed: commands
+are logged as "dry run". Physical checks are the
+[power checklist](VALIDATION.md#hardware-checklist--power-management).
+
 ### Real-daemon tests
 
 They run the daemon bundled in `drivers/whisplay`
@@ -59,7 +78,7 @@ builds ([Host API](../platform/HOST_API.md#whisplay-daemon-facts-the-design-depe
 
 ### Fresh-install rehearsal
 
-`bash tests/fresh_install/rehearse.sh <offline pack> [--suite]` installs MFruit
+`bash tests/fresh_install/rehearse.sh <offline pack> [--suite]` installs mFruit
 OS from scratch, offline, in a disposable container of the pack's OS image
 (run it on a Docker host of the pack's architecture, for example the board):
 stock image plus what the board image has (python3, sudo, kmod, systemd,

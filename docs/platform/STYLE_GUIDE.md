@@ -1,6 +1,6 @@
 # Style guide
 
-Launcher UI and code conventions for MFruit OS itself. Use the existing
+Launcher UI and code conventions for mFruit OS itself. Use the existing
 components before introducing a new pattern. Apps follow the
 [UI guidelines](../apps/UI_GUIDELINES.md), which use the SDK's own geometry;
 the four screen questions come from

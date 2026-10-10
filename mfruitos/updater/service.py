@@ -5,7 +5,7 @@ worker thread. Results are cached in ``cache/updates.json`` so the Updater
 screen and Home badges work offline and after a reboot.
 
 Update channels:
-  ``system``   MFruit OS itself (GitHub releases of ``system.repository``)
+  ``system``   mFruit OS itself (GitHub releases of ``system.repository``)
   ``release``  OS-managed apps (GitHub releases/tags, semantic versions)
   ``git``      existing apps installed as git checkouts (commit tracking)
   ``none``     apps the updater cannot manage
@@ -274,7 +274,7 @@ class UpdateService:
                                              os_version=self.os_version)
                 return release, manifest.id
             except NotFoundError:
-                last_error = "No manifest.json in the repository (not an MFruit OS app package)"
+                last_error = "No manifest.json in the repository (not an mFruit OS app package)"
             except (ValueError, ManifestError) as exc:
                 last_error = f"{release.tag}: {exc}"
         raise InstallError("check", last_error or "No compatible release found")
@@ -327,7 +327,7 @@ class UpdateService:
         releases = self.releases_for(repository)
         release = next((r for r in releases if r.version == version), None)
         if release is None:
-            raise InstallError("check", f"MFruit OS {version} is not available")
+            raise InstallError("check", f"mFruit OS {version} is not available")
         return self.installer.run(self.plan(repository, release, OS_APP_ID, "system"), progress)
 
     def sideload(self, path: str, progress=None) -> InstallResult:

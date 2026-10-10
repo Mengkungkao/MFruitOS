@@ -37,7 +37,7 @@ Add an optional manifest field naming the Settings page an app provides:
   most recently installed.
 - **Owner:** registry (lookup) and Settings screen (entry point);
   `ApplicationManager` is unchanged.
-- **Old MFruit OS versions:** ignore the unknown field; the bundled ConnectWifi
+- **Old mFruit OS versions:** ignore the unknown field; the bundled ConnectWifi
   keeps working there through today's special case.
 - **Migration:** ConnectWifi's bundled manifest gains the field. Installed
   copies without it are recognized through a single, documented compatibility
@@ -63,7 +63,7 @@ installed. One compatibility alias remains for one release.
 ## Compatibility
 
 No change for installed apps without the field. Apps declaring it require
-the MFruit OS version that introduces it (`min_os_version`).
+the mFruit OS version that introduces it (`min_os_version`).
 
 ## Validation
 

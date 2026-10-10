@@ -1,7 +1,7 @@
-# ADR 0008 — MFruit OS ships the Whisplay driver
+# ADR 0008 — mFruit OS ships the Whisplay driver
 
 Status: Accepted 2026-10-03 (owner's request: "replace the external Whisplay
-driver with an MFruit OS-owned Whisplay driver; keep everything else
+driver with an mFruit OS-owned Whisplay driver; keep everything else
 stable"). Canonical description: [Whisplay driver](../../WHISPLAY_DRIVER.md).
 
 ## Context
@@ -9,10 +9,10 @@ stable"). Canonical description: [Whisplay driver](../../WHISPLAY_DRIVER.md).
 Before this decision, a device needed two installations: PiSugar/Whisplay
 (`install_driver.sh` plus `daemon/install_whisplay_daemon_service.sh`, which
 needed a `git clone`, a prompt, a board-specific script and a reboot), then
-MFruit OS. MFruit OS depended on that checkout at run time:
+mFruit OS. mFruit OS depended on that checkout at run time:
 
 - `whisplay-daemon.service` ran `~/Whisplay/daemon/whisplay_daemon.py`;
-- MFruit OS's drop-in started the daemon wrapper with `--whisplay ~/Whisplay`;
+- mFruit OS's drop-in started the daemon wrapper with `--whisplay ~/Whisplay`;
 - the recovery display imported `~/Whisplay/runtime/whisplay.py`;
 - catalogue apps import `whisplay_client` from `~/Whisplay/runtime` or
   `/usr/local/share/whisplay/runtime`;
@@ -29,7 +29,7 @@ documentation, none of which is needed for the hardware to work.
    `upstream.sha256` records them and `scripts/check.sh` verifies them.
    Daemon behaviour changes stay in `scripts/whisplay-daemon-mfruit.py`
    (unchanged by this decision).
-2. MFruit OS's own `drivers/whisplay/install.sh` replaces Whisplay's seven
+2. mFruit OS's own `drivers/whisplay/install.sh` replaces Whisplay's seven
    install scripts. It performs the same steps, asks no questions, skips work
    that is already done, keeps the daemon's settings, and installs the runtime
    and daemon to `/usr/local/share/whisplay` through a staged copy, keeping
@@ -41,8 +41,8 @@ documentation, none of which is needed for the hardware to work.
 
 ## Alternatives
 
-- **Rewrite the driver and daemon as MFruit OS code.** Rejected for now. It
-  would change hardware timing and daemon semantics that MFruit OS and its
+- **Rewrite the driver and daemon as mFruit OS code.** Rejected for now. It
+  would change hardware timing and daemon semantics that mFruit OS and its
   apps rely on ([Host API](../HOST_API.md)), against the owner's instruction
   to keep behaviour unchanged. Extraction stays incremental
   ([ADR 0005](0005-incremental-host-boundary-extraction.md)).
@@ -60,7 +60,7 @@ documentation, none of which is needed for the hardware to work.
 
 - One installation command. A reboot is still needed the first time the
   buses or the sound card are enabled.
-- MFruit OS now carries about 620 KB of upstream files and must follow
+- mFruit OS now carries about 620 KB of upstream files and must follow
   upstream deliberately (`scripts/whisplay-driver-sync.sh`, then the full
   checks and a device validation).
 - The driver updates only with `scripts/install.sh`/`update.sh` (root). The

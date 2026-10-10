@@ -25,7 +25,8 @@ py39_syntax() {
   "$PYTHON" - <<'PY'
 import ast, pathlib, sys
 bad = 0
-for path in sorted(pathlib.Path(".").rglob("*.py")):
+# Python scripts without the .py suffix are listed explicitly.
+for path in sorted(pathlib.Path(".").rglob("*.py")) + [pathlib.Path("scripts/mfruit-power-off")]:
     if any(part in {".git", "__pycache__", ".venv", "node_modules"} for part in path.parts):
         continue
     try:

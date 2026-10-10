@@ -1,4 +1,4 @@
-"""Whisplay host: screen ownership between MFruit OS, apps and daemon pages.
+"""Whisplay host: screen ownership between mFruit OS, apps and daemon pages.
 
 This is the platform side of an application session (see
 ``mfruitos.core.application_manager``). It owns the whisplay-daemon focus of
@@ -6,7 +6,7 @@ the OS itself and carries out launches the ApplicationManager decided on.
 
 Screen modes
 ------------
-``HOME``     MFruit OS owns the screen (daemon foreground app ``mfruit-os``).
+``HOME``     mFruit OS owns the screen (daemon foreground app ``mfruit-os``).
 ``APP``      a session's app is starting (phase ``pending``) or on screen.
 ``SYSTEM``   a session's daemon page (WiFi, Volume, Power...) is on screen.
 ``DESKTOP``  the user chose the daemon's own desktop; stay out until summoned.
@@ -293,7 +293,7 @@ class ForegroundManager:
 
     # ---------------------------------------------------- desktop / summon
     def yield_to_desktop(self) -> None:
-        """Show whisplay-daemon's own desktop until the user summons MFruit OS."""
+        """Show whisplay-daemon's own desktop until the user summons mFruit OS."""
         self._prefer_desktop = True
         self.mode = DESKTOP
         self._release_own()

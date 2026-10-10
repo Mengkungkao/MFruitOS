@@ -1,6 +1,6 @@
 #!/bin/sh
 # Runs inside the new version's folder during install AND update, before the
-# version is activated. A non-zero exit aborts the install and MFruit OS
+# version is activated. A non-zero exit aborts the install and mFruit OS
 # restores the previous version. Runs as the normal user, without a terminal.
 #
 # Useful environment: WHISPLAY_APP_ID, WHISPLAY_OS_APP_DIR (this folder),

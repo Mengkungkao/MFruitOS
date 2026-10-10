@@ -2,7 +2,7 @@
 
 ## Context
 
-The Fruit Store listed only `config/catalog.json` from the installed MFruit OS
+The Fruit Store listed only `config/catalog.json` from the installed mFruit OS
 version. A new app (or a new pinned version of a listed one) reached a device
 only with an OS update; on 2026-10-05 a freshly installed OS could not offer an
 app that was being prepared for the Store.
@@ -44,7 +44,7 @@ and verified when committed.
 
 ## Compatibility
 
-Devices on MFruit OS 1.4.0 without this change keep their bundled list. The
+Devices on mFruit OS 1.4.0 without this change keep their bundled list. The
 file format is unchanged (a JSON list); `min_os_version` is a new optional
 entry field. Turning `updater.online_catalog` off removes the downloaded copy.
 

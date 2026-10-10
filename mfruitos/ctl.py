@@ -1,4 +1,4 @@
-"""``mfruitctl`` — control MFruit OS from a shell.
+"""``mfruitctl`` — control mFruit OS from a shell.
 
     mfruitctl status                  show launcher state
     mfruitctl apps                    list installed apps
@@ -21,8 +21,15 @@
                                       tab enter escape home space)
     mfruitctl screenshot <file.png>   save the current screen
     mfruitctl restart                 restart the launcher
-    mfruitctl summon                  bring MFruit OS to the front (daemon desktop entry)
+    mfruitctl summon                  bring mFruit OS to the front (daemon desktop entry)
     mfruitctl release                 hand the screen back to the daemon (systemd ExecStopPost)
+    mfruitctl wifi-setup [start|stop] Wi-Fi from a phone (PiSugar app over Bluetooth): run it
+                                      without the screen, or show its state and key
+    mfruitctl power                   battery state and power settings (mfruit-power.service)
+    mfruitctl power set KEY VALUE     change a power setting, e.g. safe_shutdown_level 10
+    mfruitctl power shutdown|reboot   power off or restart safely
+    mfruitctl power probe             look for the battery board again
+    mfruitctl power clock save|load   battery board clock <- system / system <- board
 """
 
 from __future__ import annotations
@@ -40,7 +47,7 @@ ACTION_ALIASES = {"next": "next", "prev": "previous", "previous": "previous", "s
 
 
 def _release() -> int:
-    """Used by systemd after the launcher stops: if MFruit OS still owns the
+    """Used by systemd after the launcher stops: if mFruit OS still owns the
     screen (crash), ask the daemon to reclaim it so the device never freezes."""
     from mfruitos.daemon.client import DaemonError, WhisplayDaemonClient
     from mfruitos.system.settings import Settings
@@ -65,6 +72,10 @@ def main(argv=None) -> int:
     command, rest = argv[0], argv[1:]
     if command == "release":
         return _release()
+    if command == "power":
+        # The power service is its own process with its own socket.
+        from mfruitos.power.__main__ import main as power_main
+        return power_main(rest or ["status"])
 
     from mfruitos.launcher.control import send
     if command in GESTURE_ALIASES:
@@ -85,6 +96,8 @@ def main(argv=None) -> int:
         cmd, args = "sideload", {"path": rest[0]}
     elif command in ("uninstall", "delete", "reset", "rollback") and rest:
         cmd, args = command, {"app_id": rest[0]}
+    elif command == "wifi-setup":
+        cmd, args = "wifi-setup", {"action": rest[0] if rest else "status"}
     elif command == "catalog":
         cmd, args = "catalog", {"app_id": rest[0] if rest else ""}
     elif command == "screenshot":
@@ -99,7 +112,7 @@ def main(argv=None) -> int:
     try:
         response = send(resolve_paths().control_socket, cmd, args)
     except OSError as exc:
-        print(f"MFruit OS is not running ({exc})", file=sys.stderr)
+        print(f"mFruit OS is not running ({exc})", file=sys.stderr)
         return 1
     print(json.dumps(response, indent=2))
     return 0 if response.get("ok") else 1

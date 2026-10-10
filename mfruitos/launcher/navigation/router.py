@@ -55,6 +55,18 @@ class Router:
         self._on_change()
         return True
 
+    def remove(self, screen) -> bool:
+        """Take ``screen`` out of the stack wherever it is (never the root)."""
+        if screen not in self._stack[1:]:
+            return False
+        was_top = screen is self.top
+        self._stack.remove(screen)
+        if was_top:
+            screen.on_hide()
+            self.top.on_show()
+        self._on_change()
+        return True
+
     def pop_to(self, screen_type) -> bool:
         """Pop until the top is an instance of ``screen_type``."""
         if not any(isinstance(s, screen_type) for s in self._stack):

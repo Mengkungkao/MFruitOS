@@ -1,4 +1,4 @@
-# MFruit OS — instructions for Claude
+# mFruit OS — instructions for Claude
 
 @AGENTS.md
 

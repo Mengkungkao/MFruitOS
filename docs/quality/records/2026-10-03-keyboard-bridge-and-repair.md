@@ -16,7 +16,7 @@
 
 1. The games (Whisplay `example/`) read Space from `/dev/input` as their button,
    and Esc-to-exit comes from whisplay-daemon's own keyboard reader. Since 1.4.0
-   MFruit OS holds every keyboard with `EVIOCGRAB` (RC6), so neither received
+   mFruit OS holds every keyboard with `EVIOCGRAB` (RC6), so neither received
    any key. Only SDK apps (key hub) and internal daemon pages had a path.
 2. `InstallAppScreen` marked a catalogue app *Installed* whenever its ID was
    registered, including registrations whose working directory is missing

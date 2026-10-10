@@ -1,7 +1,7 @@
 """The app: a menu, a Wi-Fi scan list, SSID and password entry from a USB
 or Bluetooth keyboard, and a switch for the BLE setup service.
 
-The MFruit controller handles both button gestures and keyboard input.
+The mFruit controller handles both button gestures and keyboard input.
 Typing needs a keyboard; without one, the BLE service is the way on.
 """
 
@@ -635,7 +635,7 @@ def main():
 
 
 def _led_preferences() -> tuple[bool, int]:
-    """Honor MFruit OS's existing Light switch and brightness setting."""
+    """Honor mFruit OS's existing Light switch and brightness setting."""
     home = (os.environ.get("MFRUIT_HOME") or os.environ.get("WHISPLAY_OS_HOME")
             or os.path.expanduser("~/.whisplay-os"))
     try:

@@ -100,7 +100,7 @@ class RuntimeEndToEndTests(TempHomeTestCase):
 
     def test_keyboard_navigation(self):
         self.assertTrue(self.daemon.apps["mfruit-os"]["disable_esc_exit_key"],
-                        "Esc must be MFruit OS's back key, not the daemon's close key")
+                        "Esc must be mFruit OS's back key, not the daemon's close key")
         start = self.rt.home_screen.selected
         self.key("down")
         self.wait(lambda: self.rt.home_screen.selected == start + 1, "next item")
@@ -132,14 +132,14 @@ class RuntimeEndToEndTests(TempHomeTestCase):
 
     def test_keys_that_went_down_elsewhere_do_nothing(self):
         self.rt.loop.post(self.rt.home_screen.focus_key, "os.settings")
-        # e.g. the Enter that opened an app, released after MFruit OS is back
+        # e.g. the Enter that opened an app, released after mFruit OS is back
         self.key("enter", REPEAT)
         self.key("enter", UP)
         time.sleep(0.3)
         self.assertEqual(self.status().get("screens"), ["HomeScreen"])
         self.assertTrue(send(self.paths.control_socket, "launch", {"app_id": "demo"})["ok"])
         self.wait(lambda: self.daemon.foreground == "demo", "demo foreground")
-        self.key("down")                 # typed into the app, not into MFruit OS
+        self.key("down")                 # typed into the app, not into mFruit OS
         self.key("enter")
         self.daemon.app_exits("demo")
         self.wait(lambda: self.daemon.foreground == "mfruit-os"
@@ -150,7 +150,7 @@ class RuntimeEndToEndTests(TempHomeTestCase):
         self.assertEqual(self.daemon.foreground, "mfruit-os")
 
     def hub_client(self, app_id):
-        """An app listening on MFruit OS's key hub, as the SDK connects."""
+        """An app listening on mFruit OS's key hub, as the SDK connects."""
         import socket as socket_module
         sock = socket_module.socket(socket_module.AF_UNIX, socket_module.SOCK_STREAM)
         sock.connect(self.paths.keys_socket)
@@ -179,20 +179,20 @@ class RuntimeEndToEndTests(TempHomeTestCase):
     def test_keys_go_to_whoever_owns_the_screen(self):
         app = self.hub_client("demo")
         start = self.rt.home_screen.selected
-        self.hardware_key("down")                     # Home: MFruit OS moves
+        self.hardware_key("down")                     # Home: mFruit OS moves
         self.hardware_key("down", UP)
         self.wait(lambda: self.rt.home_screen.selected == start + 1, "next item")
         self.assertEqual([m for m in self.received(app) if m["type"] == "key"], [])
         self.assertTrue(send(self.paths.control_socket, "launch", {"app_id": "demo"})["ok"])
         self.wait(lambda: self.daemon.foreground == "demo", "demo foreground")
-        self.hardware_key("space")                    # the app's, not MFruit OS's
+        self.hardware_key("space")                    # the app's, not mFruit OS's
         time.sleep(0.2)
         keys = [m for m in self.received(app) if m["type"] == "key"]
         self.assertEqual([(k["value"], k["action"]) for k in keys], [("space", 1)])
         self.daemon.app_exits("demo")
         self.wait(lambda: self.status()["focus"]["has_focus"], "back home")
         self.hardware_key("space", UP)                # its release follows its press
-        self.hardware_key("down")                     # a new press is MFruit OS's again
+        self.hardware_key("down")                     # a new press is mFruit OS's again
         self.wait(lambda: self.rt.home_screen.selected == start + 2, "next item")
         keys = [m for m in self.received(app) if m["type"] == "key"]
         self.assertEqual([(k["value"], k["action"]) for k in keys], [("space", 0)])

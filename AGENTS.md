@@ -1,6 +1,6 @@
 # Agent orientation
 
-You are working on **MFruit OS**, an application platform for small Linux
+You are working on **mFruit OS**, an application platform for small Linux
 devices (today: whisplay-daemon on a Whisplay HAT). Before changing anything:
 
 1. Read [docs/platform/DEVELOPMENT_RULES.md](docs/platform/DEVELOPMENT_RULES.md)

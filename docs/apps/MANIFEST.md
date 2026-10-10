@@ -35,17 +35,17 @@ nothing is installed. This document describes that validator.
 | `entrypoint` | yes | — | safe relative path (≤200, `A-Za-z0-9._/-`, no `..`, no leading `/` or `~`); must be a file inside the package | What `mfruit-run` executes |
 | `description` | no | `""` | ≤160 characters | Subtitle in the launcher |
 | `icon` | no | `""` | safe relative path to a PNG | Launcher icon; a missing file is dropped silently and initials are shown |
-| `min_os_version` | no | `""` | semantic version | Installation refused on an older MFruit OS. Apps using SDK 1.2.0 declare `1.4.0` or newer |
+| `min_os_version` | no | `""` | semantic version | Installation refused on an older mFruit OS. Apps using SDK 1.2.0 declare `1.4.0` or newer |
 | `repository` | no | `""` | `https://github.com/owner/repo` or `owner/repo`; `http://` refused; normalized | Must match the repository the package is downloaded from |
 | `branch` | no | `""` | ≤100 characters | Recorded in the install record; informational |
-| `exit_gesture` | no | `quad_click` | `quad_click`, `long_press`, `none` | Daemon exit gesture. MFruit apps use `none` because the SDK implements Back |
-| `disable_esc_exit_key` | no | false | boolean | Stops the daemon closing the app on Esc. MFruit apps set `true` (Esc is their Back) |
+| `exit_gesture` | no | `quad_click` | `quad_click`, `long_press`, `none` | Daemon exit gesture. mFruit apps use `none` because the SDK implements Back |
+| `disable_esc_exit_key` | no | false | boolean | Stops the daemon closing the app on Esc. mFruit apps set `true` (Esc is their Back) |
 | `priority` | no | 0 | integer −1000…999 | Ordering hint; the user's own order wins |
 | `env` | no | `{}` | keys `[A-Za-z_][A-Za-z0-9_]{0,63}`, string values ≤1024 | Extra environment variables at launch |
 | `test` | no | `""` | safe relative path; must be a file in the package | Smoke test run after installation, before activation; non-zero exit rolls back |
 | `persist` | no | `[]` | list of safe relative paths — **checked during installation only**: unsafe entries are skipped with a warning | Paths copied from the previous version into the new one on update (a venv, a user-edited config) |
 | `background` | no | false | boolean | Keep running after the user leaves (e.g. receives messages); users can override per app (*Keep running*) |
-| `type` | no | `app` | `app` or `system`; only `mfruit-os` may be `system` | Package type; `system` is MFruit OS itself |
+| `type` | no | `app` | `app` or `system`; only `mfruit-os` may be `system` | Package type; `system` is mFruit OS itself |
 
 Reserved IDs: `mfruit-os`, `whisplay-wifi`, `whisplay-bluetooth`,
 `whisplay-volume`, `whisplay-system`, `settings`, `updater`, `system`.
@@ -53,19 +53,19 @@ Reserved IDs: `mfruit-os`, `whisplay-wifi`, `whisplay-bluetooth`,
 Size limit: 64 KiB. The file must be UTF-8 JSON with an object at the top
 level.
 
-## Additional requirements for native MFruit apps
+## Additional requirements for native mFruit apps
 
 `scripts/check-app.py` enforces the [app contract](APP_CONTRACT.md) on top of
 the validator: `type` is `app`, `exit_gesture` is `none`,
 `disable_esc_exit_key` is `true`, a `test` hook is declared, a declared icon
 exists, hooks are executable with a shebang and LF endings, and the vendored
-SDK and contract copy match MFruit OS. The only documented exception is the
+SDK and contract copy match mFruit OS. The only documented exception is the
 existing AI chatbot's daemon `quad_click` exit (contract §1).
 
 ## Compatibility rules
 
 - **Unknown fields** are ignored by the validator (they stay available in the
-  raw manifest) and do not fail installation on older MFruit OS versions.
+  raw manifest) and do not fail installation on older mFruit OS versions.
   Do not rely on an unknown field having any effect.
 - **There is no manifest schema version.** Compatibility is expressed with
   `min_os_version`: a manifest that needs a newer OS behavior declares the
@@ -76,7 +76,7 @@ existing AI chatbot's daemon `quad_click` exit (contract §1).
 ## Adding or changing a field
 
 Follow [Part I §9](../platform/DEVELOPMENT_RULES.md#9-app-integration-contract):
-define the use case and owner, the validation, the behavior on older MFruit OS
+define the use case and owner, the validation, the behavior on older mFruit OS
 versions, add tests in `tests/test_manifest.py`, and update this document and
 the [app contract](APP_CONTRACT.md) if apps must act on it. A field that
 changes how the launcher treats an app needs an [ADR](../platform/ADR/README.md).

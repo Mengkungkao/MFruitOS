@@ -1,0 +1,198 @@
+#!/usr/bin/python3 -I
+"""mFruit OS: switch the PiSugar battery board off at the end of a power-off.
+
+Installed by scripts/install.sh as a root-owned copy in
+/usr/lib/systemd/system-shutdown/mfruit-power-off (never a link into a
+user-writable directory). systemd-shutdown runs it after every filesystem
+is unmounted or read-only, just before the kernel powers off, with
+"poweroff", "reboot", "halt" or "kexec" as the argument. Only "poweroff"
+switches the board's output off; without it the battery keeps the halted
+Pi powered until it is empty. Cutting power at this point cannot damage
+the SD card: nothing is mounted read-write any more.
+
+Self-contained on purpose (standard library only): /home may already be
+unmounted, so the installed mFruit OS code cannot be imported. The power
+settings are read when still reachable (model, I2C bus/address,
+power_off_at_shutdown); otherwise the board is detected on bus 1.
+"""
+
+import ctypes
+import fcntl
+import json
+import os
+import sys
+import time
+
+# Replaced by scripts/install.sh with the user's power settings file.
+CONFIG = "@POWER_CONFIG@"
+
+I2C_SLAVE = 0x0703
+I2C_SMBUS = 0x0720
+P3_ADDR, P2_ADDR, RTC_ADDR = 0x57, 0x75, 0x32
+
+
+class _Data(ctypes.Union):
+    _fields_ = [("byte", ctypes.c_uint8), ("word", ctypes.c_uint16),
+                ("block", ctypes.c_uint8 * 34)]
+
+
+class _Args(ctypes.Structure):
+    _fields_ = [("read_write", ctypes.c_uint8), ("command", ctypes.c_uint8),
+                ("size", ctypes.c_uint32), ("data", ctypes.POINTER(_Data))]
+
+
+class SMBus:
+    """Byte transfers only (the full driver is mfruitos/hosts/pisugar/i2c.py)."""
+
+    def __init__(self, bus):
+        self.fd = os.open("/dev/i2c-%d" % int(bus), os.O_RDWR)
+        self.addr = None
+
+    def _xfer(self, addr, read, register, value=0):
+        if self.addr != addr:
+            fcntl.ioctl(self.fd, I2C_SLAVE, addr)
+            self.addr = addr
+        data = _Data()
+        data.byte = value & 0xFF
+        fcntl.ioctl(self.fd, I2C_SMBUS, _Args(1 if read else 0, register, 2, ctypes.pointer(data)))
+        return data.byte
+
+    def read_byte_data(self, addr, register):
+        return self._xfer(addr, True, register)
+
+    def write_byte_data(self, addr, register, value):
+        self._xfer(addr, False, register, value)
+
+    def close(self):
+        os.close(self.fd)
+
+
+def settings(path):
+    result = {"model": "auto", "i2c_bus": 1, "i2c_address": None, "power_off_at_shutdown": True}
+    try:
+        with open(path, encoding="utf-8") as fp:
+            data = json.load(fp)
+        for key in result:
+            if key in data:
+                result[key] = data[key]
+    except (OSError, ValueError, TypeError):
+        pass
+    return result
+
+
+def update(bus, addr, register, clear=0, set_bits=0):
+    value = bus.read_byte_data(addr, register)
+    bus.write_byte_data(addr, register, (value & ~clear & 0xFF) | set_bits)
+
+
+def pisugar3_off(bus, addr):
+    """Output off (control 1 bit 5), inside the write protection. Repeated
+    until the board confirms or stops answering (power gone)."""
+    for _ in range(20):
+        try:
+            bus.write_byte_data(addr, 0x0B, 0x29)
+            control = bus.read_byte_data(addr, 0x02)
+            bus.write_byte_data(addr, 0x02, control & 0b1101_1111)
+            bus.write_byte_data(addr, 0x0B, 0x00)
+            if not bus.read_byte_data(addr, 0x02) & 0b0010_0000:
+                return True
+        except OSError:
+            return True
+        time.sleep(0.05)
+    return False
+
+
+def pisugar2_off(bus, ip5312):
+    """Stop the clock's 2 Hz wake-up, enable light-load shutdown, boost off."""
+    try:
+        bus.read_byte_data(RTC_ADDR, 0x0F)
+        update(bus, RTC_ADDR, 0x10, set_bits=0x80)
+        update(bus, RTC_ADDR, 0x0F, set_bits=0x84)
+        update(bus, RTC_ADDR, 0x10, clear=0b0010_0001, set_bits=0b0001_0000)
+        update(bus, RTC_ADDR, 0x0F, clear=0x84)
+        update(bus, RTC_ADDR, 0x10, clear=0x80)
+    except OSError:
+        pass
+    if ip5312:
+        update(bus, P2_ADDR, 0xC9, clear=0b0011_1111, set_bits=46)
+        update(bus, P2_ADDR, 0x06, clear=0b1100_0000)
+        update(bus, P2_ADDR, 0x03, set_bits=0b0010_0000)
+    else:
+        update(bus, P2_ADDR, 0x0C, clear=0b1111_1000, set_bits=9 << 3)
+        update(bus, P2_ADDR, 0x04, clear=0b1100_0000)
+        update(bus, P2_ADDR, 0x02, set_bits=0b0000_0011)
+    update(bus, P2_ADDR, 0x01, clear=0b0000_0100)
+    return True
+
+
+def _plausible(millivolts):
+    return 2800 <= millivolts <= 4600
+
+
+def ip5312_mv(bus):
+    low, high = bus.read_byte_data(P2_ADDR, 0xD0), bus.read_byte_data(P2_ADDR, 0xD1)
+    if low == 0 and high == 0:
+        return 0
+    return 2600 + (((high & 0x3F) << 8) | low) * 0.26855
+
+
+def ip5209_mv(bus):
+    low, high = bus.read_byte_data(P2_ADDR, 0xA2), bus.read_byte_data(P2_ADDR, 0xA3)
+    raw = ((high & 0x1F) << 8) | low
+    if high & 0x20:
+        raw = (((high | 0xC0) << 8) | low) - 0x10000
+        return 2600 - raw * 0.26855
+    return 2600 + raw * 0.26855
+
+
+def power_off(bus, model, p3_addr):
+    """Switch the board off; returns a description or "" when none was found."""
+    if model in ("auto", "pisugar3"):
+        try:
+            if model == "pisugar3" or (bus.read_byte_data(p3_addr, 0x00) == 3
+                                       and bus.read_byte_data(p3_addr, 0x01) == 0x0F):
+                return "PiSugar 3 output off" if pisugar3_off(bus, p3_addr) else ""
+        except OSError:
+            if model == "pisugar3":
+                return ""
+    if model == "pisugar2-pro":
+        return "PiSugar 2 Pro off" if pisugar2_off(bus, True) else ""
+    if model in ("pisugar2-4led", "pisugar2-2led"):
+        return "PiSugar 2 off" if pisugar2_off(bus, False) else ""
+    if model == "auto":
+        try:
+            if _plausible(ip5312_mv(bus)):
+                return "PiSugar 2 Pro off" if pisugar2_off(bus, True) else ""
+            if _plausible(ip5209_mv(bus)):
+                return "PiSugar 2 off" if pisugar2_off(bus, False) else ""
+        except OSError:
+            pass
+    return ""
+
+
+def main(argv, opener=SMBus, config=None):
+    if len(argv) < 2 or argv[1] != "poweroff":
+        return 0
+    cfg = settings(config or CONFIG)
+    if not cfg.get("power_off_at_shutdown", True) or cfg.get("model") == "none":
+        return 0
+    try:
+        bus = opener(int(cfg.get("i2c_bus") or 1))
+    except (OSError, ValueError):
+        return 0
+    try:
+        done = power_off(bus, cfg.get("model") or "auto", int(cfg.get("i2c_address") or P3_ADDR))
+        if done:
+            sys.stderr.write("mfruit-power-off: %s\n" % done)
+    except (OSError, ValueError):
+        pass
+    finally:
+        try:
+            bus.close()
+        except OSError:
+            pass
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

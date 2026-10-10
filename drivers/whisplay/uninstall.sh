@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Remove the MFruit OS Whisplay driver.
+# Remove the mFruit OS Whisplay driver.
 #
 #   sudo bash drivers/whisplay/uninstall.sh           stop and remove whisplay-daemon
 #                                                     and the driver files
@@ -18,13 +18,13 @@ AUDIO=0
 [ "${1:-}" = "--audio" ] && AUDIO=1
 [ "${EUID:-$(id -u)}" -eq 0 ] || { echo "Run as root: sudo bash $0" >&2; exit 1; }
 
-if grep -qsF "# Installed by MFruit OS (drivers/whisplay/install.sh)." "$UNIT_PATH"; then
+if grep -qsF "# Installed by mFruit OS (drivers/whisplay/install.sh)." "$UNIT_PATH"; then
   systemctl disable --now "$SERVICE" >/dev/null 2>&1 || true
   rm -f "$UNIT_PATH" "/etc/systemd/system/$SERVICE.d/20-cubie-a7z-audio.conf"
   systemctl daemon-reload
   echo "[+] $SERVICE removed"
 else
-  echo "[!] $SERVICE was not installed by MFruit OS; left alone" >&2
+  echo "[!] $SERVICE was not installed by mFruit OS; left alone" >&2
 fi
 if [ -f "$DRIVER_DIR/MFRUIT_DRIVER" ]; then
   rm -rf -- "$DRIVER_DIR" "$DRIVER_DIR.previous"

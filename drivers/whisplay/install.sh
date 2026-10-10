@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# MFruit OS Whisplay driver installer. scripts/install.sh runs it; it can also
+# mFruit OS Whisplay driver installer. scripts/install.sh runs it; it can also
 # be run on its own to repair or check the driver.
 #
 #   sudo bash drivers/whisplay/install.sh --user USER   install or update the driver
@@ -27,7 +27,7 @@ DRIVER_DIR="${MFRUIT_WHISPLAY_DIR:-/usr/local/share/whisplay}"
 SOUNDCARD_DIR="$HERE/audio/whisplay-soundcard"
 SERVICE=whisplay-daemon.service
 UNIT_PATH="/etc/systemd/system/$SERVICE"
-UNIT_MARK="# Installed by MFruit OS (drivers/whisplay/install.sh)."
+UNIT_MARK="# Installed by mFruit OS (drivers/whisplay/install.sh)."
 BACKUP_DIR=/var/backups/mfruitos
 STATUS_FILE=/run/mfruitos/whisplay-driver.status
 SYSROOT="${SYSROOT:-}"   # tests point the board detection at a fake tree
@@ -200,14 +200,14 @@ check() {
     if [ "$(installed_value manifest_sha256)" = "$(bundle_digest)" ]; then
       echo "OK: driver files at $DRIVER_DIR (upstream $(installed_value upstream))"
     else
-      echo "FAIL: driver files at $DRIVER_DIR differ from this MFruit OS (installed upstream $(installed_value upstream), bundled $(upstream_commit))"; bad=1
+      echo "FAIL: driver files at $DRIVER_DIR differ from this mFruit OS (installed upstream $(installed_value upstream), bundled $(upstream_commit))"; bad=1
     fi
   else
     echo "FAIL: driver files not installed at $DRIVER_DIR"; bad=1
   fi
-  if grep -qsF "$UNIT_MARK" "$UNIT_PATH"; then echo "OK: $SERVICE uses the MFruit OS driver"
+  if grep -qsF "$UNIT_MARK" "$UNIT_PATH"; then echo "OK: $SERVICE uses the mFruit OS driver"
   elif [ -f "$UNIT_PATH" ]; then
-    echo "FAIL: $SERVICE runs $(systemctl show -p WorkingDirectory --value "$SERVICE" 2>/dev/null) (not the MFruit OS driver)"; bad=1
+    echo "FAIL: $SERVICE runs $(systemctl show -p WorkingDirectory --value "$SERVICE" 2>/dev/null) (not the mFruit OS driver)"; bad=1
   else echo "FAIL: $SERVICE not installed"; bad=1; fi
   state="$(systemctl is-active "$SERVICE" 2>/dev/null || true)"
   if [ "$state" = active ]; then echo "OK: $SERVICE active"; else echo "FAIL: $SERVICE ${state:-unknown}"; bad=1; fi
@@ -356,7 +356,7 @@ install_driver_files() {
   find "$stage" -name '__pycache__' -prune -exec rm -rf {} +
   python3 -m compileall -q "$stage/runtime" "$stage/daemon" >/dev/null || { rm -rf "$stage"; die "driver files failed to compile"; }
   cat >"$stage/MFRUIT_DRIVER" <<EOF
-name=MFruit OS Whisplay driver
+name=mFruit OS Whisplay driver
 upstream=$(upstream_commit)
 manifest_sha256=$(bundle_digest)
 installed=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -367,7 +367,7 @@ EOF
     if [ ! -f "$DRIVER_DIR/MFRUIT_DRIVER" ]; then
       # Not ours: keep it aside instead of deleting it.
       previous="$DRIVER_DIR.preexisting-$(date +%Y%m%d%H%M%S)"
-      warn "$DRIVER_DIR was not installed by MFruit OS; moved to $previous"
+      warn "$DRIVER_DIR was not installed by mFruit OS; moved to $previous"
     else
       rm -rf "$DRIVER_DIR.previous"
     fi
@@ -447,7 +447,7 @@ EOF
   fi
   systemctl daemon-reload
   systemctl enable "$SERVICE" >/dev/null 2>&1
-  ok "$SERVICE runs the MFruit OS driver ($DRIVER_DIR)"
+  ok "$SERVICE runs the mFruit OS driver ($DRIVER_DIR)"
 }
 
 write_status() {
@@ -513,7 +513,7 @@ main() {
   fi
   (cd "$HERE" && sha256sum --quiet -c upstream.sha256) || die "bundled driver files do not match upstream.sha256"
 
-  echo "MFruit OS Whisplay driver (upstream $(upstream_commit)) on $PLATFORM for $user"
+  echo "mFruit OS Whisplay driver (upstream $(upstream_commit)) on $PLATFORM for $user"
   PACK="$(offline_find "$PLATFORM" || true)"
   [ -z "$PACK" ] || ok "offline pack: $PACK (made $(pack_value "$PACK" CREATED) on kernel $(pack_value "$PACK" KERNEL))"
   case "$PLATFORM" in

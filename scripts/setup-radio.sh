@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup-radio.sh -- one-time LoRa radio setup for MFruit OS radio apps
+# setup-radio.sh -- one-time LoRa radio setup for mFruit OS radio apps
 # (WalkieTalkie, Messenger, ...) on a Waveshare SX126X HAT.
 #
 #   bash setup-radio.sh                 check, then fix what is missing (asks first)
@@ -75,8 +75,8 @@ case "$BOARD" in
   raspberrypi|orangepi) ok "board: $BOARD" ;;
   *) echo "Cannot tell which board this is; pass --board raspberrypi or --board orangepi." >&2; exit 2 ;;
 esac
-[ -f "$ROOT/mfruitos/hosts/lora/__main__.py" ] || { echo "MFruit OS code not found under $ROOT" >&2; exit 2; }
-ok "MFruit OS code: $ROOT; data: $OS_HOME"
+[ -f "$ROOT/mfruitos/hosts/lora/__main__.py" ] || { echo "mFruit OS code not found under $ROOT" >&2; exit 2; }
+ok "mFruit OS code: $ROOT; data: $OS_HOME"
 
 # -------------------------------------------------------------- 2. packages
 say "System packages"
@@ -200,7 +200,7 @@ WANT_FREQ="$FREQUENCY"
 # The radio settings written once at the next boot (mfruitos.hosts.lora boot-unit).
 BOOT_UNIT=mfruit-radio-setup.service
 BOOT_UNIT_FILE="/etc/systemd/system/$BOOT_UNIT"
-# Code path for the unit: the stable "current" link survives MFruit OS updates.
+# Code path for the unit: the stable "current" link survives mFruit OS updates.
 UNIT_CODE="$OS_HOME/system/current"
 [ -f "$UNIT_CODE/mfruitos/hosts/lora/__main__.py" ] || UNIT_CODE="$ROOT"
 
@@ -233,7 +233,7 @@ fi
 say "Radio module ($BAND${FREQUENCY:+, $FREQUENCY MHz}, $AIR_SPEED bps)"
 CURRENT=$(PY -c "from mfruitos.sdk.radio.settings import load_radio, radio_dir
 s = load_radio(radio_dir('$OS_HOME')); print(f'{s.band} {s.frequency_mhz} {s.air_speed}' if s else '')" 2>/dev/null)
-info "recorded now: ${CURRENT:-nothing (never provisioned by MFruit OS)}"
+info "recorded now: ${CURRENT:-nothing (never provisioned by mFruit OS)}"
 if [ "$CURRENT" = "$BAND $WANT_FREQ $AIR_SPEED" ]; then
   ok "already provisioned for $BAND, $WANT_FREQ MHz, $AIR_SPEED bps"
 elif ask "write these settings into the module (stops whisplay-daemon for a few seconds, closing open apps)?"; then

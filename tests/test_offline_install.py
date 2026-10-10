@@ -232,7 +232,7 @@ class PackContentsFollowWhisplay(unittest.TestCase):
         self.assertIn("raspberrypi-kernel-headers", self.installer)
         for name in ("wget", "xz-utils", "make", "gcc", "kmod"):
             self.assertIn(name, bash(MAKE_PACK, "pack_packages orangepi_zero2w 6.1").stdout.split())
-        # MFruit OS's own packages and the driver's are in every pack.
+        # mFruit OS's own packages and the driver's are in every pack.
         packages = bash(MAKE_PACK, "pack_packages raspberry_pi 6.1").stdout.split()
         for name in ("python3-pil", "python3-venv", "network-manager", "python3-spidev", "python3-libgpiod"):
             self.assertIn(name, packages)

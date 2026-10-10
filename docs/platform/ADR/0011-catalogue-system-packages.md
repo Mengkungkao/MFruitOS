@@ -11,7 +11,7 @@ not a device capability.
 ## Decision
 
 - A catalogue entry may list `system_packages`: Debian package names
-  (validated, at most 40). MFruit OS treats missing ones as an unmet
+  (validated, at most 40). mFruit OS treats missing ones as an unmet
   requirement (`dpkg-query`): the Store shows *Needs setup first* and the
   command, and queued installs wait.
 - `scripts/setup-app.sh <id>…`, run by the user over SSH, installs only the
@@ -38,7 +38,7 @@ package differently fails at setup with apt's message.
 
 ## Compatibility
 
-Older MFruit OS versions ignore the field: they list the entry and its own
+Older mFruit OS versions ignore the field: they list the entry and its own
 `install.sh` stops with the instruction (whose script they lack). Entries
 without the field are unchanged.
 

@@ -1,7 +1,7 @@
 #!/bin/sh
 # boot-guard.sh — runs before every launcher start (systemd ExecStartPre).
 #
-# After a system update is activated, MFruit OS writes
+# After a system update is activated, mFruit OS writes
 # state/pending_system_update.env. The launcher deletes it once the new
 # version has run healthily for 15 s. If instead the service keeps failing,
 # this guard switches ~/.whisplay-os/system/current back to the previous

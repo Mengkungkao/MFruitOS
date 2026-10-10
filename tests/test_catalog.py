@@ -355,7 +355,7 @@ class OnlineCatalogTests(TempHomeTestCase):
         self.assertEqual(self.ids(), ['adopted', 'weather'])
         self.assertEqual(catalog.get('weather', self.paths.home)['name'], 'Weather')
         self.assertEqual(len(logs.output), 5)
-        self.assertIn('needs MFruit OS 99.0.0', '\n'.join(logs.output))
+        self.assertIn('needs mFruit OS 99.0.0', '\n'.join(logs.output))
 
     def test_a_failed_download_keeps_the_previous_list(self):
         self.refresh([online_item()])

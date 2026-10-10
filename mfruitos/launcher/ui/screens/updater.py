@@ -515,7 +515,7 @@ class SystemUpdateScreen(ListScreen):
         if info and info.update_available:
             rows.append(Item("Update now", lambda: os.push(confirm(
                 os, f"Update to {info.latest}?",
-                "MFruit OS restarts after the update. If the new version fails to start it is "
+                "mFruit OS restarts after the update. If the new version fails to start it is "
                 "rolled back automatically.", "Update", lambda: os.update_system(info.latest),
                 danger=False)), icon="download", tone="accent"))
         if os.settings.get("system.repository"):
@@ -525,7 +525,7 @@ class SystemUpdateScreen(ListScreen):
         if record.get("previous_dir"):
             version = record.get("previous_version") or "previous build"
             rows.append(Item(f"Roll back to {version}", lambda: os.push(confirm(
-                os, "Roll back system?", "Restore the saved build and restart MFruit OS.",
+                os, "Roll back system?", "Restore the saved build and restart mFruit OS.",
                 "Roll back", os.rollback_system, danger=False)), icon="rollback"))
         rows += [Item("Check now", lambda: os.check_updates(), icon="refresh"), back_item()]
         return rows

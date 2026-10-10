@@ -1,6 +1,6 @@
 """Removing an app from the REAL whisplay-daemon (Fruit Store uninstall).
 
-whisplay-daemon has no unregister command. With MFruit OS's daemon wrapper,
+whisplay-daemon has no unregister command. With mFruit OS's daemon wrapper,
 ``mfruit.app.unregister`` removes the app from the daemon's list and its JSON
 file at once. Without the wrapper the daemon answers "unknown command" and the
 launcher falls back to the old trick (an empty, non-persistent "(removed)"

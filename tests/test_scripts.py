@@ -164,7 +164,7 @@ class LaunchGateTests(TempHomeTestCase):
         self.assertIn("expired", self.gate_log())
 
     def test_open_policy_and_no_launcher_allow(self):
-        self.run_gate()                            # no MFruit OS running: legacy behaviour
+        self.run_gate()                            # no mFruit OS running: legacy behaviour
         self.hold_launcher_lock()
         with open(os.path.join(self.paths.state_dir, "launch-policy"), "w") as fp:
             fp.write("open\n")                     # daemon-desktop mode

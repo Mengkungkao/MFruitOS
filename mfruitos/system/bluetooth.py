@@ -171,6 +171,25 @@ class Bluetooth:
             return bool(self._adapter_props().get("Powered", False))
         return "Powered: yes" in self._ctl("show")
 
+    def adapter_settings(self) -> dict:
+        """Powered, Pairable and Alias of the controller, to put them back later."""
+        if self._dbus is not None:
+            props = self._adapter_props()
+            return {"powered": bool(props.get("Powered", False)),
+                    "pairable": bool(props.get("Pairable", False)),
+                    "alias": str(props.get("Alias") or props.get("Name") or "")}
+        output = self._ctl("show")
+        alias = next((line.split(":", 1)[1].strip() for line in output.splitlines()
+                      if line.strip().startswith("Alias:")), "")
+        return {"powered": "Powered: yes" in output, "pairable": "Pairable: yes" in output,
+                "alias": alias}
+
+    def set_pairable(self, on: bool) -> None:
+        if self._dbus is not None:
+            self._set_adapter("Pairable", self._dbus.Boolean(on))
+        else:
+            self._ctl("pairable", "on" if on else "off")
+
     def devices(self) -> list[BtDevice]:
         """Every device BlueZ knows: paired ones, and those heard while searching."""
         if self._dbus is not None:

@@ -1,4 +1,4 @@
-"""MFruit OS runtime: wires the daemon, UI, input, timers and services together.
+"""mFruit OS runtime: wires the daemon, UI, input, timers and services together.
 
 Threads: the event loop (UI thread) owns all state. The daemon event stream,
 task workers and control socket only ever ``post`` work to it.
@@ -8,15 +8,16 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 import time
 
-from mfruitos import OS_APP_ID, __version__
+from mfruitos import OS_APP_ID, __version__, power
 from mfruitos.apps.manifest import Manifest
 from mfruitos.apps.registry import AppEntry, AppRegistry
 from mfruitos.core.application_manager import FAILED, HEADLESS, ApplicationManager
 from mfruitos.daemon.client import DaemonError, WhisplayDaemonClient
 from mfruitos.daemon.events import EventStream
-from mfruitos.launcher import sdnotify
+from mfruitos.system import sdnotify
 from mfruitos.launcher.app_manager.lifecycle import AppLifecycle
 from mfruitos.launcher.control import ControlServer
 from mfruitos.launcher.direct import DirectDisplay, daemon_unit_state, find_whisplay_root, SAFE_STATES
@@ -25,9 +26,10 @@ from mfruitos.launcher.keyhub import KeyHub
 from mfruitos.launcher.loop import EventLoop
 from mfruitos.launcher.navigation.gestures import GestureRecognizer
 from mfruitos.launcher.navigation.router import Router
+from mfruitos.launcher.power_link import PowerLink
 from mfruitos.launcher.services import ScreenServices
 from mfruitos.launcher.tasks import TaskRunner
-from mfruitos.launcher.ui.components import StatusInfo, draw_status_bar, draw_toast
+from mfruitos.launcher.ui.components import Item, StatusInfo, draw_status_bar, draw_toast
 from mfruitos.launcher.ui.fonts import Fonts
 from mfruitos.launcher.ui.painter import Painter
 from mfruitos.launcher.ui.rgb565 import to_rgb565
@@ -42,7 +44,7 @@ from mfruitos.sdk.keys import DOWN as KEY_DOWN
 from mfruitos.sdk.keys import REPEAT as KEY_REPEAT
 from mfruitos.sdk.keys import UP as KEY_UP
 from mfruitos.sdk.keys import KeyEvent, KeyReader
-from mfruitos.system import hardware, system_info
+from mfruitos.system import hardware, system_info, wifi_setup
 from mfruitos.system.bluetooth import Bluetooth
 from mfruitos.system.settings import GESTURE_KEYS, Settings
 from mfruitos.updater.github import GitHubClient
@@ -61,7 +63,7 @@ FALLBACK_POLL_SEC = 5.0
 AUTOSTART_DELAY_SEC = 1.0
 UPDATE_TICK_SEC = 600
 SCRIPTS = ("mfruit-run", "mfruitctl", "boot-guard.sh", "whisplay-daemon-mfruit.py")
-# Keyboard keys -> launcher actions, the same map every MFruit app uses
+# Keyboard keys -> launcher actions, the same map every mFruit app uses
 # (mfruitos/sdk/input.py).
 KEY_ACTIONS = {"down": "next", "right": "next", "tab": "next", "up": "previous",
                "left": "previous", "enter": "select", "escape": "back", "home": "home"}
@@ -96,6 +98,14 @@ class Runtime(ScreenServices):
         self.led = hardware.LedController(self.client, self.settings)
         self.tasks = TaskRunner(self.loop.post)
         self.bluetooth = Bluetooth()
+        # Battery state and safe shutdown come from mfruit-power.service.
+        self.power = PowerLink(power.api_socket(paths), self.loop.post)
+        self.power.listener = self._on_power_event
+        self._low_battery_screen = None
+        # Wi-Fi from a phone: PiSugar's sugar-wifi-conf, started and stopped here.
+        self.wifi_setup = wifi_setup.WifiSetupService(paths, self.settings, self.loop.post,
+                                                      self.loop.call_later, _LaneBluetooth(self))
+        self.wifi_setup.on_change = self._on_wifi_setup_change
         self.router = Router(on_change=self._on_route_change)
         self.hold_armed = False
         self.gestures = GestureRecognizer(self._on_gesture, self.loop.call_later,
@@ -103,8 +113,8 @@ class Runtime(ScreenServices):
         self._configure_gestures()
         # USB / Bluetooth keyboards, held exclusively (EVIOCGRAB): no key
         # reaches the Linux console -- whose auto-login shell ran whatever
-        # was typed for MFruit OS -- or any other reader. Each key goes to
-        # whoever owns the screen: MFruit OS, or the foreground app through
+        # was typed for mFruit OS -- or any other reader. Each key goes to
+        # whoever owns the screen: mFruit OS, or the foreground app through
         # the key hub (launcher/keyhub.py).
         self.keyhub = KeyHub(paths.keys_socket)
         # ``input_dir`` replaces /dev/input and /sys/class/input (tests pass an
@@ -144,11 +154,11 @@ class Runtime(ScreenServices):
 
     # =============================================================== startup
     def start(self) -> None:
-        log.info("MFruit OS %s starting (package %s)", __version__, self.package_dir)
+        log.info("mFruit OS %s starting (package %s)", __version__, self.package_dir)
         set_debug(self.settings.get("developer.debug_logging"))
         self.install_bin_scripts()
         if not self.lifecycle.acquire_instance_lock():
-            raise SystemExit("another MFruit OS instance is already running")
+            raise SystemExit("another mFruit OS instance is already running")
         # Launch gate: only tickets written by this process may start apps.
         self.lifecycle.revoke_all_tickets()
         self.lifecycle.set_gate("gate")
@@ -160,11 +170,13 @@ class Runtime(ScreenServices):
         self.tasks.start()
         self.control.start()
         self.stream.start()
+        self.power.start()
         try:
             self.keyhub.start()
         except OSError as exc:
             log.error("Key hub unavailable, apps will not get keyboard keys: %s", exc)
         self.keyboard.start()
+        self._apply_wifi_setup_mode()
         self._refresh_status()
         self._fallback_timer = self.loop.call_later(FALLBACK_AFTER_SEC, self._check_fallback)
         sdnotify.notify("READY=1")
@@ -250,7 +262,7 @@ class Runtime(ScreenServices):
         rollback_note = os.path.join(state, "system_rollback.env")
         if os.path.exists(rollback_note):
             self.push(MessageScreen(self, "Update rolled back",
-                                    "The new MFruit OS version failed to start, so the previous "
+                                    "The new mFruit OS version failed to start, so the previous "
                                     "version was restored automatically.", tone="warning",
                                     icon="warning"))
             _remove(rollback_note)
@@ -455,7 +467,7 @@ class Runtime(ScreenServices):
     def _on_hardware_key(self, event: KeyEvent) -> None:
         """Every keyboard key comes here first (the keyboards are held
         exclusively). A key goes to whoever owned the screen when it went
-        down -- MFruit OS or the foreground app -- and so do its repeats and
+        down -- mFruit OS or the foreground app -- and so do its repeats and
         its release, even if the screen has changed hands in between."""
         if event.action == KEY_DOWN:
             owner = self._key_route()
@@ -482,10 +494,10 @@ class Runtime(ScreenServices):
         """A key for a foreground app that is not listening on the key hub.
 
         Such apps follow the Whisplay keyboard convention instead: Space is
-        their button and the daemon closes them on Esc. MFruit OS holds the
+        their button and the daemon closes them on Esc. mFruit OS holds the
         keyboards, so it forwards those two keys through the daemon wrapper
         (``mfruit.app.key``). Space is not forwarded to apps that claim Esc
-        (MFruit SDK apps): they take keys from the hub once connected.
+        (mFruit SDK apps): they take keys from the hub once connected.
         """
         if event.kind != "key" or event.action == KEY_REPEAT or event.value not in ("escape", "space"):
             return
@@ -514,7 +526,7 @@ class Runtime(ScreenServices):
     def _on_key(self, event: KeyEvent) -> None:
         """A keyboard key: Up/Down/Tab move, Enter opens, Esc goes back.
 
-        Only keys that went down while MFruit OS owned the screen count: the
+        Only keys that went down while mFruit OS owned the screen count: the
         key-up of the Esc that closed an app, or the auto-repeat of the Enter
         that opened one, must not act here (the keyboard is shared).
         """
@@ -576,6 +588,7 @@ class Runtime(ScreenServices):
     # ============================================================== rendering
     def _on_route_change(self) -> None:
         self._arm_idle_timers()
+        self._wifi_setup_routes()
         self.request_render()
 
     def request_render(self) -> None:
@@ -639,12 +652,17 @@ class Runtime(ScreenServices):
         if getattr(self, "_status_timer", None) is not None:
             self._status_timer.cancel()
         self._status_timer = self.loop.call_later(STATUS_REFRESH_SEC, self._refresh_status)
+        if self.settings.get("wifi_setup.mode") == "offline":
+            self._apply_wifi_setup_mode(offline=not system_info.has_default_route())
         if self._output() is None or self.backlight.state == "off":
             return  # nobody is looking; skip the reads
         wifi = system_info.wifi_level()
         if wifi is not None and wifi > 0 and not system_info.has_default_route():
             wifi = 0
-        battery, charging = hardware.read_battery()
+        # The power service's live state; without it, PiSugar's own server
+        # (a device installed with --no-power) is read as before.
+        link = self.power.battery()
+        battery, charging = link if link is not None else hardware.read_battery()
         changed = (wifi, battery, charging) != (self.status.wifi_level, self.status.battery,
                                                 self.status.charging)
         self.status.wifi_level, self.status.battery, self.status.charging = wifi, battery, charging
@@ -711,6 +729,8 @@ class Runtime(ScreenServices):
             self._arm_idle_timers()
         elif key.startswith("applications.") or key.startswith("apps."):
             self.registry.refresh(self._daemon_apps)
+        elif key == "wifi_setup.mode":
+            self._apply_wifi_setup_mode(offline=not system_info.has_default_route())
         self.request_render()
 
     # ============================================================== registry
@@ -733,7 +753,7 @@ class Runtime(ScreenServices):
     def _update_backlight_hold(self) -> None:
         """Hold the backlight at 100% while an app with *Keep screen bright*
         keeps running in the background (the per-app ``screen_bright`` flag,
-        set by the user or by the app through the SDK). Only while MFruit OS
+        set by the user or by the app through the SDK). Only while mFruit OS
         owns the screen does this matter; an app on screen sets its own."""
         holders = [e.id for e in self.registry.all()
                    if e.kind != "system" and e.running and e.background and e.screen_bright
@@ -830,14 +850,143 @@ class Runtime(ScreenServices):
             self.direct = None
         self.control.stop()
         self.stream.stop()
+        self.power.stop()
         self.keyboard.stop()
         self.keyhub.stop()
+        self.wifi_setup.close()
         self.bluetooth.close()
         self.tasks.stop()
         self.lifecycle.revoke_all_tickets()
         self.lifecycle.release_instance_lock()
         sdnotify.notify("STOPPING=1")
         self.loop.stop()
+
+    # ================================================================ power
+    def _on_power_event(self, event: dict) -> None:
+        """Events from mfruit-power.service (posted to the loop by PowerLink)."""
+        name = event.get("event")
+        if name in ("_connected", "_disconnected", power.STATE):
+            self._apply_power_state()
+        elif name == power.LOW_BATTERY:
+            self._show_low_battery(event.get("level"), int(event.get("seconds_left") or 0))
+        elif name == power.LOW_BATTERY_CANCELLED:
+            self._hide_low_battery(str(event.get("reason", "")))
+        elif name == power.SHUTTING_DOWN:
+            self._show_shutting_down(bool(event.get("reboot")))
+        elif name == power.SHUTDOWN_FAILED:
+            log.error("Power service could not shut down: %s", event.get("error"))
+            self.led.show("error", force=True)
+            self.toast("Shutdown failed", "error")
+        elif name == power.BUTTON:
+            self._board_button(str(event.get("tap", "")))
+        handler = getattr(self.router.top, "on_power_event", None)
+        if handler is not None:
+            handler(event)
+
+    def _apply_power_state(self) -> None:
+        link = self.power.battery()
+        if link is None:
+            return      # the status refresh falls back to PiSugar's own server
+        if link != (self.status.battery, self.status.charging):
+            self.status.battery, self.status.charging = link
+            self.request_render()
+
+    def _show_low_battery(self, level, seconds: int) -> None:
+        from mfruitos.launcher.ui.screens.battery import LowBatteryScreen
+        self.led.show("error", force=True)
+        screen = self._low_battery_screen
+        if screen is not None and screen in list(self.router):
+            screen.update(level, seconds)
+            return
+        if not (self.focus.has_focus and self.focus.mode == HOME):
+            return      # an app is on screen: the red light is the warning
+        self.backlight.wake()
+        self._arm_idle_timers()
+        self._low_battery_screen = LowBatteryScreen(self, level, seconds)
+        self.push(self._low_battery_screen)
+
+    def _hide_low_battery(self, reason: str) -> None:
+        screen, self._low_battery_screen = self._low_battery_screen, None
+        if screen is not None:
+            self.router.remove(screen)
+        self.led.show("idle", force=True)
+        if reason == "plugged":
+            self.toast("Power connected")
+
+    def _show_shutting_down(self, reboot: bool) -> None:
+        self._hide_low_battery("")
+        self.led.show("update", force=True)
+        if not (self.focus.has_focus and self.focus.mode == HOME):
+            return
+        screen = MessageScreen(self, "Restarting" if reboot else "Shutting down",
+                               "The device restarts when it has stopped." if reboot else
+                               "The device switches off when it has stopped.",
+                               actions=[Item("Please wait", kind="info", tone="muted")],
+                               icon="power", page="Power")
+        screen.modal = True
+        self.backlight.wake()
+        self._cancel_idle_timers()
+        self.push(screen)
+
+    def _board_button(self, tap: str) -> None:
+        action = self.power.button_action(tap)
+        if action == "none":
+            return
+        log.info("Battery board %s press: %s", tap, action)
+        if action == "screen":
+            if self.backlight.state == "off":
+                self.backlight.wake()
+                self._arm_idle_timers()
+            else:
+                self._cancel_idle_timers()
+                self.backlight.off()
+        elif action == "home":
+            if self.focus.mode in (APP, SYSTEM) and self.apps.request_stop(reason="battery-button"):
+                return
+            self.backlight.wake()
+            self.dispatch("home")
+        elif action == "power_menu":
+            self.backlight.wake()
+            self.open_power_menu()
+
+    # ===================================================== Wi-Fi from a phone
+    def _on_wifi_setup_change(self) -> None:
+        handler = getattr(self.router.top, "on_wifi_setup_change", None)
+        if handler is not None:
+            handler()
+        self.request_render()
+
+    def _wifi_setup_routes(self) -> None:
+        """Runs while its screen is in the stack; never while Bluetooth devices
+        are being paired (the tool turns pairing off every second)."""
+        from mfruitos.launcher.ui.screens.bluetooth import (BluetoothScreen, BtDeviceScreen,
+                                                            PairingScreen)
+        from mfruitos.launcher.ui.screens.phone_setup import PhoneSetupScreen
+        stack = list(self.router)
+        service = self.wifi_setup
+        if any(isinstance(s, PhoneSetupScreen) for s in stack):
+            service.want("screen")
+        else:
+            service.unwant("screen")
+        if any(isinstance(s, (BluetoothScreen, BtDeviceScreen, PairingScreen)) for s in stack):
+            service.pause("bluetooth")
+        else:
+            service.resume("bluetooth")
+
+    def _apply_wifi_setup_mode(self, offline: bool | None = None) -> None:
+        mode = self.settings.get("wifi_setup.mode")
+        service = self.wifi_setup
+        if mode == "always":
+            service.want("always")
+        else:
+            service.unwant("always")
+        if mode == "offline" and offline is not None:
+            if offline:
+                service.want("offline")
+            else:
+                service.unwant("offline")
+        elif mode != "offline":
+            service.unwant("offline")
 
     # ============================================================== control
     def handle_control(self, cmd: str, args: dict) -> dict:
@@ -860,3 +1009,41 @@ def _remove(path: str) -> None:
         pass
     except OSError as exc:
         log.warning("Cannot remove %s: %s", path, exc)
+
+
+class _LaneBluetooth:
+    """Bluetooth calls for the phone Wi-Fi setup worker, run on the bluetooth
+    lane so BlueZ is used by one thread at a time. Completion is signalled from
+    the lane itself, so the UI loop may wait (shutdown) without deadlocking."""
+
+    TIMEOUT_SEC = 20.0
+
+    def __init__(self, runtime):
+        self.runtime = runtime
+
+    def _call(self, fn):
+        done = threading.Event()
+        box: dict = {}
+
+        def work():
+            try:
+                box["result"] = fn()
+            except BaseException as exc:
+                box["error"] = exc
+            finally:
+                done.set()
+        self.runtime.tasks.submit("wifi-setup-bluetooth", work, None, None, lane="bluetooth")
+        if not done.wait(self.TIMEOUT_SEC):
+            raise TimeoutError("Bluetooth did not answer")
+        if "error" in box:
+            raise box["error"]
+        return box.get("result")
+
+    def settings(self) -> dict:
+        return self._call(self.runtime.bluetooth.adapter_settings)
+
+    def set_powered(self, on: bool) -> None:
+        self._call(lambda: self.runtime.bluetooth.set_powered(on))
+
+    def set_pairable(self, on: bool) -> None:
+        self._call(lambda: self.runtime.bluetooth.set_pairable(on))

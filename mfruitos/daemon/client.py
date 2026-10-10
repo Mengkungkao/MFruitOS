@@ -116,7 +116,7 @@ class WhisplayDaemonClient:
         return self.request("app.register", payload)
 
     def unregister_app(self, app_id: str) -> dict:
-        """Remove a registration. Needs MFruit OS's daemon wrapper
+        """Remove a registration. Needs mFruit OS's daemon wrapper
         (``mfruit.app.unregister``); a plain daemon answers "unknown command"."""
         return self.request("mfruit.app.unregister", {"app_id": app_id})
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Make an offline pack so MFruit OS installs without internet.
+# Make an offline pack so mFruit OS installs without internet.
 #
 #   bash scripts/make-offline-pack.sh            write offline/<board>-<os>-<release>-<arch>/
 #   bash scripts/make-offline-pack.sh --archive  also write that directory as a .tar.gz
@@ -9,7 +9,7 @@
 # image as the boards you will install offline: best straight after flashing
 # the image and `sudo apt-get update`, before upgrading (the sound card is
 # built for the kernel the pack was made on). It changes nothing on the board.
-# The pack holds the .deb files MFruit OS and its Whisplay driver may install,
+# The pack holds the .deb files mFruit OS and its Whisplay driver may install,
 # with all their dependencies, and the files Whisplay's sound card installer
 # downloads on this board (about 200 MB).
 # Use: put it in MFruitOS/offline/ next to the code; scripts/install.sh finds
@@ -93,6 +93,13 @@ main() {
     echo "[*] $url"
     wget -q -O "$out.partial/files/$(offline_file_key "$url")" "$url"
   done
+  # Wi-Fi from a phone: PiSugar's sugar-wifi-conf for this architecture
+  # (scripts/install.sh checks it by SHA-256; docs/platform/ADR/0013-phone-wifi-setup.md).
+  url="$(PYTHONPATH="$REPO" python3 -m mfruitos.system.wifi_setup url 2>/dev/null || true)"
+  if [ -n "$url" ]; then
+    echo "[*] $url"
+    wget -q -O "$out.partial/files/$(offline_file_key "$url")" "$url" || echo "[!] could not download $url"
+  fi
 
   cat >"$out.partial/pack.env" <<EOF
 PLATFORM=$platform

@@ -1,4 +1,4 @@
-# Moved: MFruit OS architecture
+# Moved: mFruit OS architecture
 
 The architecture is now in [docs/platform/ARCHITECTURE.md](platform/ARCHITECTURE.md).
 The host boundary and whisplay-daemon facts are in

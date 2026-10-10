@@ -1,6 +1,6 @@
 # Publishing
 
-How to release an app so MFruit OS can discover, install and update it.
+How to release an app so mFruit OS can discover, install and update it.
 
 ## Release on GitHub
 
@@ -35,15 +35,15 @@ automated suite passes ([Part I §30](../platform/DEVELOPMENT_RULES.md#30-releas
 
 ## The curated catalogue
 
-The Fruit Store's curated list (`config/catalog.json` in MFruit OS) pins a
+The Fruit Store's curated list (`config/catalog.json` in mFruit OS) pins a
 reviewed commit and its archive SHA-256. Adding or updating an entry is an
-MFruit OS change: open a pull request with the new `ref`, `url`, `sha256`,
+mFruit OS change: open a pull request with the new `ref`, `url`, `sha256`,
 `entry` and `dependencies`, after the archive was downloaded and its checksum
-and entry verified. Devices running MFruit OS with the online list see the
+and entry verified. Devices running mFruit OS with the online list see the
 entry once it is on the default branch, the next time the Fruit Store opens,
 without an OS update ([Installation](INSTALLATION.md#curated-catalogue)); so
 commit an entry only when its pin is verified. Add `min_os_version` when the
-app needs a newer MFruit OS than the devices may run. To ship a new version of
+app needs a newer mFruit OS than the devices may run. To ship a new version of
 a native entry, change its `ref`, `url`, `sha256` and `version` together;
 devices that have the app installed are offered the update.
 

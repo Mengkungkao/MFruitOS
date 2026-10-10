@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Update MFruit OS from this git checkout and reinstall it.
+# Update mFruit OS from this git checkout and reinstall it.
 #
 # For devices without a checkout, use Settings > System > System update
 # (GitHub releases) instead.

@@ -1,7 +1,7 @@
 """Updates for apps that were installed as git checkouts (e.g. ~/WalkieTalkie).
 
 Many existing Whisplay apps are cloned from GitHub and registered with the
-daemon directly, without releases. For those, MFruit OS can track the
+daemon directly, without releases. For those, mFruit OS can track the
 checked-out branch. This is labelled as *commit tracking* in the UI — it is
 not a version number, and semver releases are always preferred when a repo
 publishes them.

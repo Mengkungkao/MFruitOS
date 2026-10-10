@@ -9,7 +9,7 @@ Removing an app takes two separate steps, each with its own question:
 
 1. **Uninstall** removes the app from the device and keeps its data, so
    installing it again brings everything back.
-2. **Delete data** removes what MFruit OS still keeps for it: the data folder,
+2. **Delete data** removes what mFruit OS still keeps for it: the data folder,
    logs and records. Offered straight after uninstalling, and later from the
    app's page in the Fruit Store.
 """
@@ -22,7 +22,7 @@ from mfruitos.launcher.ui.components import Item, back_item
 from mfruitos.launcher.ui.screens.base import ListScreen
 from mfruitos.launcher.ui.screens.dialogs import confirm
 
-KIND_TEXT = {"os": "Installed by MFruit OS", "daemon": "Registered with whisplay-daemon"}
+KIND_TEXT = {"os": "Installed by mFruit OS", "daemon": "Registered with whisplay-daemon"}
 
 
 def ask_uninstall(os, app_id: str, after=None, after_delete=None) -> None:
@@ -50,10 +50,10 @@ def ask_uninstall(os, app_id: str, after=None, after_delete=None) -> None:
 
 
 def ask_delete(os, app_id: str, name: str, first: bool = False, after=None) -> None:
-    """Question 2 of 2: delete what MFruit OS keeps for an uninstalled app."""
+    """Question 2 of 2: delete what mFruit OS keeps for an uninstalled app."""
     message = (f"{name} is uninstalled. Also delete its data, logs and records? "
                "This cannot be undone." if first else
-               f"Deletes {name}'s data, logs and records kept by MFruit OS. "
+               f"Deletes {name}'s data, logs and records kept by mFruit OS. "
                "This cannot be undone.")
 
     def delete():

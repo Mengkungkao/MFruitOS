@@ -1,4 +1,4 @@
-# Moved: MFruit OS app rules
+# Moved: mFruit OS app rules
 
 The app rules are now the **app contract**:
 [docs/apps/APP_CONTRACT.md](apps/APP_CONTRACT.md).

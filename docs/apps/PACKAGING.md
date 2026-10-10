@@ -1,6 +1,6 @@
 # Packaging
 
-How to lay out a native package so MFruit OS can install, update, roll back and
+How to lay out a native package so mFruit OS can install, update, roll back and
 remove it without manual steps. Field rules are in [Manifest](MANIFEST.md);
 behavior rules in the [App contract](APP_CONTRACT.md) §7.
 
@@ -21,7 +21,7 @@ my-app/
 ```
 
 Shell entrypoints and hooks use LF endings, a shebang and the executable bit.
-End `run.sh` with `exec` so signals and the exit status reach MFruit OS.
+End `run.sh` with `exec` so signals and the exit status reach mFruit OS.
 
 ## Lifecycle hooks
 

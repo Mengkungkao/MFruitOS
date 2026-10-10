@@ -1,7 +1,7 @@
-# Hello MFruit — MFruit OS app template
+# Hello mFruit — mFruit OS app template
 
-A minimal MFruit OS app package: a counter with MFruit OS's own controls
-and look. It requires MFruit OS 1.4.0 or newer. Copy this folder to start a
+A minimal mFruit OS app package: a counter with mFruit OS's own controls
+and look. It requires mFruit OS 1.4.0 or newer. Copy this folder to start a
 new app, then validate the resulting package and its hardware behaviour.
 
 | Button | Keyboard (USB or Bluetooth) | |
@@ -11,15 +11,15 @@ new app, then validate the resulting package and its hardware behaviour.
 | hold, then release | Enter | reset |
 | 4 clicks | Esc | leave the app |
 
-It follows the MFruit OS app contract (`docs/apps/APP_CONTRACT.md` in the MFruit OS
+It follows the mFruit OS app contract (`docs/apps/APP_CONTRACT.md` in the mFruit OS
 repository; included here as `.claude/rules/mfruit-os-app.md`):
-input through the SDK's `InputController`, MFruit OS's status bar and
+input through the SDK's `InputController`, mFruit OS's status bar and
 footer hints, `exit_gesture: "none"` and `disable_esc_exit_key: true`.
 
 ```
 whisplay-app-template/
 ├── manifest.json   required: id, name, version, entrypoint
-├── run.sh          entrypoint started by MFruit OS
+├── run.sh          entrypoint started by mFruit OS
 ├── install.sh      runs on install and update (non-zero exit = abort + rollback)
 ├── update.sh       optional: data migration on upgrade/downgrade
 ├── uninstall.sh    optional: cleanup before removal
@@ -28,7 +28,7 @@ whisplay-app-template/
 ├── app/
 │   ├── main.py
 │   ├── whisplay_app.py   small whisplay-daemon client (copy it)
-│   └── mfruit_sdk/       the MFruit App SDK, a copy: refresh it with
+│   └── mfruit_sdk/       the mFruit App SDK, a copy: refresh it with
 │                         MFruitOS/scripts/sdk-sync.sh <your app>/app
 └── assets/icon.png
 ```
@@ -46,7 +46,7 @@ whisplay-app-template/
 4. Store user data in `WHISPLAY_OS_APP_DATA`. Adapt `install.sh` for your
    dependencies and `test.sh` for a fast import/render check that leaves the
    display and network alone. Make any data migrations reversible.
-5. Refresh the vendored SDK and copied rules from the same MFruit OS checkout:
+5. Refresh the vendored SDK and copied rules from the same mFruit OS checkout:
 
    ```bash
    ~/MFruitOS/scripts/sdk-sync.sh ./my-app/app
@@ -74,10 +74,10 @@ physical hardware and have not been completed.
 
 1. Run the static package check, app tests, sideload and hardware checks on
    the final package. Keep caches, secrets and personal data out of the archive.
-2. Push to GitHub and add the topic `whisplay-app` so MFruit OS can discover it.
+2. Push to GitHub and add the topic `whisplay-app` so mFruit OS can discover it.
 3. Create a release whose tag matches the manifest version (`v1.1.0` ↔ `"1.1.0"`
    for this template before renaming).
    Optionally attach `<id>-<version>.tar.gz` and a `SHA256SUMS` file;
    otherwise the source archive of the tag is used.
 
-See `docs/apps/` in the MFruit OS repository (start with `GETTING_STARTED.md`) for the full specification.
+See `docs/apps/` in the mFruit OS repository (start with `GETTING_STARTED.md`) for the full specification.

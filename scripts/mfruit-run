@@ -1,12 +1,12 @@
 #!/bin/sh
 # mfruit-run <app_id> — the launch gate and runner for apps started by whisplay-daemon.
 #
-# MFruit OS registers every app it manages with this command, both packages it
-# installed and daemon apps it adopted. While MFruit OS runs, an app starts
-# only with the one-shot ticket MFruit OS writes just before it asks the
+# mFruit OS registers every app it manages with this command, both packages it
+# installed and daemon apps it adopted. While mFruit OS runs, an app starts
+# only with the one-shot ticket mFruit OS writes just before it asks the
 # daemon to launch that app; any other start (for example a press on the
 # daemon's own desktop while another app is starting up) is denied. When
-# MFruit OS is not running, the gate is open and the daemon desktop works as
+# mFruit OS is not running, the gate is open and the daemon desktop works as
 # before.
 #
 # The runner records pid, session and exit code in
@@ -18,7 +18,7 @@ case "$APP_ID" in
   ""|*[!a-z0-9_-]*) echo "mfruit-run: invalid app id '$APP_ID'" >&2; exit 64 ;;
 esac
 
-# Replaced with the real data directory when MFruit OS installs this script:
+# Replaced with the real data directory when mFruit OS installs this script:
 # the daemon may run with a different $HOME than the launcher.
 DEFAULT_HOME="@MFRUIT_HOME@"
 case "$DEFAULT_HOME" in @*) DEFAULT_HOME="$HOME/.whisplay-os" ;; esac
@@ -42,7 +42,7 @@ deny() {
 }
 
 launcher_alive() {
-  # MFruit OS holds an flock on launcher.lock for as long as it runs; the kernel
+  # mFruit OS holds an flock on launcher.lock for as long as it runs; the kernel
   # drops it when the process dies, so a crash can never leave the gate closed.
   [ -e "$STATE_DIR/launcher.lock" ] || return 1
   if command -v flock >/dev/null 2>&1; then
@@ -59,7 +59,7 @@ if launcher_alive && [ "$(cat "$STATE_DIR/launch-policy" 2>/dev/null)" != "open"
   TICKET="$STATE_DIR/tickets/$APP_ID"
   CLAIM="$TICKET.claim.$$"
   # mv is atomic: exactly one start can claim a ticket.
-  mv "$TICKET" "$CLAIM" 2>/dev/null || deny "not requested by MFruit OS (no launch ticket)"
+  mv "$TICKET" "$CLAIM" 2>/dev/null || deny "not requested by mFruit OS (no launch ticket)"
   read -r SESSION EXPIRES < "$CLAIM"
   rm -f "$CLAIM"
   [ "$(date +%s)" -le "${EXPIRES:-0}" ] || deny "launch ticket expired (session $SESSION)"
@@ -68,7 +68,7 @@ fi
 # ------------------------------------------------------------ what to run
 STARTED=$(date +%s)
 if [ -d "$APP_ROOT/current" ]; then
-  # A package installed by MFruit OS.
+  # A package installed by mFruit OS.
   APP_DIR="$APP_ROOT/current"
   LOG="$OS_HOME/logs/$APP_ID.log"
   ENTRY=$(head -n 1 "$APP_DIR/.mfruit-entrypoint" 2>/dev/null)
@@ -93,7 +93,7 @@ if [ -d "$APP_ROOT/current" ]; then
   mkdir -p "$APP_ROOT/data" 2>/dev/null
   cd "$APP_DIR" || exit 66
 elif [ -f "$ADOPTED/command" ]; then
-  # A daemon app adopted by MFruit OS: run its original launch command.
+  # A daemon app adopted by mFruit OS: run its original launch command.
   # Output goes wherever the daemon sends it (e.g. daemon-app.log), as before.
   LOG=""
   CWD=$(cat "$ADOPTED/cwd" 2>/dev/null)
@@ -106,7 +106,7 @@ else
 fi
 
 # -------------------------------------------------------------------- run
-# Tells the app (and its MFruit App SDK) where MFruit OS lives -- fonts, and
+# Tells the app (and its mFruit App SDK) where mFruit OS lives -- fonts, and
 # the key hub it takes its keyboard keys from -- and which app it is.
 export MFRUIT_HOME="$OS_HOME" MFRUIT_SESSION="$SESSION" WHISPLAY_APP_ID="$APP_ID"
 write_state "{\"app_id\":\"$APP_ID\",\"session\":\"$SESSION\",\"state\":\"running\",\"pid\":$$,\"started_at\":$STARTED}"

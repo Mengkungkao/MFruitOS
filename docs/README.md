@@ -1,4 +1,4 @@
-# MFruit OS documentation
+# mFruit OS documentation
 
 Three domains, one canonical document per concept
 ([ADR 0004](platform/ADR/0004-documentation-architecture.md)). Status words
@@ -8,7 +8,7 @@ says.
 
 | Domain | For | Start at |
 |---|---|---|
-| [Platform / OS development](platform/README.md) | changing MFruit OS itself: rules, architecture, lifecycle, host API, installation, configuration, security, roadmap, ADRs | [Development rules](platform/DEVELOPMENT_RULES.md) |
+| [Platform / OS development](platform/README.md) | changing mFruit OS itself: rules, architecture, lifecycle, host API, installation, configuration, security, roadmap, ADRs | [Development rules](platform/DEVELOPMENT_RULES.md) |
 | [App development](apps/README.md) | building, packaging, publishing and migrating apps | [Getting started](apps/GETTING_STARTED.md) |
 | [Quality](quality/README.md) | testing, validation, known issues, troubleshooting, records | [Known issues](quality/KNOWN_ISSUES.md) |
 
@@ -16,7 +16,7 @@ says.
 
 | Task | Read |
 |---|---|
-| Install, update or remove MFruit OS | [Installation](platform/INSTALLATION.md) |
+| Install, update or remove mFruit OS | [Installation](platform/INSTALLATION.md) |
 | Understand who owns what | [Architecture](platform/ARCHITECTURE.md) |
 | Understand, test or troubleshoot the Whisplay HAT driver | [Whisplay driver](WHISPLAY_DRIVER.md) |
 | Fix a launch, input or focus problem | [Lifecycle](platform/LIFECYCLE.md), [Troubleshooting](quality/TROUBLESHOOTING.md) |

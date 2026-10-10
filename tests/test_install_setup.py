@@ -130,6 +130,109 @@ esac
                        if line.startswith("sudo rm -f /etc/sudoers.d/whisplay-os "))
         self.assertIn("/etc/polkit-1/rules.d/49-mfruit-wifi.rules", removal.split())
 
+    def test_uninstall_removes_the_power_service_and_enables_pisugar_again(self):
+        self.command("python3", "cat >/dev/null\nexit 0\n")
+        self.command("systemctl", '''printf 'systemctl %s\\n' "$*" >> "$SCRIPT_TEST_LOG"
+case "$1" in cat|list-unit-files) exit 0 ;; *) exit 0 ;; esac
+''')
+        state = self.tmp / "installed" / "state"
+        state.mkdir(parents=True)
+        (state / "pisugar-services-disabled").write_text(
+            "pisugar-server.service\nsugar-wifi-config.service\nevil.service\n")
+        result = self.run_script("uninstall.sh")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        log = self.log.read_text()
+        self.assertIn("sudo rm -f /usr/lib/systemd/system-shutdown/mfruit-power-off", log)
+        self.assertIn("sudo systemctl enable pisugar-server.service", log)
+        self.assertIn("sudo systemctl start pisugar-server.service", log)
+        self.assertIn("sudo systemctl enable sugar-wifi-config.service", log)
+        self.assertNotIn("evil.service", log)
+
+
+class PowerServiceInstallTests(unittest.TestCase):
+    """The power unit and shutdown hook the installer writes (static checks
+    of security-relevant properties, plus systemd-analyze when available)."""
+
+    def setUp(self):
+        self.source = (SCRIPTS / "install.sh").read_text(encoding="utf-8")
+        self.unit = self.source.split('cat > "$POWER_TMP" <<EOF\n', 1)[1].split("\nEOF\n", 1)[0]
+
+    def test_unit_runs_as_the_user_with_only_the_clock_capability(self):
+        self.assertIn("User=$TARGET_USER", self.unit)
+        self.assertIn("SupplementaryGroups=$POWER_GROUPS", self.unit)
+        self.assertIn("AmbientCapabilities=CAP_SYS_TIME", self.unit)
+        # A capability bounding set or NoNewPrivileges would break the
+        # "sudo -n systemctl poweroff" the safe shutdown relies on.
+        self.assertNotIn("CapabilityBoundingSet", self.unit)
+        self.assertNotIn("NoNewPrivileges", self.unit)
+        self.assertIn("Before=$DAEMON_SERVICE $SERVICE", self.unit)
+        self.assertIn("ExecStart=$PYTHON -m mfruitos.power serve", self.unit)
+        self.assertIn('POWER_GROUPS="i2c"', self.source)
+
+    def test_shutdown_hook_is_a_root_owned_copy(self):
+        self.assertIn('sed "s|@POWER_CONFIG@|$OS_HOME/config/power.json|" "$SRC/scripts/mfruit-power-off"',
+                      self.source)
+        self.assertIn('sudo install -D -o root -g root -m 0755 "$HOOK_TMP" '
+                      '"$POWER_HOOK_DIR/mfruit-power-off"', self.source)
+        self.assertNotRegex(self.source, r"ln -s\S* [^\n]*system-shutdown")
+        hook = (SCRIPTS / "mfruit-power-off").read_text(encoding="utf-8")
+        self.assertIn('CONFIG = "@POWER_CONFIG@"', hook)
+        self.assertTrue(hook.startswith("#!/usr/bin/python3 -I"))
+
+    def test_sudoers_allows_only_restart_poweroff_and_reboot(self):
+        line = next(l for l in self.source.splitlines()
+                    if l.startswith("printf '%s ALL=(root) NOPASSWD:"))
+        self.assertIn("%s poweroff, %s reboot", line)
+        self.assertNotIn("ALL\\n", line.split("NOPASSWD:", 1)[1])
+
+    def test_no_power_option_skips_it(self):
+        self.assertIn("--no-power) INSTALL_POWER=0 ;;", self.source)
+        self.assertIn('if [ "$INSTALL_POWER" = 1 ]; then', self.source)
+
+    @unittest.skipUnless(shutil.which("systemd-analyze"), "systemd-analyze not available")
+    def test_rendered_unit_passes_systemd_analyze(self):
+        import getpass
+        import sys
+        user = getpass.getuser()
+        values = {"$DAEMON_SERVICE": "whisplay-daemon.service", "$SERVICE": "whisplay-os.service",
+                  "$TARGET_USER": user, "$TARGET_GROUP": user, "$POWER_GROUPS": "",
+                  "$TARGET_HOME": os.path.expanduser("~"), "$OS_HOME": "/tmp",
+                  "$PYTHON": sys.executable}
+        unit = self.unit
+        for name in sorted(values, key=len, reverse=True):
+            unit = unit.replace(name, values[name])
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "mfruit-power.service"
+            path.write_text(unit, encoding="utf-8")
+            result = subprocess.run(["systemd-analyze", "verify", str(path)], capture_output=True,
+                                    text=True, timeout=60)
+        problems = [l for l in (result.stdout + result.stderr).splitlines()
+                    if "mfruit-power.service" in l and "Unknown" in l]
+        self.assertEqual(problems, [], result.stdout + result.stderr)
+
+
+class WifiSetupInstallTests(unittest.TestCase):
+    def setUp(self):
+        self.source = (SCRIPTS / "install.sh").read_text(encoding="utf-8")
+
+    def test_the_tool_is_installed_as_the_user_never_with_sudo(self):
+        line = next(l for l in self.source.splitlines() if "-m mfruitos.system.wifi_setup" in l)
+        self.assertIn("as_user env", line)
+        self.assertNotIn("sudo", line)
+        self.assertIn('WS_ARGS=(--home "$OS_HOME" install)', self.source)
+        self.assertIn('WS_ARGS+=(--offline "$OFFLINE_PACK")', self.source)
+
+    def test_option_and_pisugar_service_hand_over(self):
+        self.assertIn("--no-wifi-setup) WIFI_SETUP=0 ;;", self.source)
+        block = self.source.split("for unit in sugar-wifi-config.service; do", 1)[1].split("done", 1)[0]
+        self.assertIn('sudo systemctl disable --now "$unit"', block)
+        self.assertIn("pisugar-services-disabled", block)
+
+    def test_offline_packs_carry_the_tool(self):
+        pack = (SCRIPTS / "make-offline-pack.sh").read_text(encoding="utf-8")
+        self.assertIn("python3 -m mfruitos.system.wifi_setup url", pack)
+        self.assertIn('offline_file_key "$url"', pack)
+
 
 if __name__ == "__main__":
     unittest.main()

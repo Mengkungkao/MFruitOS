@@ -69,7 +69,7 @@ def _button(rt, args):
 
 def _key(rt, args):
     """A key press and release, as if typed on a keyboard on the board: routed
-    to whoever owns the screen, MFruit OS or the foreground app."""
+    to whoever owns the screen, mFruit OS or the foreground app."""
     from mfruitos.sdk.keys import DOWN, UP, KeyEvent
     name = args.get("name", "")
     code = KEY_CODES.get(name)
@@ -212,7 +212,7 @@ def _app_background(rt, args):
     """An app reads or changes its own *Keep running* and *Keep screen bright*
     (SDK ``background``, ADR 0009). No other flag, no other effect.
 
-    The control socket is the user's own (mode 0600); MFruit OS cannot tell
+    The control socket is the user's own (mode 0600); mFruit OS cannot tell
     which of the user's processes asks, so this is a convenience contract, not
     a permission boundary (docs/platform/SECURITY.md)."""
     app_id = args.get("app_id")
@@ -245,6 +245,24 @@ def _restart(rt, args):
     return {"ok": True}
 
 
+def _wifi_setup(rt, args):
+    """Wi-Fi from a phone over SSH: start/stop PiSugar's sugar-wifi-conf (as
+    the Settings screen does) or show its state and the key a phone needs."""
+    action = args.get("action", "status")
+    service = rt.wifi_setup
+    if action == "start":
+        service.want("remote")
+    elif action == "stop":
+        service.unwant("remote")
+    elif action != "status":
+        return {"ok": False, "error": "action must be start, stop or status"}
+    ok, reason = service.available()
+    return {"ok": True, "state": service.state, "detail": service.detail or reason,
+            "available": ok, "name": service.advertised or service.name(),
+            "key": service.key() if ok else "", "wanted_by": sorted(service.wanted),
+            "paused_by": sorted(service.paused), "mode": rt.settings.get("wifi_setup.mode")}
+
+
 COMMANDS = {
     "status": _status, "ping": _status, "summon": _summon, "gesture": _gesture,
     "action": _action, "button": _button, "key": _key, "screenshot": _screenshot,
@@ -252,6 +270,7 @@ COMMANDS = {
     "launch": _launch, "reload": _reload, "check-updates": _check, "install": _install,
     "sideload": _sideload, "catalog": _catalog, "jobs": _jobs, "restart": _restart,
     "app.background": _app_background,
+    "wifi-setup": _wifi_setup,
     "uninstall": lambda rt, args: _package_action(rt, args, "uninstall"),
     "delete": lambda rt, args: _package_action(rt, args, "delete"),
     "reset": lambda rt, args: _package_action(rt, args, "reset"),

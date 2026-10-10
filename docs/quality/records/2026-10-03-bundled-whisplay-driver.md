@@ -6,10 +6,10 @@
 | Revision | uncommitted work on top of `3413c72` |
 | Whisplay | PiSugar/Whisplay `c73051e64dc62aced1853d16f33d4614fec5bee4` copied into `drivers/whisplay` |
 | Dev machine | Ubuntu 24.04 (noble) arm64, Python 3.12 |
-| Device | Orange Pi Zero 2W `orangepi@192.168.0.130`: Ubuntu 22.04 (jammy) arm64, kernel `6.1.31-sun50iw9`, Python 3.10.12, Pillow 9.0.1, libgpiod Python API v1; `~/Whisplay` clean at `c73051e`; live MFruit OS `1.4.0-local20261003055500` (not changed) |
+| Device | Orange Pi Zero 2W `orangepi@192.168.0.130`: Ubuntu 22.04 (jammy) arm64, kernel `6.1.31-sun50iw9`, Python 3.10.12, Pillow 9.0.1, libgpiod Python API v1; `~/Whisplay` clean at `c73051e`; live mFruit OS `1.4.0-local20261003055500` (not changed) |
 | Not reachable | Raspberry Pi Zero 2 W `jarvis@192.168.0.33` (SSH timed out) |
 
-Request: replace the external Whisplay driver with an MFruit OS-owned one
+Request: replace the external Whisplay driver with an mFruit OS-owned one
 ([ADR 0008](../../platform/ADR/0008-bundled-whisplay-driver.md),
 [Whisplay driver](../../WHISPLAY_DRIVER.md)); later in the session, the
 owner added that installation must also work offline.
@@ -54,7 +54,7 @@ are identical to `drivers/whisplay`):
 | Full suite on the device | AUTOMATED: 461 passed, 0 skipped |
 
 Backup before the install: `~/mfruit-backups/20261003-072228-before-bundled-driver`
-(MFruit OS home, daemon home, unit, data checksums, boot environment, ALSA
+(mFruit OS home, daemon home, unit, data checksums, boot environment, ALSA
 config, audio file listing).
 
 ## Changeover on the Orange Pi (owner ran the install, 2026-10-03 17:23 UTC)
@@ -67,8 +67,8 @@ The owner ran `cd ~/MFruitOS-candidate && bash scripts/install.sh` (log
 | Install | one sudo prompt, no questions, no reboot needed; `python3-smbus` installed **from the offline pack** (`Get:1 file:…/debs`); overlays and sound card left as they were; old unit saved to `/var/backups/mfruitos`; daemon and launcher restarted; self-test OK |
 | D1 `install.sh --check` | DEVICE: all `OK`, exit 0 |
 | Daemon | runs `whisplay-daemon-mfruit.py --whisplay /usr/local/share/whisplay`; wrapper patches applied (`_render_desktop` … `_send_data_bytes`); no errors in its log |
-| D2 data and configuration | DEVICE: daemon settings and every app registration unchanged except MFruit OS's own (`cwd` → the new launcher version, expected); `~/Whisplay` unchanged; sound card module and overlay files not rebuilt; `orangepiEnv.txt`, `asound.conf`, sound cards unchanged |
-| Lifecycle on the new daemon | `mfruitctl launch radioconnect`: the daemon reported RadioConnect in front; `app.exit.request` → back to MFruit OS; process gone; log `LAUNCH_REQUEST` → `SESSION_END outcome=exited` → `APP_CLOSED` |
+| D2 data and configuration | DEVICE: daemon settings and every app registration unchanged except mFruit OS's own (`cwd` → the new launcher version, expected); `~/Whisplay` unchanged; sound card module and overlay files not rebuilt; `orangepiEnv.txt`, `asound.conf`, sound cards unchanged |
+| Lifecycle on the new daemon | `mfruitctl launch radioconnect`: the daemon reported RadioConnect in front; `app.exit.request` → back to mFruit OS; process gone; log `LAUNCH_REQUEST` → `SESSION_END outcome=exited` → `APP_CLOSED` |
 | D6 runtime for apps | `whisplay_client` imports from `/usr/local/share/whisplay/runtime` (apps that search `~/Whisplay` first still use the identical copy there) |
 | Microphone after the switch | 1 s capture: RMS 707, peak 4239 |
 
@@ -96,7 +96,7 @@ stock `ubuntu:22.04` arm64 + python3, sudo, kmod, systemd, udev; then
 |---|---|
 | 1, 2 | harness bugs (docker `commit -q`; `SUDO_USER=root` from starting the user shell with sudo, so the installer refused root as designed; a `check` name clash in `verify.sh`) |
 | 3 | install exit 0, all verify checks passed except "user in gpio group" (the check read the running session's groups; fixed to read the group database). **Real-daemon tests against the installed driver failed:** `daemon_renderer` uses DejaVu Sans; without it Pillow 9.0.1's fallback font has no `getbbox`, so the daemon desktop and pages crash on a fresh image. Upstream Whisplay assumes the font too |
-| 4 (after the fix: `fonts-dejavu-core` required; `bluez`, `python3-dbus`, `python3-gi` optional; pack rebuilt: 400 packages, 208 MB) | AUTOMATED in the container: install exit 0, **47 of 47 checks passed**, among them: everything from the pack with no network, `snd-soc-whisplay-soundcard.ko` and `snd-soc-wm8960.ko` compiled for `6.1.31-sun50iw9` (vermagic matches), overlay compiled, `orangepiEnv.txt` overlays, `/etc/modules`, ALSA config, units and wrapper drop-in, sudoers valid, MFruit OS self-test, Wi-Fi app provisioned, no build files in the checkout. Real-daemon tests against `/usr/local/share/whisplay`: `test_background_ui`, `test_launch_lifecycle`, `test_daemon_unregister`, `test_dc_park` all OK. 6 min 21 s |
+| 4 (after the fix: `fonts-dejavu-core` required; `bluez`, `python3-dbus`, `python3-gi` optional; pack rebuilt: 400 packages, 208 MB) | AUTOMATED in the container: install exit 0, **47 of 47 checks passed**, among them: everything from the pack with no network, `snd-soc-whisplay-soundcard.ko` and `snd-soc-wm8960.ko` compiled for `6.1.31-sun50iw9` (vermagic matches), overlay compiled, `orangepiEnv.txt` overlays, `/etc/modules`, ALSA config, units and wrapper drop-in, sudoers valid, mFruit OS self-test, Wi-Fi app provisioned, no build files in the checkout. Real-daemon tests against `/usr/local/share/whisplay`: `test_background_ui`, `test_launch_lifecycle`, `test_daemon_unregister`, `test_dc_park` all OK. 6 min 21 s |
 
 Not covered by the rehearsal: the reboot, a real device tree, the LCD, loading
 the modules and the sound card on the board (fresh install on hardware is
@@ -106,7 +106,7 @@ still to do).
 
 | Board | Finding | Result |
 |---|---|---|
-| Pi Zero 2 W, fresh trixie (kernel 6.18.50), MFruit OS from GitHub `0629edf` | DEVICE: `install.sh --check` all OK (SPI, sound card built and loaded, driver files, service); optional `i2c-tools` missing | first fresh install of the bundled driver on hardware works |
+| Pi Zero 2 W, fresh trixie (kernel 6.18.50), mFruit OS from GitHub `0629edf` | DEVICE: `install.sh --check` all OK (SPI, sound card built and loaded, driver files, service); optional `i2c-tools` missing | first fresh install of the bundled driver on hardware works |
 | Pi | Settings > Bluetooth: `org.bluez.Error.Failure`. Cause: rfkill soft block restored at every boot by systemd-rfkill (`soc-amba-3f201000.serial:bluetooth` = 1); BlueZ cannot power on | fixed: Settings lifts the soft block (through `/dev/rfkill`, the session ACL allows the user) and waits for BlueZ, which powers on by itself (asking as well gave `org.bluez.Error.Busy`). DEVICE: from the blocked state `set_powered(True)` returned in 0.1 s, `PowerState: on`. Tests with negative controls |
 | Orange Pi | Wi-Fi app broken ("Working directory missing"): its registration and adopted record pointed to the removed `~/ConnectWifi`; provisioning skipped the bundled app because a registration existed, and the launcher kept the stale `cwd` because only the command was compared | fixed in provisioning and in `sync_registrations`. DEVICE: bundled Wi-Fi app 1.1.0 installed, registration `cwd` → `apps/connectwifi/current`, the app opened (RUNNING) and closed (`SESSION_END outcome=exited`). Connecting to a new network NOT VERIFIED (needs the user at the board) |
 

@@ -2,13 +2,13 @@
 
 Why this bypasses the daemon (docs/platform/DEVELOPMENT_RULES.md requires a
 documented reason for any direct hardware access):
-without the daemon there is no framebuffer, so MFruit OS could not show the
+without the daemon there is no framebuffer, so mFruit OS could not show the
 "Daemon unavailable" screen the user needs to recover. This module is only
 used when the daemon's systemd unit is *inactive or failed* (never while it
 is starting), and the hardware is released as soon as the unit is active
 again, so it can never compete with a running daemon for GPIO/SPI.
 
-It uses ``WhisplayBoard`` from the MFruit OS Whisplay driver's runtime
+It uses ``WhisplayBoard`` from the mFruit OS Whisplay driver's runtime
 (drivers/whisplay, installed to /usr/local/share/whisplay; docs/WHISPLAY_DRIVER.md);
 no hardware logic is duplicated here.
 """
@@ -54,7 +54,7 @@ def find_whisplay_root(configured: str = "") -> str | None:
     except (OSError, subprocess.SubprocessError):
         pass
     # The installed driver, then a Whisplay checkout of an older installation,
-    # then the copy shipped with this MFruit OS version.
+    # then the copy shipped with this mFruit OS version.
     candidates += [DRIVER_DIR, os.path.expanduser("~/Whisplay"),
                    os.path.join(package_root(), "drivers", "whisplay")]
     for path in candidates:

@@ -42,17 +42,21 @@ esac
 expect "ALSA card name whisplaysound" grep -q whisplaysound /etc/asound.conf
 expect "boot volume service" test -f /etc/systemd/system/whisplay-soundcard-warmup.service
 expect "driver files at /usr/local/share/whisplay" test -f /usr/local/share/whisplay/daemon/whisplay_daemon.py
-expect "  they match this MFruit OS" bash -c "grep -qx 'manifest_sha256=$(bundle_digest)' /usr/local/share/whisplay/MFRUIT_DRIVER"
+expect "  they match this mFruit OS" bash -c "grep -qx 'manifest_sha256=$(bundle_digest)' /usr/local/share/whisplay/MFRUIT_DRIVER"
 expect "  compiled, read-only for the daemon user" bash -c \
   'test -d /usr/local/share/whisplay/daemon/__pycache__ && ! test -w /usr/local/share/whisplay/daemon'
 expect "whisplay-daemon.service runs the driver" grep -q "^ExecStart=.*/usr/local/share/whisplay/daemon/whisplay_daemon.py" /etc/systemd/system/whisplay-daemon.service
-expect "  through MFruit OS's wrapper" grep -q -- "--whisplay /usr/local/share/whisplay " /etc/systemd/system/whisplay-daemon.service.d/mfruit-os.conf
+expect "  through mFruit OS's wrapper" grep -q -- "--whisplay /usr/local/share/whisplay " /etc/systemd/system/whisplay-daemon.service.d/mfruit-os.conf
 expect "whisplay-os.service" test -f /etc/systemd/system/whisplay-os.service
+expect "mfruit-power.service (power management)" test -f /etc/systemd/system/mfruit-power.service
+expect "  power-off shutdown hook: root-owned copy with the settings path" bash -c \
+  'h=/usr/lib/systemd/system-shutdown/mfruit-power-off; [ -x "$h" ] && [ "$(stat -c %U "$h")" = root ] && ! grep -q @POWER_CONFIG@ "$h"'
+expect "  sudoers lets the power service power off" sudo grep -q "systemctl poweroff" /etc/sudoers.d/whisplay-os
 expect "sudoers files valid" sudo visudo -c
 expect "Power page may reboot and power off" sudo test -f /etc/sudoers.d/whisplay-daemon-power
 expect "daemon settings created" test -f ~/.whisplay-daemon/settings.json
-expect "MFruit OS active version" test -f ~/.whisplay-os/system/current/mfruitos/__init__.py
-expect "MFruit OS self-test" env PYTHONPATH="$HOME/.whisplay-os/system/current" python3 -m mfruitos --self-test
+expect "mFruit OS active version" test -f ~/.whisplay-os/system/current/mfruitos/__init__.py
+expect "mFruit OS self-test" env PYTHONPATH="$HOME/.whisplay-os/system/current" python3 -m mfruitos --self-test
 expect "Wi-Fi app provisioned" test -f ~/.whisplay-os/apps/connectwifi/current/manifest.json
 expect "no build files left in the source tree" bash -c \
   '[ -z "$(find drivers/whisplay/audio -name "*.o" -o -name "*.ko" -o -name "*.dtbo" | head -1)" ]'

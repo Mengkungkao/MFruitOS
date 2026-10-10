@@ -1,10 +1,61 @@
 # Changelog
 
-All notable changes to MFruit OS are documented here. Versions follow
+All notable changes to mFruit OS are documented here. Versions follow
 [Semantic Versioning](https://semver.org/). App versions are independent of
 the OS version.
 
 ## Unreleased
+
+### Added (2026-10-10, power management)
+- **mFruit OS has its own power management** for PiSugar battery boards
+  (PiSugar 3, PiSugar 2 with 4 or 2 LEDs, PiSugar 2 Pro): a new
+  `mfruit-power.service` that reads the battery, shuts the device down
+  safely when the battery runs low (below 5 % for 30 s while unplugged, with
+  an on-screen countdown; connecting power cancels it), lets the PiSugar 3
+  power button shut down safely, and switches the battery board off at the
+  end of a power-off. Before, the battery was shown only with PiSugar's own
+  server installed, nothing protected the SD card at an empty battery, and
+  after *Shut down* the board kept the halted Pi powered.
+- **Settings → Battery**: level, charging, voltage, board and temperature;
+  safe-shutdown level and countdown; double/long press actions (screen on/off,
+  power menu, Home); hold to shut down safely; anti-mistouch; power on when
+  plugged in; battery protection or charging range; a wake-up alarm and the
+  board clock. **Settings → General → Power** opens mFruit OS's own power
+  menu (lock, restart, shut down).
+- `mfruitctl power` (status, `set KEY VALUE`, `shutdown`, `reboot`, `probe`,
+  `clock save|load`); settings in `~/.whisplay-os/config/power.json`.
+- The clock is moved forward from the battery board's clock at boot when it
+  is not synchronised, and saved to the board once it is.
+- whisplay-daemon, apps' status bars and scripts that read PiSugar's socket
+  keep working: the power service answers PiSugar's protocol. `install.sh`
+  stops PiSugar's own `pisugar-server`/`pisugar-poweroff` and imports their
+  settings once; `uninstall.sh` enables them again; `--no-power` keeps them.
+  Not verified on a device yet ([ADR 0012](docs/platform/ADR/0012-own-power-management.md)).
+
+### Added (2026-10-10, Wi-Fi from a phone)
+- **Settings → Wi-Fi → Phone Setup**: set the device's Wi-Fi from the PiSugar
+  app (or pisugar.com/sugar-wifi-conf in Chrome) over Bluetooth. mFruit OS
+  installs PiSugar's sugar-wifi-conf (2.3.0, or 2.2.3 on systems older than
+  glibc 2.39 such as Ubuntu 22.04; checked by SHA-256, also from offline packs) and runs it only while wanted — on that screen, or also
+  when there is no network, or always — with a key made for this device
+  (shown on the screen) instead of "pisugar", its own information (version,
+  battery, temperature, memory, up time) and commands (restart mFruit OS,
+  reboot, shut down safely). Bluetooth is put back as it was, and pairing a
+  keyboard in Settings → Bluetooth pauses it. `mfruitctl wifi-setup
+  start|stop|status`; `install.sh --no-wifi-setup` skips it. Settings → Wi-Fi
+  now opens the Wi-Fi page (network, address, Choose a network…, Phone
+  Setup) instead of jumping straight into Connect WiFi
+  ([ADR 0013](docs/platform/ADR/0013-phone-wifi-setup.md)).
+
+### Changed (2026-10-10)
+- `scripts/deploy.sh` keeps one folder per device: the device's `~/MFruitOS`
+  becomes an exact copy of the checkout (same commit when it is a git clone,
+  removed files removed, its `.git` and offline packs kept); `--sync-only`
+  syncs without installing.
+- **The name is now "mFruit OS"** (small m) everywhere: screens, the boot
+  logo letter, messages, documentation and the mFruit App SDK. Repository,
+  folder, service and package names (`MFruitOS`, `mfruitos`, `mfruit-os`,
+  `whisplay-os.service`) are unchanged so existing installations keep working.
 
 ### Fixed (2026-10-06, AI Chatbot 1.0.2)
 - **AI Chatbot no longer loses the microphone after a quick press.** A
@@ -48,7 +99,7 @@ the OS version.
 
 ### Added (2026-10-05)
 - **New apps appear in the Fruit Store without an OS update.** The Store
-  downloads its list from MFruit OS's GitHub repository when it opens
+  downloads its list from mFruit OS's GitHub repository when it opens
   (setting `updater.online_catalog`, on by default) and falls back to the
   list shipped with the OS when offline. Entries this OS version cannot
   install are left out; entries can declare `min_os_version`.
@@ -80,7 +131,7 @@ the OS version.
   folder.
 
 ### Whisplay driver included
-- **No separate Whisplay installation.** MFruit OS now carries the Whisplay
+- **No separate Whisplay installation.** mFruit OS now carries the Whisplay
   HAT driver in `drivers/whisplay`: the display, button and LED driver, the
   `whisplay-daemon` hardware service and the sound card driver, copied
   unmodified from PiSugar/Whisplay `c73051e`. `scripts/install.sh` installs it
@@ -108,7 +159,7 @@ the OS version.
 
 ### Fixed
 - Keyboards work again in plain Whisplay apps such as Jump Game and Flappy
-  Bird: MFruit OS holds the keyboards, so it now forwards **Esc** (leave the
+  Bird: mFruit OS holds the keyboards, so it now forwards **Esc** (leave the
   app, as the daemon does) and **Space** (the app's button) to foreground apps
   that do not use the key hub. Restart whisplay-daemon once after updating so
   its wrapper provides the new `mfruit.app.key` command.
@@ -130,13 +181,13 @@ the OS version.
 - **RadioConnect is in the Fruit Store; Messenger and WalkieTalkie are not.**
   RadioConnect replaces both. Copies already installed stay on the device, and
   their pages in the Fruit Store still uninstall and delete them.
-- **Native catalogue entries:** `"native": true` installs an MFruit OS package
+- **Native catalogue entries:** `"native": true` installs an mFruit OS package
   exactly as published (own manifest and hooks), pinned by commit and SHA-256.
 - **The App installer is now the Fruit Store:** each app has a page to open,
   update, roll back, reset, uninstall and delete it.
 - **Uninstall and delete are two steps, each confirmed:** Uninstall removes the
   app and keeps its data (installing it again brings it back); Delete data
-  removes what MFruit OS still keeps. Reset app empties an installed app's data.
+  removes what mFruit OS still keeps. Reset app empties an installed app's data.
   Also `mfruitctl uninstall|delete|reset|rollback <app_id>`.
 - **Daemon apps can be removed:** apps registered directly with whisplay-daemon
   (such as the leftover *WiFi Config*) can be uninstalled; their own files stay.
@@ -169,7 +220,7 @@ the OS version.
 ### Tests
 - The launch-window daemon-page test no longer fails intermittently (5 of 20
   runs before). Root cause: whisplay-daemon sometimes treats a hold as a tap
-  while a launch is pending, so no page opened; MFruit OS was correct. The
+  while a launch is pending, so no page opened; mFruit OS was correct. The
   test now waits on the observed daemon state and retries across daemon
   pages, and a new deterministic test opens the page through the daemon API.
 - Regression tests for sideloaded folders (escaping symlinks, special files,
@@ -214,12 +265,12 @@ the OS version.
 - Keep documentation in installed versions; close test fixture resources and
   remove tracked Python bytecode.
 
-- MFruit OS branding in app labels, diagnostics, CLI help and package errors.
+- mFruit OS branding in app labels, diagnostics, CLI help and package errors.
   Messenger's app description is Radio Message. Existing hardware identifiers,
   service names, paths and launch behavior stay compatible.
 - Grouped Settings with coloured icon tiles, Wi-Fi and Bluetooth first, and
   About, Software Update, diagnostics and power under General.
-- Settings → Wi-Fi now opens Connect WiFi directly as one MFruit-styled
+- Settings → Wi-Fi now opens Connect WiFi directly as one mFruit-styled
   network manager, with connection/IP status, nearby and hidden networks,
   saved-profile joining, password recovery and phone setup in one flow. It
   returns to Settings on exit, stays in Apps for management and leaves Home.
@@ -242,27 +293,27 @@ the OS version.
   copies cannot break the Linux launch gate; refresh boot and Settings images.
 - Boot draws only the centred logo on a dark background; startup steps stay
   in the log and configuration errors remain visible after boot.
-- SDK 1.2.0: MFruit OS exclusively grabs keyboards and routes each key to
+- SDK 1.2.0: mFruit OS exclusively grabs keyboards and routes each key to
   the foreground owner through its key hub. This prevents keys reaching tty1's
   autologin shell and accidentally executing a launcher restart.
 - Deploy the matching SDK to keyboard apps with this release. Daemon desktop
-  mode releases the keyboard grab; returning to MFruit OS takes it again.
+  mode releases the keyboard grab; returning to mFruit OS takes it again.
 
 ## [1.3.0] - 2026-09-30
 
 ### Added
-- **The MFruit App SDK 1.1.0** (`mfruitos/sdk/`, copied into apps as `mfruit_sdk`
+- **The mFruit App SDK 1.1.0** (`mfruitos/sdk/`, copied into apps as `mfruit_sdk`
   with `scripts/sdk-sync.sh`): one input controller for the button and USB or
-  Bluetooth keyboards, and MFruit OS's look — status bar (page name, WiFi,
+  Bluetooth keyboards, and mFruit OS's look — status bar (page name, WiFi,
   battery), footer hints, lists, toast, text field, theme, fonts, RGB565.
   Keys count only while the app has the screen, and only keys pressed while
   it did. Talk screens talk on a hold or Space.
-- **Keyboard control in MFruit OS**: arrows move, Enter opens, Esc goes back.
-  MFruit OS registers with `disable_esc_exit_key`, so Esc is its "back" rather
+- **Keyboard control in mFruit OS**: arrows move, Enter opens, Esc goes back.
+  mFruit OS registers with `disable_esc_exit_key`, so Esc is its "back" rather
   than the daemon's close.
-- `docs/APP_RULES.md`: the rules every MFruit OS app follows (controls,
+- `docs/APP_RULES.md`: the rules every mFruit OS app follows (controls,
   registration, screen layout, tests), also used as a Claude rule in each app.
-- The app template is an MFruit app: SDK controls and look, Esc and four
+- The app template is an mFruit app: SDK controls and look, Esc and four
   clicks as its own "back".
 - `mfruit-run` exports `MFRUIT_HOME` and `MFRUIT_SESSION` to apps.
 - Diagnostics lists the keyboards being read; `mfruitctl status` shows them
@@ -273,20 +324,20 @@ the OS version.
   polls while idle, in the keyboard reader or the button worker.
 
 ### Apps converted (their own repositories)
-- Crypto dashboard, WalkieTalkie, Messenger: MFruit OS controls (menus and
+- Crypto dashboard, WalkieTalkie, Messenger: mFruit OS controls (menus and
   lists: tap next · 2× previous · hold open · 4× back; hold or Space talks on
-  talk screens), keyboard support, MFruit OS status bar and footer.
+  talk screens), keyboard support, mFruit OS status bar and footer.
 - AI chatbot: typed questions from a keyboard (Enter asks, Space held talks,
-  Esc clears or leaves), MFruit OS status bar and footer hints.
+  Esc clears or leaves), mFruit OS status bar and footer hints.
 
 ## [1.2.0] - 2026-09-29
 
 ### Added
 - **Whisplay's own user interface runs in the background.** `install.sh`
   starts whisplay-daemon through `whisplay-daemon-mfruit.py` (systemd
-  drop-in): while MFruit OS runs, the daemon no longer draws its desktop or
+  drop-in): while mFruit OS runs, the daemon no longer draws its desktop or
   its "Opening app…" modal and ignores the button when no app owns the
-  screen. It behaves normally when MFruit OS is not running or in
+  screen. It behaves normally when mFruit OS is not running or in
   Developer → Daemon desktop. Opt out with `install.sh --no-background-daemon`.
 - "Opening <App>" loading screen, shown until the app draws its first frame.
 - Leaving an app closes it completely (exit request, then its process group
@@ -296,7 +347,7 @@ the OS version.
 
 ### Changed
 - Status bar: page name on the left, WiFi strength and battery on the right;
-  the "MFruit OS" title row and the clock are gone, every list shows one more
+  the "mFruit OS" title row and the clock are gone, every list shows one more
   row. Dialogs show a short page label and a full heading.
 - Screens render about 6× faster (text is rasterised once and cached):
   a frame takes ~16 ms instead of ~100 ms on a Pi Zero 2 W.
@@ -313,7 +364,7 @@ Launch lifecycle fixes. Root causes and evidence: docs/LAUNCH_LIFECYCLE.md.
   A hold now arms at 0.7 s ("Release to open") and fires on release.
 - Pressing the button while an app was starting could start a second app
   from the daemon's desktop (RC2/RC3). Every app launch now needs a one-shot
-  ticket from MFruit OS (`mfruit-run` launch gate); daemon pages opened in
+  ticket from mFruit OS (`mfruit-run` launch gate); daemon pages opened in
   that window are closed and the requested app still opens.
 - Launch requests from any source could overlap (RC4). A new core
   ApplicationManager allows one session at a time and ignores reports from
@@ -325,9 +376,9 @@ Launch lifecycle fixes. Root causes and evidence: docs/LAUNCH_LIFECYCLE.md.
 ### Changed
 - Daemon-registered apps are *adopted*: their daemon entry runs through
   `mfruit-run`; the original registration is kept in `~/.whisplay-os/adopted/`
-  and restored by `uninstall.sh`. With MFruit OS stopped they launch exactly
+  and restored by `uninstall.sh`. With mFruit OS stopped they launch exactly
   as before.
-- MFruit OS refuses to start a second instance (`state/launcher.lock`).
+- mFruit OS refuses to start a second instance (`state/launcher.lock`).
 - Structured lifecycle log (EVENT, GESTURE, LAUNCH_REQUEST, STATE, TICKET,
   PROCESS_STARTED, INTRUDER, SESSION_END, STALE_EVENT, LAUNCH_REJECTED).
 

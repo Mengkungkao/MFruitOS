@@ -3,7 +3,7 @@
 With a LoRa HAT on stock jumpers the backlight pin is the radio's M0: any
 dimming (PWM) or screen-off deafens the radio (measured: 0/20 packets at
 80% and 15%, 40/40 at 100%; KI-11). An app such as RadioConnect asks, through
-the SDK, to keep running and to keep the screen bright; MFruit OS then holds
+the SDK, to keep running and to keep the screen bright; mFruit OS then holds
 the backlight at 100% only while that app runs in the background.
 """
 

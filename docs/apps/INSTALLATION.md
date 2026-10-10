@@ -1,6 +1,6 @@
 # Installing apps
 
-The ways an app gets onto an MFruit OS device, and what each one does. All
+The ways an app gets onto an mFruit OS device, and what each one does. All
 native installs run through the same pipeline
 ([Update and rollback](UPDATE_ROLLBACK.md#the-pipeline)); afterwards the app is
 registered with whisplay-daemon through `mfruit-run`, enabled, and **not** set
@@ -42,7 +42,7 @@ Installing one:
 4. copies the current platform SDK into the package as `mfruit_sdk/`;
 5. runs the normal pipeline (hooks, smoke test, activation).
 
-An entry marked `"native": true` (RadioConnect) is a native MFruit OS package
+An entry marked `"native": true` (RadioConnect) is a native mFruit OS package
 and is installed exactly as published: steps 2–4 are skipped. Only its
 `manifest.json` `id` and `version` must match the entry's `id` and `version`.
 Its own hooks run, and it updates from its GitHub releases like any native
@@ -78,7 +78,7 @@ bash ~/.whisplay-os/system/current/scripts/setup-app.sh --check whisplay-ai-chat
 It installs only the missing packages, with sudo through `scripts/offline.sh`
 (an offline pack when there is one, otherwise apt-get), then queues the app;
 the launcher installs it by itself, through the same job as the Store's
-Install. `scripts/install.sh --app <id>` does the same while installing MFruit
+Install. `scripts/install.sh --app <id>` does the same while installing mFruit
 OS, and without `--app` the installer offers such apps. The app's own
 `install.sh` still checks what it needs and stops with the same instruction.
 
@@ -113,10 +113,10 @@ Discovery lists repositories with the topic in `updater.discovery_topic`
 ## Git checkouts and adopted apps
 
 An app installed by `git clone` and its own installer appears as a daemon app.
-MFruit OS adopts it: the original daemon registration is saved in
+mFruit OS adopts it: the original daemon registration is saved in
 `~/.whisplay-os/adopted/<id>/` and the app is re-registered with `mfruit-run`
-so the launch gate applies; uninstalling MFruit OS restores the original. If
-the app folder is inside a Git repository, MFruit OS offers commit-tracking
+so the launch gate applies; uninstalling mFruit OS restores the original. If
+the app folder is inside a Git repository, mFruit OS offers commit-tracking
 updates ([Update and rollback](UPDATE_ROLLBACK.md#apps-installed-as-git-checkouts)).
 Adoption alone does not make an app a native package
 ([Migrating an existing app](MIGRATING_EXISTING_APP.md)).

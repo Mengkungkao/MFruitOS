@@ -49,7 +49,7 @@ daemon registrations, service definitions, previous active version
 - **Problem:** `test_press_during_launch_window_page_is_closed` intermittently
   did not log `INTRUDER app=whisplay-volume`, although the requested slow app
   opened (reported on the Pi on 2026-10-01).
-- **Hypothesis from 2026-10-01:** the second hold began while MFruit OS still
+- **Hypothesis from 2026-10-01:** the second hold began while mFruit OS still
   owned the screen. **Disproved here:** in every diagnostic run the daemon
   state before the hold was `foreground=None pending=slow`.
 - **Evidence:** failing run — `BUTTON press` 3.535 s, `BUTTON release`
@@ -63,7 +63,7 @@ daemon registrations, service definitions, previous active version
   window. The release then measures 0 s and the desktop treats the hold as a
   tap. A daemon defect
   ([Host API fact 8](../../platform/HOST_API.md#whisplay-daemon-facts-the-design-depends-on));
-  MFruit OS behaved correctly in all runs.
+  mFruit OS behaved correctly in all runs.
 - **Fix (test only):** wait for the observed launch window (`foreground` None,
   `pending` = app) instead of `sleep(0.2)`; start on the first of the
   consecutive daemon pages and hold again while the selection is a page; skip

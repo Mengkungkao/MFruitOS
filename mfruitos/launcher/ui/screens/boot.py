@@ -11,14 +11,14 @@ PENDING, RUNNING, DONE, FAILED = "pending", "running", "done", "failed"
 
 
 def draw_logo(p: Painter, cx: int, cy: int, size: int) -> None:
-    """The MFruit mark: an accent tile with a leaf and an 'M'."""
+    """The mFruit mark: an accent tile with a leaf and a lowercase 'm'."""
     t = p.theme
     half = size // 2
     p.rounded((cx - half, cy - half, cx + half, cy + half), size // 4, fill=t.accent)
     leaf = size // 5
     p.draw.ellipse((cx + half // 5, cy - half - leaf // 2, cx + half // 5 + leaf, cy - half + leaf // 2),
                    fill=t.success)
-    p.text(cx, cy + 2, "M", int(size * 0.55), "bold", (255, 255, 255), anchor="mm")
+    p.text(cx, cy + 2, "m", int(size * 0.6), "bold", (255, 255, 255), anchor="mm")
 
 
 class BootScreen(Screen):

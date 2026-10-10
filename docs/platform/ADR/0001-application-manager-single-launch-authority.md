@@ -33,7 +33,7 @@ a refused request is visible in the log with its source. The UI must check
 
 ## Compatibility
 
-No app-visible change. Apps started outside MFruit OS while it is idle are
+No app-visible change. Apps started outside mFruit OS while it is idle are
 adopted as `external` sessions.
 
 ## Validation

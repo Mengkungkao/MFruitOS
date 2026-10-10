@@ -1,6 +1,6 @@
 # Roadmap
 
-Where MFruit OS is going, in dependency order, with acceptance criteria
+Where mFruit OS is going, in dependency order, with acceptance criteria
 instead of dates. Every item is **PLANNED** until its evidence is recorded in
 [quality records](../quality/records/README.md). Current behavior is in
 [Architecture](ARCHITECTURE.md); the rules for getting there are in
@@ -35,7 +35,7 @@ instead of dates. Every item is **PLANNED** until its evidence is recorded in
 |---|---|---|---|
 | 1. Reliable baseline | Resolve the launch-window test using observed state; CI; full suite green | Regression fails with its guard removed; repeated runs stable; full suite recorded with skips disclosed; CI runs on every change | Test fixed and stable on a dev machine (2026-10-02); full-suite and CI evidence in [records](../quality/records/README.md); a Pi rerun is NOT VERIFIED |
 | 2. Repeatable integration | Template + one app contract; sideload safety; release packaging; install/update/rollback with disposable data | A clean checkout becomes an installable app without launcher edits; lifecycle results recorded; `check-app.py` and SDK sync pass for released apps | In progress |
-| 3. Host boundaries | Steps 1–6 of [Part I §25](DEVELOPMENT_RULES.md#25-current-whisplay-migration-strategy), see [Host API](HOST_API.md#planned-host-interfaces) and [ADR 0005](ADR/0005-incremental-host-boundary-extraction.md) | Whisplay regressions intact; core contract tests run without a Whisplay checkout; temporary coupling documented | PLANNED |
+| 3. Host boundaries | Steps 1–6 of [Part I §25](DEVELOPMENT_RULES.md#25-current-whisplay-migration-strategy), see [Host API](HOST_API.md#planned-host-interfaces) and [ADR 0005](ADR/0005-incremental-host-boundary-extraction.md) | Whisplay regressions intact; core contract tests run without a Whisplay checkout; temporary coupling documented | PLANNED; the battery board boundary (part of step 6) is IMPLEMENTED ([ADR 0012](ADR/0012-own-power-management.md)) |
 | 4. Offline host | MockHost (step 7), then shared contract tests (step 8), documented recovery/diagnostic commands | Navigate, launch a fake app, stop it, inspect failure, change settings and exercise disposable package operations without a daemon or HAT | PLANNED |
 | 5. Broader hardware and app services | Second adapter; notifications/permissions only when an app needs them | Second host passes shared contract tests and its own physical checklist; any permission claim has enforcement tests | PLANNED |
 

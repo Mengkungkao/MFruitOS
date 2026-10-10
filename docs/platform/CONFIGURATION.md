@@ -1,6 +1,6 @@
 # Configuration
 
-MFruit OS has one persistent settings file, a small set of environment
+mFruit OS has one persistent settings file, a small set of environment
 variables and command-line options, and two read-only configuration files
 shipped with the code. The schema in `mfruitos/system/settings.py` (`SCHEMA`)
 is the single source of truth; this document describes it. Do not read or
@@ -37,7 +37,7 @@ python3 -m mfruitos.system.settings --dump-defaults > config/default.json
 
 | Key | Default | Accepted values | Effect |
 |---|---|---|---|
-| `display.brightness` | 80 | 5–100 | backlight level while MFruit OS is in front |
+| `display.brightness` | 80 | 5–100 | backlight level while mFruit OS is in front |
 | `display.auto_dim` | true | bool | dim after `dim_after_sec` |
 | `display.dim_after_sec` | 30 | 10, 15, 30, 60, 120 | idle time before dimming |
 | `display.dim_level` | 15 | 1–60 | dimmed brightness |
@@ -81,6 +81,22 @@ Gesture actions: `next`, `previous`, `select`, `back`, `home`, `none`. LED
 colours: `off`, `white`, `blue`, `cyan`, `green`, `yellow`, `orange`, `red`,
 `purple`, `pink`.
 
+### Wi-Fi from a phone
+
+| Key | Default | Meaning |
+|---|---|---|
+| `wifi_setup.mode` | `screen` | when PiSugar's sugar-wifi-conf runs: `screen` (only while Settings → Wi-Fi → Phone Setup is open), `offline` (also whenever there is no network), `always` ([ADR 0013](ADR/0013-phone-wifi-setup.md)) |
+| `wifi_setup.key` | `""` | the key phones must give (6–32 letters and digits); made on first use (8 characters) and shown on the screen — a secret |
+| `wifi_setup.name` | `""` | its Bluetooth name; empty uses the controller's own name |
+
+The tool's own config is generated as `state/sugar-wifi-conf.json` (mode
+0600): information (mFruit OS version, battery, CPU temperature, memory, up
+time) and commands (restart mFruit OS, reboot, shut down). A valid
+`config/sugar-wifi-conf.json` in the same format (`info`: label of at most
+20 bytes, command, interval; `commands`: label, command) replaces it; its
+commands run as the mFruit user. The tool's log, with everything a phone
+typed removed, is `logs/wifi-setup.log`.
+
 ### Removed keys
 
 Keys from older versions are ignored when loaded (no error) and dropped on the
@@ -106,15 +122,15 @@ its default and stays distinguishable from an explicit choice.
 
 ### Secrets
 
-`updater.github_token` is stored in plain text in `settings.json` (mode set by
-the user's umask). Never commit a settings file, paste a token into a test,
+`updater.github_token` and `wifi_setup.key` are stored in plain text in
+`settings.json` (mode set by the user's umask). Never commit a settings file, paste a token into a test,
 example or log, or include it in a validation record.
 
 ## Environment variables
 
 | Variable | Read by | Meaning |
 |---|---|---|
-| `WHISPLAY_OS_HOME` | platform, `mfruit-run`, `boot-guard.sh`, SDK | MFruit OS data directory (default `~/.whisplay-os`) |
+| `WHISPLAY_OS_HOME` | platform, `mfruit-run`, `boot-guard.sh`, SDK | mFruit OS data directory (default `~/.whisplay-os`) |
 | `WHISPLAY_DAEMON_HOME` | platform | whisplay-daemon data directory (default `~/.whisplay-daemon`) |
 | `MFRUIT_HOME`, `MFRUIT_SESSION` | SDK (set by `mfruit-run`) | data directory and launch session for the running app |
 | `MFRUIT_KEYS_SOCKET` | SDK | override the key hub socket path |
@@ -141,10 +157,39 @@ PNGs. `mfruitctl help` lists the control commands.
 | `keys.json` | radio apps | this radio's X25519 key and broadcast key, and each paired radio's keys — **secret** |
 | `contacts.json` | radio apps | names of paired radios |
 
+## Power settings
+
+`~/.whisplay-os/config/power.json`, written only by the power service
+(`mfruit-power.service`, [ADR 0012](ADR/0012-own-power-management.md)).
+The launcher's Settings → Battery and `mfruitctl power set KEY VALUE` change
+it through the service, which validates, applies to the board and saves
+atomically. A broken file is kept as `power.json.broken-<timestamp>` and the
+defaults are used; one invalid entry falls back alone. On the first start,
+settings of PiSugar's own power manager (`/etc/pisugar-server/config.json`
+and the model in `/etc/default/pisugar-server`) are imported once.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `model` | `auto` | `auto` (detect), `pisugar3`, `pisugar2-4led`, `pisugar2-2led`, `pisugar2-pro`, or `none` (power management off; the bus is not opened) |
+| `i2c_bus` | 1 | I2C bus (`/dev/i2c-N`) |
+| `i2c_address` | null | PiSugar 3 address when changed from 0x57 |
+| `safe_shutdown_level` | 5 | power off below this charge (%) while unplugged; 0 = off; at most 30 |
+| `safe_shutdown_delay` | 30 | countdown in seconds before that power-off (0–120); external power cancels it |
+| `button_double`, `button_long` | `none` | board button action: `none`, `home`, `screen` (screen off/on), `power_menu`; a single press is whisplay-daemon's Home |
+| `soft_poweroff`, `anti_mistouch`, `power_restore`, `battery_protect` | null | board settings (PiSugar 3; `power_restore` also PiSugar 2 with its clock); null = leave the board as it is |
+| `charging_range` | null | `[start, stop]` % for boards that can switch charging (PiSugar 2 2-LED and Pro) |
+| `full_charge_duration` | 300 | seconds to keep charging once the range's stop level is reached |
+| `wake_time`, `wake_days` | null, 127 | wake alarm in local time `HH:MM` and weekday mask (bit 0 = Sunday); not with `power_restore` |
+| `rtc_sync` | true | move the clock forward from the board's clock at boot when not synchronised; save the synchronised time to the board |
+| `battery_curve` | null | your own `[[volts, percent], …]` (rising), replacing the board's curve |
+| `compat_socket` | true | serve PiSugar's protocol on `/tmp/pisugar-server.sock` |
+| `power_off_at_shutdown` | true | the shutdown hook switches the board off after a power-off |
+| `tap_hooks` | off | `{single|double|long: {enabled, shell}}`, set by clients through PiSugar's protocol (`set_button_shell`); run as the mFruit user |
+
 ## Shipped configuration files
 
 | File | Purpose |
 |---|---|
 | `config/default.json` | generated defaults reference (see above) |
 | `config/catalog.json` | curated Fruit Store catalogue: per app `id`, `name`, `description`, `repository`, pinned `ref`, archive `url`, `sha256`, Python `entry`, `dependencies` and optional `requires` (device capabilities, e.g. `radio`), `min_os_version` and `system_packages` (Debian packages installed once by `scripts/setup-app.sh`); a native package instead has `"native": true` and its `version`. The same file on the default branch of `system.repository` is the online list ([App installation](../apps/INSTALLATION.md#curated-catalogue)) |
-| `manifest.json` | MFruit OS's own system package manifest (`type: system`) |
+| `manifest.json` | mFruit OS's own system package manifest (`type: system`) |

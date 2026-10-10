@@ -1,6 +1,6 @@
 """Long-lived ``events.subscribe`` stream with automatic reconnect.
 
-MFruit OS subscribes *globally* (no app_id). whisplay-daemon only sends
+mFruit OS subscribes *globally* (no app_id). whisplay-daemon only sends
 ``desktop_entered``, ``screen_locked`` and ``screen_unlocked`` to global
 subscribers, and those are exactly the signals the OS needs to take the
 screen back after an app exits. Global subscribers also receive app-scoped

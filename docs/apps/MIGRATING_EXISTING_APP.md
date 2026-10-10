@@ -1,20 +1,20 @@
 # Migrating an existing app
 
-How an existing whisplay-daemon app becomes a native MFruit OS package, and
+How an existing whisplay-daemon app becomes a native mFruit OS package, and
 how to tell the stages apart. Until the full package lifecycle is validated,
 call it an **adopted app**, not a native package
 ([Part I §12](../platform/DEVELOPMENT_RULES.md#12-app-integration-guide)).
 
-## What MFruit OS does with an existing app today
+## What mFruit OS does with an existing app today
 
 Any app registered with whisplay-daemon (`~/.whisplay-daemon/app/<id>.json`) is
 discovered and **adopted**: its original registration is saved in
 `~/.whisplay-os/adopted/<id>/` and the app is re-registered with
-`mfruit-run <id>`, so it starts only through MFruit OS's launch gate. With
-MFruit OS stopped or uninstalled it launches exactly as before. If the app is
+`mfruit-run <id>`, so it starts only through mFruit OS's launch gate. With
+mFruit OS stopped or uninstalled it launches exactly as before. If the app is
 a Git checkout, commit-tracking updates are offered.
 
-Adoption gives launching, exit handling and process clean-up. Because MFruit
+Adoption gives launching, exit handling and process clean-up. Because mFruit
 OS holds the keyboards, an adopted app that reads `/dev/input` itself gets
 only the keyboard bridge: Esc (the daemon's exit) and Space as its button
 ([SDK](SDK.md#keyboard-input-and-the-key-hub)); move it to the SDK for
@@ -28,8 +28,8 @@ Write down, before changing anything:
 
 | Question | Why it matters |
 |---|---|
-| Hardware access: does it open GPIO, SPI, `/dev/input` or the display itself? | MFruit OS and whisplay-daemon own these; the app must use the daemon and the SDK |
-| Direct daemon calls: `app.register` with a launch command, `app.launch`, focus handling | registration belongs to MFruit OS; other apps are never launched |
+| Hardware access: does it open GPIO, SPI, `/dev/input` or the display itself? | mFruit OS and whisplay-daemon own these; the app must use the daemon and the SDK |
+| Direct daemon calls: `app.register` with a launch command, `app.launch`, focus handling | registration belongs to mFruit OS; other apps are never launched |
 | Configuration files and where they live | must move to the data directory or `persist` |
 | Dependencies: Python, Node, system packages, models | must install noninteractively from `install.sh` or a release artifact |
 | Data locations, including paths outside the checkout and sibling repositories | updates replace the code folder; only managed data is snapshotted |
@@ -73,7 +73,7 @@ adoption meanwhile.
 
 | App | Work still required before native release sign-off |
 |---|---|
-| ConnectWifi | Bundled with MFruit OS and provisioned on install; native manifest for an independent release and an install-time smoke hook absent; adapt its standalone setup/registration for managed installation. |
+| ConnectWifi | Bundled with mFruit OS and provisioned on install; native manifest for an independent release and an install-time smoke hook absent; adapt its standalone setup/registration for managed installation. |
 | WalkieTalkie | Native manifest and smoke hook; keep radio/codec/system setup separate from repeatable hooks; preserve managed registration. |
 | Messenger | Manifest exists but lacks a minimum OS version and smoke hook; persist or relocate downloaded `models/`; migrate data into the managed data contract; replace the assumption of a sibling `WalkieTalkie/config.yaml`. |
 | Crypto dashboard | Native manifest and smoke hook; adapt the standalone installer (system packages, direct daemon registration) for a noninteractive managed lifecycle; account for external configuration and data. |

@@ -2,7 +2,7 @@
 
 whisplay-daemon forwards ``button_pressed`` / ``button_released`` to the
 foreground app and leaves interpretation to it (daemon desktop gestures only
-apply when no app is foreground). MFruit OS registers with
+apply when no app is foreground). mFruit OS registers with
 ``exit_gesture: "none"`` so the daemon does not also count quad-clicks on the
 OS itself; this recognizer is therefore the only interpreter — no competing
 gesture system.

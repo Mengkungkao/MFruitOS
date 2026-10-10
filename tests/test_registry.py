@@ -36,7 +36,7 @@ class RegistryTests(TempHomeTestCase):
         self.daemon_app("mfruit-os")
         live = [{"app_id": "legacy", "display_name": "Legacy", "running": True},
                 {"app_id": "weather", "display_name": "Weather"},
-                {"app_id": "mfruit-os", "display_name": "MFruit OS"},
+                {"app_id": "mfruit-os", "display_name": "mFruit OS"},
                 {"app_id": "whisplay-wifi", "display_name": "WiFi"}]
         self.registry.refresh(live)
         ids = {e.id: e.kind for e in self.registry.all()}

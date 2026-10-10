@@ -56,13 +56,13 @@ screen only wakes it.
 
 - Colours from `mfruit_sdk.ui.theme.DARK` (or `LIGHT`); fonts from
   `mfruit_sdk.ui.fonts`. An app may keep one brand accent inside its content
-  (for example Bitcoin orange); chrome stays MFruit.
+  (for example Bitcoin orange); chrome stays mFruit.
 - Sentence case ("Refreshing…", "Network error"), not ALL CAPS. Hint labels:
   `tap`, `2×`, `3×`, `4×`, `hold`, `release`.
 
 ## Performance
 
-Draw the first frame as soon as possible: until then the user sees MFruit OS's
+Draw the first frame as soon as possible: until then the user sees mFruit OS's
 "Opening <App>" screen. Render only when state changes, convert with
 `to_rgb565`, and keep network, radio and model work off the input and render
 path.

@@ -1,7 +1,7 @@
 """In-process fake of whisplay-daemon for integration tests.
 
 It mirrors the semantics of the real daemon (whisplay_daemon.py, upstream
-1066486) that MFruit OS depends on:
+1066486) that mFruit OS depends on:
 
 * app.launch is refused while another app is foreground;
 * app.focus.acquire is refused while another app is foreground or pending;

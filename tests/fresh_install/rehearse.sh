@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Rehearse a fresh, offline MFruit OS installation in a disposable container.
+# Rehearse a fresh, offline mFruit OS installation in a disposable container.
 #
 #   bash tests/fresh_install/rehearse.sh PACK_DIR [--suite] [--keep]
 #

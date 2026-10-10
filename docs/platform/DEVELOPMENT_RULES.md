@@ -1,6 +1,6 @@
-# MFruit OS development rules
+# mFruit OS development rules
 
-This is the canonical rule set for everyone who changes MFruit OS: people and
+This is the canonical rule set for everyone who changes mFruit OS: people and
 coding agents. **Part I** is the project constitution: the principles, priorities
 and quality language that govern every change. **Part II** applies those
 principles to the code in this repository today.
@@ -16,7 +16,7 @@ direction and its status are in the [Roadmap](ROADMAP.md).
 
 # Part I — Project shaping, architecture and development constitution
 
-You are acting as the senior platform architect, software engineer, integration engineer and quality engineer for **MFruit OS**.
+You are acting as the senior platform architect, software engineer, integration engineer and quality engineer for **mFruit OS**.
 
 Repository:
 
@@ -24,7 +24,7 @@ https://github.com/Mengkungkao/MFruitOS
 
 Your job is not merely to implement requested features.
 
-Your responsibility is to continuously shape MFruit OS into a platform that is:
+Your responsibility is to continuously shape mFruit OS into a platform that is:
 
 1. easy for users to operate,
 2. easy for developers to understand and maintain,
@@ -61,9 +61,9 @@ Preserve user data, existing applications, update history and backwards compatib
 
 The platform is called:
 
-MFruit OS
+mFruit OS
 
-MFruit OS is an application operating environment for small Linux devices.
+mFruit OS is an application operating environment for small Linux devices.
 
 It is NOT:
 
@@ -75,7 +75,7 @@ It is NOT:
 
 Whisplay is currently an important host/hardware integration.
 
-It must not define the long-term architecture of MFruit OS.
+It must not define the long-term architecture of mFruit OS.
 
 Always distinguish between:
 
@@ -94,9 +94,9 @@ Shape the system toward this dependency direction:
 ```text
 Application
     ↓
-MFruit App API / SDK
+mFruit App API / SDK
     ↓
-MFruit Platform Services
+mFruit Platform Services
     ↓
 Host Interface
     ↓
@@ -134,13 +134,13 @@ Examples:
 
 Apps own their application-specific features.
 
-Apps must integrate through the documented MFruit app contract.
+Apps must integrate through the documented mFruit app contract.
 
-Apps must not modify MFruit OS source code to install normally.
+Apps must not modify mFruit OS source code to install normally.
 
-### Layer B — MFruit App API / SDK
+### Layer B — mFruit App API / SDK
 
-The SDK is the stable contract between applications and MFruit OS.
+The SDK is the stable contract between applications and mFruit OS.
 
 It may expose capabilities such as:
 
@@ -295,7 +295,7 @@ or:
 ```text
 Generic application
  ↓
-MFruit launcher internals
+mFruit launcher internals
 ```
 
 Circular architecture is prohibited.
@@ -321,7 +321,7 @@ If responsibility is unclear, stop and define ownership before adding another ab
 
 ## 7. User experience rules
 
-MFruit OS targets small displays and limited input.
+mFruit OS targets small displays and limited input.
 
 Every user-facing screen must make clear:
 
@@ -332,7 +332,7 @@ Every user-facing screen must make clear:
 
 Navigation must remain deterministic.
 
-Default actions must remain consistent across the OS and native MFruit applications.
+Default actions must remain consistent across the OS and native mFruit applications.
 
 A long press must not accidentally trigger an action before release if the established lifecycle requires hold-and-release behavior.
 
@@ -356,7 +356,7 @@ rather than leaving the user stuck.
 
 ## 8. Resource rules
 
-MFruit OS runs on small Linux boards.
+mFruit OS runs on small Linux boards.
 
 Prefer:
 
@@ -385,7 +385,7 @@ rollback impact.
 
 ## 9. App integration contract
 
-A third-party application should ideally be integratable without changing MFruit OS itself.
+A third-party application should ideally be integratable without changing mFruit OS itself.
 
 The supported application lifecycle should be:
 
@@ -402,7 +402,7 @@ CREATE
 → UNINSTALL
 ```
 
-A native MFruit app should have a documented application manifest.
+A native mFruit app should have a documented application manifest.
 
 Manifest fields must have:
 
@@ -452,13 +452,13 @@ Updates must preserve persistent user data unless an explicit tested migration c
 
 Each application owns its application-specific dependencies.
 
-Avoid adding application dependencies to the MFruit OS core.
+Avoid adding application dependencies to the mFruit OS core.
 
 Apps should use isolated/reproducible dependency installation where feasible.
 
 System-level dependencies must be explicit.
 
-Installation must be noninteractive when managed by MFruit OS.
+Installation must be noninteractive when managed by mFruit OS.
 
 Apps must never secretly require manual setup that is absent from their documentation.
 
@@ -473,7 +473,7 @@ How to:
 - copy/start from template;
 - choose application ID;
 - create manifest;
-- use MFruit SDK;
+- use mFruit SDK;
 - store data;
 - add dependencies;
 - test locally;
@@ -486,7 +486,7 @@ How to:
 
 ### Existing application
 
-Document how to migrate an existing Whisplay/daemon app into a native MFruit package.
+Document how to migrate an existing Whisplay/daemon app into a native mFruit package.
 
 Identify:
 
@@ -498,7 +498,7 @@ Identify:
 - lifecycle assumptions;
 - update behavior.
 
-Do not claim an adopted daemon application is a complete native MFruit package unless the complete package lifecycle has been validated.
+Do not claim an adopted daemon application is a complete native mFruit package unless the complete package lifecycle has been validated.
 
 ## 13. SDK distribution
 
@@ -518,7 +518,7 @@ Long-term SDK distribution may evolve, but do not replace the existing mechanism
 
 ## 14. Installation architecture
 
-MFruit OS installation must be:
+mFruit OS installation must be:
 
 - repeatable;
 - idempotent where practical;
@@ -640,7 +640,7 @@ Fast and hardware independent.
 
 ### Level 2 — Integration
 
-Multiple MFruit services together.
+Multiple mFruit services together.
 
 Use controlled fake dependencies.
 
@@ -730,7 +730,7 @@ Every validation record should contain:
 
 ## 22. Documentation architecture
 
-MFruit OS documentation has three major domains.
+mFruit OS documentation has three major domains.
 
 ### A. Platform / OS development
 
@@ -884,7 +884,7 @@ Validate:
 
 Never allow package extraction to escape its staging directory.
 
-Do not claim MFruit OS provides a security sandbox unless actual isolation/enforcement exists and is tested.
+Do not claim mFruit OS provides a security sandbox unless actual isolation/enforcement exists and is tested.
 
 Capabilities/permissions may be added later, but documentation must distinguish design intent from enforcement.
 
@@ -1008,7 +1008,7 @@ Do not sacrifice lifecycle correctness for visual features.
 
 ## 35. Project shaping loop
 
-Periodically review MFruit OS using this loop:
+Periodically review mFruit OS using this loop:
 
 ```text
 OBSERVE
@@ -1038,7 +1038,7 @@ For a user:
 
 ```text
 Power on
-→ MFruit OS appears
+→ mFruit OS appears
 → navigation is predictable
 → application opens exactly once
 → application works
@@ -1052,18 +1052,18 @@ For an application developer:
 ```text
 Clone template
 → build app
-→ use MFruit SDK
+→ use mFruit SDK
 → validate
 → sideload
 → test
 → package
 → publish
-→ MFruit OS discovers/installs it.
+→ mFruit OS discovers/installs it.
 ```
 
 No launcher modification should normally be necessary.
 
-For an MFruit OS developer:
+For an mFruit OS developer:
 
 ```text
 Clone repository
@@ -1082,7 +1082,7 @@ No tribal knowledge should be required.
 
 Whenever implementing a feature ask:
 
-- Does this belong in MFruit OS or in an app?
+- Does this belong in mFruit OS or in an app?
 - Does this already have an owner?
 - Am I creating a second implementation of an existing responsibility?
 - Am I introducing hardware-specific behavior into generic code?
@@ -1098,7 +1098,7 @@ If these questions cannot be answered, resolve the architecture before expanding
 
 ## Final project principle
 
-MFruit OS should evolve into a small, predictable platform with strong contracts rather than a large collection of special cases.
+mFruit OS should evolve into a small, predictable platform with strong contracts rather than a large collection of special cases.
 
 Prefer:
 
@@ -1112,13 +1112,13 @@ Prefer:
 - canonical documentation over duplicated instructions,
 - incremental migration over rewrites.
 
-Every change should leave MFruit OS easier for the next user, application developer and platform developer to understand.
+Every change should leave mFruit OS easier for the next user, application developer and platform developer to understand.
 
 ---
 
 # Part II — Applying the rules in this repository
 
-These rules make Part I concrete for the current source tree (MFruit OS 1.4
+These rules make Part I concrete for the current source tree (mFruit OS 1.4
 on whisplay-daemon). Current module ownership is mapped in
 [Architecture](ARCHITECTURE.md#layer-map-current-modules-and-target-layers).
 

@@ -22,7 +22,7 @@ Install options are forwarded unchanged to the existing installer:
   --no-background-daemon   retain the daemon's own desktop between apps
   --yes                    installer noninteractive mode (sudo still needs authorization)
 
-scripts/install.sh installs the MFruit OS Whisplay driver (docs/WHISPLAY_DRIVER.md)
+scripts/install.sh installs the mFruit OS Whisplay driver (docs/WHISPLAY_DRIVER.md)
 when it is missing or out of date; --check only reports its state.
 See docs/platform/INSTALLATION.md for prerequisites, manual setup, tests and recovery.
 EOF
@@ -45,7 +45,7 @@ for arg in "$@"; do
 done
 [ "$MODE" = install ] || [ "${#INSTALL_ARGS[@]}" = 0 ] || fail "installer options require --install"
 
-[ "$(uname -s)" = Linux ] || fail "MFruit OS requires Linux"
+[ "$(uname -s)" = Linux ] || fail "mFruit OS requires Linux"
 [ "$(id -u)" != 0 ] || fail "run as the whisplay-daemon user without sudo"
 command -v python3 >/dev/null || fail "python3 is missing; install your distribution's Python 3.9+ package"
 command -v systemctl >/dev/null || fail "systemd is required for device setup"
@@ -71,10 +71,10 @@ from mfruitos.apps.manifest import ManifestError, load_manifest
 try:
     manifest = load_manifest(sys.argv[1])
 except (ManifestError, OSError) as exc:
-    raise SystemExit(f"FAIL: invalid MFruit OS checkout: {exc}")
+    raise SystemExit(f"FAIL: invalid mFruit OS checkout: {exc}")
 if manifest.id != "mfruit-os" or manifest.type != "system" or manifest.version != __version__:
     raise SystemExit("FAIL: source version and system manifest disagree; use one complete checkout")
-print(f"OK: Python {sys.version.split()[0]}, Pillow {PIL.__version__}, MFruit OS {__version__}")
+print(f"OK: Python {sys.version.split()[0]}, Pillow {PIL.__version__}, mFruit OS {__version__}")
 PY
 
 printf 'Whisplay driver:\n'
@@ -82,6 +82,19 @@ DRIVER_CHECK=0
 bash "$SRC/drivers/whisplay/install.sh" --check | sed 's/^/  /' || DRIVER_CHECK=$?
 [ "$DRIVER_CHECK" != 3 ] || fail "no supported Whisplay board detected (docs/WHISPLAY_DRIVER.md)"
 [ "$DRIVER_CHECK" = 0 ] || ok "scripts/install.sh installs or updates the Whisplay driver (sudo; a reboot when buses or the sound card are new)"
+printf 'Power management:\n'
+if systemctl cat mfruit-power.service >/dev/null 2>&1; then
+  if systemctl is-active --quiet mfruit-power.service; then
+    ok "  mfruit-power.service is active (status: mfruitctl power)"
+  else
+    printf '  WARN: mfruit-power.service is installed but not active (journalctl -u mfruit-power -n 50)\n'
+  fi
+else
+  ok "  not installed yet; scripts/install.sh installs mfruit-power.service (--no-power skips it)"
+fi
+if systemctl is-active --quiet pisugar-server.service 2>/dev/null; then
+  printf "  NOTE: PiSugar's pisugar-server is running; scripts/install.sh stops and disables it\n"
+fi
 if ! systemctl cat whisplay-daemon.service >/dev/null 2>&1; then
   if [ "$MODE" = check ]; then
     printf 'Preflight passed (the driver is installed first). Install with: bash scripts/setup-device.sh --install\n'

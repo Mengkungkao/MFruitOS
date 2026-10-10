@@ -1,9 +1,9 @@
-# Manifests for existing MFruit OS apps
+# Manifests for existing mFruit OS apps
 
-These `manifest.json` files turn existing apps into MFruit OS packages. The
+These `manifest.json` files turn existing apps into mFruit OS packages. The
 Messenger manifest is also included in its app checkout. Copy a file into the root of its
 repository (or the path noted below) when you want the app to be installable
-and updatable through the MFruit OS Updater.
+and updatable through the mFruit OS Updater.
 
 | Repository | App id (matches its daemon registration) | Notes |
 |---|---|---|
@@ -19,10 +19,10 @@ and updatable through the MFruit OS Updater.
 2. Tag a release whose tag matches the manifest version:
    `git tag v1.0.0 && git push origin v1.0.0`, then create a GitHub release from the tag.
 3. Optional but recommended: attach a package archive and a `SHA256SUMS` file
-   so MFruit OS can verify the download.
+   so mFruit OS can verify the download.
 4. Add the GitHub topic `whisplay-app` so the app shows up in *Updater → Install app → Discover*.
 
-Until then, these apps are still fully usable from MFruit OS (they are
+Until then, these apps are still fully usable from mFruit OS (they are
 discovered from the daemon registry), and if they were installed as `git
 clone`s the Updater offers *commit tracking* updates (fast-forward only,
 clean working tree only, rollback to the previous commit).

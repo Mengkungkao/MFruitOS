@@ -21,7 +21,7 @@ Latest Wi-Fi/RGB follow-up (active OS `1.4.0-local20260930054411`):
 
 Earlier deployment checks:
 
-Deployed MFruit OS 1.4.0 and the matching SDK 1.2.0 apps to
+Deployed mFruit OS 1.4.0 and the matching SDK 1.2.0 apps to
 `orangepi@192.168.0.130`. Both systemd services are active.
 
 - Automated Linux suite: 260 tests passed, including the real-daemon harness;

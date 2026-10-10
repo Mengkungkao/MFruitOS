@@ -74,7 +74,7 @@ class CheckAppTests(unittest.TestCase):
         rules = self.root / check_app.RULES_PATH
         rules.write_text("# stale rules\n")
         self.assertIn("SDK differs", self.errors())
-        self.assertIn("differs from MFruit OS docs/apps/APP_CONTRACT.md", self.errors())
+        self.assertIn("differs from mFruit OS docs/apps/APP_CONTRACT.md", self.errors())
         shutil.rmtree(sdk)
         rules.unlink()
         self.assertIn("missing vendored mfruit_sdk", self.errors())

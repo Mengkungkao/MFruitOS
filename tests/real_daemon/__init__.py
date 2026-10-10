@@ -10,7 +10,7 @@ import tempfile
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-# The daemon MFruit OS ships (drivers/whisplay). WHISPLAY_SRC replaces it, e.g.
+# The daemon mFruit OS ships (drivers/whisplay). WHISPLAY_SRC replaces it, e.g.
 # with a newer PiSugar/Whisplay checkout; a WHISPLAY_SRC without a daemon skips
 # the real-daemon tests (the Python 3.9 CI job sets /nonexistent).
 BUNDLED = os.path.join(os.path.dirname(os.path.dirname(HERE)), "drivers", "whisplay")

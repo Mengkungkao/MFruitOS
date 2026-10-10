@@ -1,7 +1,7 @@
-# Installing MFruit OS
+# Installing mFruit OS
 
 This is the canonical guide for preparing a board, installing, verifying,
-updating, rolling back and removing MFruit OS. Failures are diagnosed with
+updating, rolling back and removing mFruit OS. Failures are diagnosed with
 [Troubleshooting](../quality/TROUBLESHOOTING.md); physical checks are in
 [Validation](../quality/VALIDATION.md).
 
@@ -15,11 +15,11 @@ supported board it also installs the bundled
 
 | | |
 |---|---|
-| Board | Raspberry Pi Zero 2 W (primary target), Orange Pi Zero 2W; the driver also supports Orange Pi Zero 3W, Radxa ZERO 3W and Radxa Cubie A7Z (not validated with MFruit OS) |
+| Board | Raspberry Pi Zero 2 W (primary target), Orange Pi Zero 2W; the driver also supports Orange Pi Zero 3W, Radxa ZERO 3W and Radxa Cubie A7Z (not validated with mFruit OS) |
 | HAT | PiSugar Whisplay |
 | OS | Raspberry Pi OS / Debian 12+, Ubuntu 22.04+ (systemd) |
 | Python | 3.9 or newer |
-| Hardware service | installed by MFruit OS: [Whisplay driver](../WHISPLAY_DRIVER.md) (`whisplay-daemon.service` runs as your normal user) |
+| Hardware service | installed by mFruit OS: [Whisplay driver](../WHISPLAY_DRIVER.md) (`whisplay-daemon.service` runs as your normal user) |
 | Network | needed on the first install for missing packages and the sound card build (kernel headers), unless an [offline pack](../WHISPLAY_DRIVER.md#offline-installation) is next to the code |
 | Packages | Pillow (`python3-pil`), Python venv support (`python3-venv`), NetworkManager for Wi-Fi. Optional: `git` (updates for git-installed apps), `alsa-utils` (speaker test) |
 
@@ -32,7 +32,7 @@ environments. The launcher needs no NumPy, web server or desktop stack.
    Pi OS with Linux `6.1.31-sun50iw9` for the Zero 2W, Debian 1.0.2 or Ubuntu 22.04), enable SSH and
    use a normal user with sudo. Fit the Whisplay HAT.
 2. Stop standalone app services that would compete for the display.
-3. Log in as that user. The Whisplay driver is installed by MFruit OS in
+3. Log in as that user. The Whisplay driver is installed by mFruit OS in
    step 5; its own read-only check is
    `bash drivers/whisplay/install.sh --check` ([Whisplay driver](../WHISPLAY_DRIVER.md)).
 
@@ -40,7 +40,7 @@ A device prepared earlier with a PiSugar/Whisplay checkout needs nothing
 extra: the next install moves `whisplay-daemon` to the bundled driver and
 leaves the checkout in place.
 
-Do not run the MFruit OS installer as root.
+Do not run the mFruit OS installer as root.
 
 ## 2. Get the source onto the device
 
@@ -82,7 +82,7 @@ readlink -f "$HOME/.whisplay-os/system/current"
 ```
 
 The archive covers managed apps, settings, logs and data under the default
-MFruit OS home. Data in companion app checkouts and a custom
+mFruit OS home. Data in companion app checkouts and a custom
 `WHISPLAY_OS_HOME` must be preserved separately. Stop an app before backing up
 data it is actively changing.
 
@@ -111,6 +111,8 @@ bash scripts/install.sh            # or: bash scripts/setup-device.sh --install
 | `--reboot` | reboot without asking when the driver needs it (otherwise it asks; with `--yes` it only says so) |
 | `--app ID` | also install this Fruit Store app and the system packages it needs (`scripts/setup-app.sh`; e.g. `whisplay-ai-chatbot`); repeatable. Without it the installer offers such apps (with `--yes` it skips them) ([App installation](../apps/INSTALLATION.md#apps-that-need-system-packages)) |
 | `--radio` / `--no-radio` | set up a LoRa radio HAT for RadioConnect as part of the install, or do not offer it (otherwise it asks; with `--yes` it is skipped); see [Radio setup](#radio-setup-lora-apps) |
+| `--no-power` | do not install mFruit OS's power management (`mfruit-power.service`, the power-off shutdown hook); PiSugar's own power manager, if any, is left alone ([ADR 0012](ADR/0012-own-power-management.md)) |
+| `--no-wifi-setup` | do not install Wi-Fi from a phone (PiSugar's sugar-wifi-conf; [ADR 0013](ADR/0013-phone-wifi-setup.md)) |
 | `--no-background-daemon` | keep whisplay-daemon's own desktop visible between apps |
 | `--dev` | run directly from the checkout (development; keep the directory in place) |
 | `--yes` | non-interactive; does not bypass sudo authorization |
@@ -128,10 +130,16 @@ What the installer does, in order:
    default `config/settings.json`; an existing settings file is kept.
 4. Installs `mfruit-run`, `mfruitctl` and `boot-guard.sh` into
    `~/.whisplay-os/bin` and runs the offline self-test.
-5. Provisions bundled ConnectWifi when no Wi-Fi app exists; a first install
+5. Installs Wi-Fi from a phone: the newest pinned PiSugar sugar-wifi-conf
+   build that runs on this architecture and glibc (2.3.0 needs glibc 2.39,
+   2.2.3 runs from 2.30), checked by SHA-256, from the offline pack or GitHub, into
+   `~/.whisplay-os/system/tools/` (as the user; without it Settings → Wi-Fi
+   from phone says *Not installed*).
+   Provisions bundled ConnectWifi when no Wi-Fi app exists; a first install
    seeds the Apps menu with available starter games, Fruit Store and
    Settings. Reruns preserve existing apps, settings, order and launch policy.
 6. With the service: the system changes listed below, then enables and starts
+   `mfruit-power.service` (power management, before the daemon) and
    `whisplay-os.service`. When the driver enabled a bus or the sound card, the
    services are only enabled and the installer asks to reboot; after the
    reboot everything starts by itself.
@@ -144,28 +152,35 @@ What the installer does, in order:
 | Whisplay driver: packages, boot overlays, sound card module and ALSA config, Orange Pi `gpio` udev rule, `/etc/sudoers.d/whisplay-daemon-power`, `/usr/local/share/whisplay`, `whisplay-daemon.service` ([details](../WHISPLAY_DRIVER.md#where-it-lives)) | the display, button, LED and audio | no; `sudo bash drivers/whisplay/uninstall.sh [--audio]` |
 | `/etc/systemd/system/whisplay-os.service` | runs the launcher as your user after the daemon, with `Restart=always`, a 60 s watchdog, `ExecStartPre=boot-guard.sh`, `ExecStopPost=mfruitctl release` | yes |
 | `/etc/systemd/system/whisplay-daemon.service.d/mfruit-os.conf` (skipped with `--no-background-daemon`) | starts the daemon through `whisplay-daemon-mfruit.py` so its own UI stays in the background ([Host API](HOST_API.md#whisplay-user-interface-in-the-background)); the daemon restarts once, closing running apps | yes |
-| `/etc/sudoers.d/whisplay-os` | allows exactly `systemctl restart whisplay-daemon.service` and `systemctl restart whisplay-os.service` without a password (*Restart daemon* on the fallback screen), validated with `visudo -c` | yes |
+| `/etc/sudoers.d/whisplay-os` | allows exactly `systemctl restart whisplay-daemon.service`, `systemctl restart whisplay-os.service` (*Restart daemon* on the fallback screen), `systemctl poweroff` and `systemctl reboot` (the power service's safe shutdown and the power menu) without a password, validated with `visudo -c` | yes |
+| `/etc/systemd/system/mfruit-power.service` (skipped with `--no-power`) | the power service as your user with the `i2c` group and `CAP_SYS_TIME` (only to move the clock forward from the battery board's clock at boot), started before the daemon, `Restart=always`, 60 s watchdog ([ADR 0012](ADR/0012-own-power-management.md)) | yes |
+| `/usr/lib/systemd/system-shutdown/mfruit-power-off` (root-owned copy of `scripts/mfruit-power-off`; skipped with `--no-power`) | switches a PiSugar off at the end of a power-off, after every filesystem is read-only; without it the halted Pi keeps draining the battery | yes |
+| PiSugar's `pisugar-server.service` and `pisugar-poweroff.service` stopped and disabled, when present (listed in `~/.whisplay-os/state/pisugar-services-disabled`) | they drive the same battery board; two owners would fight over it | enabled again |
+| PiSugar's `sugar-wifi-config.service` stopped and disabled, when present (same list; skipped with `--no-wifi-setup`) | it runs the same Bluetooth service as root all the time with the default key; mFruit OS runs it on demand as the user | enabled again |
 | `/etc/polkit-1/rules.d/49-mfruit-wifi.rules` | grants the target user the listed NetworkManager scan/control/settings actions, because the service has no interactive polkit session | yes |
 | `/usr/local/bin/mfruitctl` symlink | `mfruitctl` on the PATH | yes |
 | Bluetooth rfkill soft block lifted (first install only) | fresh Raspberry Pi OS images can start with Bluetooth blocked; Settings > Bluetooth needs it on. systemd-rfkill keeps the state | no (turn it off in Settings) |
 
-No other system files are changed by MFruit OS itself. Adopted daemon app registrations are
+No other system files are changed by mFruit OS itself. Adopted daemon app registrations are
 changed only through the daemon's `app.register` API and are restored on
 uninstall ([Lifecycle](LIFECYCLE.md#launch-gate-and-intruder-eviction)).
 
 ## 6. Verify and health check
 
 ```bash
-systemctl is-active whisplay-daemon.service whisplay-os.service
+systemctl is-active mfruit-power.service whisplay-daemon.service whisplay-os.service
 mfruitctl status
+mfruitctl power
 mfruitctl apps
 PYTHONDONTWRITEBYTECODE=1 python3 -m mfruitos --self-test
 mfruitctl screenshot /tmp/mfruit-home.png
 journalctl -u whisplay-os.service -n 80 --no-pager
 ```
 
-Expect both services active, the launcher at Home and the self-test passing.
-Screenshots and previews show MFruit OS's rendering; they do not verify the
+Expect the services active, the launcher at Home and the self-test passing.
+On a board without a PiSugar, `mfruitctl power` reports `present: false` with
+the reason; that is not an error.
+Screenshots and previews show mFruit OS's rendering; they do not verify the
 physical LCD ([Validation](../quality/VALIDATION.md)). At Home, `mfruitctl key
 down`, `mfruitctl key enter` and `mfruitctl back` exercise navigation over SSH;
 they do not validate physical input.
@@ -173,8 +188,12 @@ they do not validate physical input.
 ## The service
 
 ```text
-whisplay-daemon.service  →  whisplay-os.service  →  MFruit OS  →  apps
+mfruit-power.service  →  whisplay-daemon.service  →  whisplay-os.service  →  mFruit OS  →  apps
 ```
+
+`mfruitctl power` shows the battery and the power settings
+([Configuration](CONFIGURATION.md#power-settings)); its log is
+`~/.whisplay-os/logs/power.log` (and `journalctl -u mfruit-power`).
 
 ```bash
 systemctl status whisplay-os
@@ -191,10 +210,10 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m mfruitos --debug   # Ctrl-C to stop
 sudo systemctl start whisplay-os.service
 ```
 
-## Updating MFruit OS
+## Updating mFruit OS
 
 - **On the device:** *Settings → General → Software Update* (or *Fruit Store →
-  Updates → MFruit OS*) installs a published GitHub release and restarts.
+  Updates → mFruit OS*) installs a published GitHub release and restarts.
   **Versions** selects a release; **Roll back** restores the saved local build.
 - **From a checkout:** `bash scripts/update.sh` (fast-forward `git pull`, then
   reinstall). For a copied checkout, transfer the candidate again and repeat
@@ -205,7 +224,7 @@ previous version, and arms the boot guard: if the new version fails to start
 three times, `boot-guard.sh` (plain `sh`) switches `system/current` back and
 the launcher reports the rollback. A healthy start is confirmed after 15 s.
 Update the OS and all keyboard apps together so their SDK and key-hub
-contract match ([SDK](../apps/SDK.md)). MFruit OS has no published releases at
+contract match ([SDK](../apps/SDK.md)). mFruit OS has no published releases at
 the time of writing, so on-device version selection has nothing to offer yet.
 
 ### Manual rollback of a checkout installation
@@ -286,7 +305,7 @@ apps without missing requirements.
 
 ## Upgrade notes
 
-**1.4.0:** update all keyboard apps to SDK 1.2.0 before restarting MFruit OS.
+**1.4.0:** update all keyboard apps to SDK 1.2.0 before restarting mFruit OS.
 The launcher grabs keyboards exclusively; older direct-input apps otherwise
 receive no keys. Reinstall so the updated daemon wrapper is used, which
 forwards keyboard input to the daemon's Volume, Power and Wi-Fi pages.

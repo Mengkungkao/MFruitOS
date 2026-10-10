@@ -1,4 +1,4 @@
-"""Persistent, validated MFruit OS configuration.
+"""Persistent, validated mFruit OS configuration.
 
 The schema below is the single source of truth for defaults. ``config/default.json``
 is a generated reference copy (``python3 -m mfruitos.system.settings --dump-defaults``).
@@ -66,6 +66,13 @@ def _string(max_len: int):
             raise Invalid(f"expected a string of at most {max_len} characters")
         return value
     return check
+
+
+def _wifi_setup_key(value):
+    if value == "" or (isinstance(value, str) and value.isascii() and value.isalnum()
+                       and 6 <= len(value) <= 32):
+        return value
+    raise Invalid("expected 6-32 letters and digits")
 
 
 def _app_id_or_empty(value):
@@ -148,9 +155,15 @@ SCHEMA: dict[str, tuple[Any, Callable[[Any], Any]]] = {
     "apps.clean_menu": (False, _boolean),
     "apps.installed_ids": ([], _id_list),
     "apps.default_app": ("", _app_id_or_empty),
+    # Wi-Fi from a phone (PiSugar sugar-wifi-conf, system/wifi_setup.py):
+    # when it runs, its key (made on first use) and its Bluetooth name
+    # ("" = the controller's own name).
+    "wifi_setup.mode": ("screen", _choice("screen", "offline", "always")),
+    "wifi_setup.key": ("", _wifi_setup_key),
+    "wifi_setup.name": ("", _string(29)),
 }
 
-# screen_bright: while the app keeps running in the background, MFruit OS holds
+# screen_bright: while the app keeps running in the background, mFruit OS holds
 # the backlight at 100% (no dimming or screen-off). On a LoRa HAT with stock
 # jumpers the backlight pin is the radio's M0, and dimming deafens it (KI-11).
 APP_FLAGS = {"enabled": True, "hidden": False, "autostart": False, "background": False,

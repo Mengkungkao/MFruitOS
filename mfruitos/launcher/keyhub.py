@@ -1,8 +1,8 @@
-"""The key hub: MFruit OS hands keyboard keys to the app that owns the screen.
+"""The key hub: mFruit OS hands keyboard keys to the app that owns the screen.
 
-While MFruit OS runs it holds every keyboard exclusively (``KeyReader``
+While mFruit OS runs it holds every keyboard exclusively (``KeyReader``
 with ``grab=True``), so no key reaches the Linux console, whisplay-daemon or
-any other reader. Apps built on the MFruit App SDK connect here
+any other reader. Apps built on the mFruit App SDK connect here
 (``state/keys.sock``), say which app they are, and receive the keys meant
 for them -- only while they own the screen. The runtime decides where each
 key goes (``Runtime._on_hardware_key``); this module only carries them.

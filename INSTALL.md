@@ -1,4 +1,4 @@
-# Installing MFruit OS
+# Installing mFruit OS
 
 The installation guide is [docs/platform/INSTALLATION.md](docs/platform/INSTALLATION.md):
 requirements, board preparation, check, install, verify, update, rollback and

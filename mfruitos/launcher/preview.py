@@ -55,6 +55,43 @@ def _setup_home(tmp: str) -> Paths:
     return paths
 
 
+SAMPLE_POWER_STATUS = {
+    "present": True, "model": "PiSugar 3", "key": "pisugar3", "firmware": "1.2.4",
+    "level": 82, "level_exact": 82.4, "voltage": 4.02, "current": 0.31, "plugged": True,
+    "charging": True, "allow_charging": True, "temperature": 31, "error": "",
+    "low_battery": None, "shutting_down": None,
+    "features": ["anti_mistouch", "battery_protect", "charging_control", "current",
+                 "power_restore", "rtc", "soft_poweroff", "taps", "temperature"],
+    "config": {"safe_shutdown_level": 5, "safe_shutdown_delay": 30, "button_double": "none",
+               "button_long": "power_menu", "wake_time": "07:30", "wake_days": 0b0111110,
+               "charging_range": None},
+    "board": {"power_restore": False, "soft_poweroff": True, "anti_mistouch": True,
+              "battery_protect": False, "allow_charging": True},
+}
+
+
+def _sample_power():
+    client = SimpleNamespace(status=lambda details=False: dict(SAMPLE_POWER_STATUS),
+                             set=lambda key, value: SAMPLE_POWER_STATUS["config"],
+                             probe=lambda: dict(SAMPLE_POWER_STATUS),
+                             clock=lambda action: "2026-10-10T09:00:00+00:00",
+                             shutdown=lambda reboot=False, reason="": None)
+    return SimpleNamespace(connected=True, state=dict(SAMPLE_POWER_STATUS),
+                           config=dict(SAMPLE_POWER_STATUS["config"]), client=client,
+                           battery=lambda: (82, True), button_action=lambda tap: "none",
+                           start=lambda: None, stop=lambda: None)
+
+
+def _sample_wifi_setup():
+    def noop(*_args):
+        return None
+    return SimpleNamespace(state="waiting", detail="Waiting for a phone", advertised="pizero",
+                           wanted=set(), paused=set(), available=lambda: (True, ""),
+                           name=lambda: "", key=lambda: "k7m2xq9p", want=noop, unwant=noop,
+                           pause=noop, resume=noop, renew_key=lambda: "k7m2xq9p", close=noop,
+                           on_change=noop)
+
+
 def run_preview(outdir: str | None) -> int:
     from mfruitos.launcher.runtime import Runtime
     from mfruitos.launcher.ui.screens import (apps, bluetooth, diagnostics, dialogs, fallback, settings,
@@ -66,6 +103,13 @@ def run_preview(outdir: str | None) -> int:
     from mfruitos.updater.service import UpdateInfo
 
     tmp = tempfile.mkdtemp(prefix="mfruit-preview-")
+    # Sample network values: previews (and docs screenshots made from them)
+    # must not show the machine's own Wi-Fi name or address.
+    from unittest import mock
+    from mfruitos.system import system_info
+    network = mock.patch.multiple(system_info, wifi_ssid=lambda *a, **k: "Home Wi-Fi",
+                                  local_ip=lambda: "192.168.1.20")
+    network.start()
     try:
         paths = _setup_home(tmp)
         rt = Runtime(paths, package_root(), socket_path=os.path.join(tmp, "no-daemon.sock"))
@@ -77,6 +121,10 @@ def run_preview(outdir: str | None) -> int:
                                        devices=lambda: [keyboard, speaker], search=lambda: None,
                                        cancel_pairing=lambda: None, answer=lambda accept: None)
         rt.status.wifi_level, rt.status.battery = 3, 82
+        # Stand-ins for mfruit-power.service and the phone Wi-Fi setup tool:
+        # previews must not need them, nor start processes.
+        rt.power = _sample_power()
+        rt.wifi_setup = _sample_wifi_setup()
         live = [{"app_id": a, "display_name": n, "icon": i, "priority": p, "running": r}
                 for a, n, i, p, r in SAMPLE_DAEMON_APPS]
         live += [{"app_id": "weather", "display_name": "Weather"},
@@ -89,7 +137,7 @@ def run_preview(outdir: str | None) -> int:
         rt.updater.last_check = now
         rt.updater.online = True
         rt.updater._infos = {
-            OS_APP_ID: UpdateInfo(OS_APP_ID, "MFruit OS", "system", installed=__version__,
+            OS_APP_ID: UpdateInfo(OS_APP_ID, "mFruit OS", "system", installed=__version__,
                                   latest=__version__, checked_at=now),
             "weather": UpdateInfo("weather", "Weather", "release", installed="1.2.0",
                                   latest="1.3.0", update_available=True, checked_at=now),
@@ -208,12 +256,22 @@ def run_preview(outdir: str | None) -> int:
         shot("54-log", dialogs.LogScreen(rt, "Launcher log", log_path))
         rt.toast("Moved up")
         shot("55-toast")
+        rt._clear_toast()
+        from mfruitos.launcher.ui.screens import battery
+        shot("56-battery", battery.BatteryScreen(rt))
+        page = battery.BatteryScreen(rt)
+        page.selected = 9
+        shot("57-battery-settings", page)
+        shot("58-battery-low", battery.LowBatteryScreen(rt, 4, 23))
+        shot("59-power-menu", battery.PowerMenuScreen(rt))
+        from mfruitos.launcher.ui.screens import phone_setup
+        shot("60-phone-setup", phone_setup.PhoneSetupScreen(rt))
 
         if outdir:
             os.makedirs(outdir, exist_ok=True)
             for name, image in frames:
                 image.save(os.path.join(outdir, f"{name}.png"))
-        print(f"self-test OK: MFruit OS {__version__}, rendered {len(frames)} screens")
+        print(f"self-test OK: mFruit OS {__version__}, rendered {len(frames)} screens")
         return 0
     except Exception:
         log.exception("self-test failed")
@@ -221,4 +279,5 @@ def run_preview(outdir: str | None) -> int:
         traceback.print_exc()
         return 1
     finally:
+        network.stop()
         shutil.rmtree(tmp, ignore_errors=True)

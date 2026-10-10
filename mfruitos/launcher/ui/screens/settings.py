@@ -7,7 +7,9 @@ import platform
 
 from mfruitos import OS_NAME, __version__
 from mfruitos.launcher.ui.components import Item, back_item
+from mfruitos.launcher.ui.screens.battery import BatteryScreen, status_label
 from mfruitos.launcher.ui.screens.bluetooth import BluetoothScreen
+from mfruitos.launcher.ui.screens.phone_setup import STATUS_TEXT, PhoneSetupScreen
 from mfruitos.launcher.ui.screens.apps import ApplicationsScreen
 from mfruitos.launcher.ui.screens.base import ListScreen
 from mfruitos.launcher.ui.screens.dialogs import ChoiceScreen, LogScreen, RangeScreen, confirm
@@ -26,6 +28,24 @@ def seconds_label(value: int) -> str:
     if value == 0:
         return "Never"
     return f"{value} sec" if value < 60 else f"{value // 60} min"
+
+
+def phone_setup_subtitle(os) -> str:
+    service = os.wifi_setup
+    if service.state in ("off", "unavailable"):
+        return "With the PiSugar app"
+    return STATUS_TEXT.get(service.state, service.state)
+
+
+def battery_subtitle(os) -> str:
+    """One line for the Settings row, from the power service's live state."""
+    if not os.power.connected:
+        return "Power service off"
+    state = os.power.state
+    if not state.get("present"):
+        return "No battery board"
+    level = state.get("level")
+    return f"{level}% · {status_label(state)}" if level is not None else status_label(state)
 
 
 def choice(os, title: str, key: str, options: list[tuple[object, str]]):
@@ -55,25 +75,18 @@ class SettingsScreen(ListScreen):
             self.redraw()
         self.os.run_task("settings-status", read, done, lane="bluetooth")
 
-    def open_wifi(self) -> None:
-        """Open the full network manager directly; keep the small status
-        page as a useful fallback on installations that do not have one."""
-        wifi = WifiScreen(self.os)
-        if self.os.registry.get("connectwifi") is not None:
-            wifi.choose_network()
-        else:
-            self.os.push(wifi)
-
     def items(self) -> list[Item]:
         os = self.os
         apps = os.registry.apps()
         rows = [
-            Item("Wi-Fi", self.open_wifi, kind="nav", icon="wifi",
+            Item("Wi-Fi", lambda: os.push(WifiScreen(os)), kind="nav", icon="wifi",
                  subtitle=self.ssid or "Not connected", tile=(46, 140, 255)),
             Item("Bluetooth", lambda: os.push(BluetoothScreen(os)), kind="nav", icon="bluetooth",
                  subtitle=self.bluetooth, tile=(46, 140, 255)),
             Item("Display & Brightness", lambda: os.push(DisplayScreen(os)), kind="nav",
                  icon="display", tile=(46, 140, 255)),
+            Item("Battery", lambda: os.push(BatteryScreen(os)), kind="nav", icon="battery",
+                 subtitle=battery_subtitle(os), tile=(52, 199, 89)),
             Item("Sounds", lambda: os.push(AudioScreen(os)), kind="nav", icon="audio", tile=(255, 69, 108)),
             Item("Button", lambda: os.push(ButtonScreen(os)), kind="nav", icon="button", tile=(94, 92, 230)),
             Item("Light", lambda: os.push(LedScreen(os)), kind="nav", icon="led", tile=(255, 149, 0)),
@@ -267,6 +280,8 @@ class WifiScreen(ListScreen):
             Item("IP address", kind="info", value=self.ip or "—"),
             Item("Internet", kind="info", value=self.internet),
             Item("Choose a network…", self.choose_network, kind="nav", icon="wifi"),
+            Item("Phone Setup", lambda: self.os.push(PhoneSetupScreen(self.os)), kind="nav",
+                 icon="bluetooth", subtitle=phone_setup_subtitle(self.os)),
             Item("Check internet", self.check_internet, icon="network"),
             back_item(),
         ]
@@ -285,12 +300,12 @@ class GeneralScreen(ListScreen):
             Item("System info", os.open_system_info, kind="nav", icon="info"),
             Item("Diagnostics", os.open_diagnostics, kind="nav", icon="diagnostics"),
         ]
-        if os.system_page_available("whisplay-system"):
-            rows.append(Item("Power", lambda: os.open_system_page("whisplay-system"), kind="nav",
-                             icon="power", subtitle="Lock, reboot, shut down"))
+        if os.power.connected or os.system_page_available("whisplay-system"):
+            rows.append(Item("Power", os.open_power_menu, kind="nav",
+                             icon="power", subtitle="Lock, restart, shut down"))
         rows += [
             Item("Restart launcher", lambda: os.push(confirm(
-                os, "Restart launcher?", "MFruit OS will restart. Running apps keep running.",
+                os, "Restart launcher?", "mFruit OS will restart. Running apps keep running.",
                 "Restart", os.restart_launcher, danger=False)), icon="refresh"),
             back_item(),
         ]
@@ -333,7 +348,7 @@ class DeveloperScreen(ListScreen):
                 "Shell access", _shell_help()), kind="nav", icon="developer"),
             Item("Daemon desktop", lambda: os.push(confirm(
                 os, "Daemon desktop?",
-                "Show whisplay-daemon's own desktop. Pick 'MFruit OS' there to come back.",
+                "Show whisplay-daemon's own desktop. Pick 'mFruit OS' there to come back.",
                 "Switch", os.yield_to_desktop, danger=False)), icon="apps"),
             Item("Restart launcher", os.restart_launcher, icon="refresh"),
             back_item(),
@@ -345,7 +360,7 @@ def _shell_help() -> str:
     user = _os.environ.get("USER") or _os.environ.get("LOGNAME") or "pi"
     ip = system_info.local_ip() or "<device-ip>"
     return (f"Connect from a computer on the same network:\n  ssh {user}@{ip}\n"
-            "Control MFruit OS from the shell with:\n  ~/.whisplay-os/bin/mfruitctl help")
+            "Control mFruit OS from the shell with:\n  ~/.whisplay-os/bin/mfruitctl help")
 
 
 class AppLogsScreen(ListScreen):

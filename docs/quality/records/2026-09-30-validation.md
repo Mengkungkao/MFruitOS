@@ -1,14 +1,14 @@
-# MFruit OS validation — 2026-09-30
+# mFruit OS validation — 2026-09-30
 
 ## Follow-up validation, cleanup and app standards
 
 This section supersedes the original checkpoint below. The user expanded the
-scope to cleanup, MFruit OS software/UI consistency, app development/production
+scope to cleanup, mFruit OS software/UI consistency, app development/production
 rules and manual installation/testing/debugging on other devices.
 
 | Suite | Local | Orange Pi final staged source |
 |---|---:|---:|
-| MFruit OS, including real daemon | 284 passed | 284 passed |
+| mFruit OS, including real daemon | 284 passed | 284 passed |
 | ConnectWifi, including ShellCheck | 137 passed | 137 passed |
 | WalkieTalkie | 637 passed | 637 passed |
 | Messenger | 147 passed | 147 passed |
@@ -45,14 +45,14 @@ already owns the real keyboard; the production service remained healthy.
   `npm test` now compiles and runs a regression with meaningful exit status.
 - SDK/rules copies match the canonical source; ordinary UI text uses sentence
   case while abbreviations, ticker symbols and content accents are retained.
-- MFruit test fixtures close parent log handles, process pipes, framebuffer
+- mFruit test fixtures close parent log handles, process pipes, framebuffer
   attachments and socket readers; no fixture ResourceWarnings in final local run.
 
 ### Cleanup and deliverables
 
 The reviewed cleanup removed 59 remaining cache directories, 350 files and
 4,990,269 bytes. SDK refresh had already cleared two more audited cache
-directories. All 95 tracked bytecode files (94 MFruit OS, one chatbot) are now
+directories. All 95 tracked bytecode files (94 mFruit OS, one chatbot) are now
 unstaged deletions. Chatbot has root ignore rules for future caches. Removed
 unused Python imports/assignments, dashboard's unused NumPy installer dependency
 and the redundant npm crypto package/lock entry. Kept assets, vendored SDKs,
@@ -75,7 +75,7 @@ models, environments, configuration, user data and board backups.
 
 ### Deployment
 
-- Active MFruit OS: `/home/orangepi/.whisplay-os/system/versions/1.4.0-local20260930101701`.
+- Active mFruit OS: `/home/orangepi/.whisplay-os/system/versions/1.4.0-local20260930101701`.
 - Retained previous: `/home/orangepi/.whisplay-os/system/versions/1.4.0-local20260930093556`.
 - Backup: `/home/orangepi/.mfruit-deploy-backups/cleanup-20260930101701/`.
 - Installed 29 reviewed companion source/documentation files with hashes checked
@@ -93,9 +93,9 @@ follow-up; the earlier unexplained reboot remains part of the original record.
 
 ### Follow-up evidence and manual work
 
-- Local MFruit final suite: `/tmp/mfruit-final-mf-tests.log` (284 tests, 140.089 s).
+- Local mFruit final suite: `/tmp/mfruit-final-mf-tests.log` (284 tests, 140.089 s).
 - Board final suites: `~/.mfruit-validation/final-cleanup-*-tests.log`;
-  copied to `/tmp/mfruit-board-final-logs/` locally. MFruit: 185.294 s.
+  copied to `/tmp/mfruit-board-final-logs/` locally. mFruit: 185.294 s.
 - Node build/regression and negative control:
   `/tmp/mfruit-cleanup-chatbot-node-tests.log`,
   `/tmp/mfruit-cleanup-chatbot-negative-control.log`.
@@ -120,7 +120,7 @@ app package gaps remain documented; no claim of full production certification.
 Target: Orange Pi Zero 2W, `orangepi@192.168.1.122`, Linux 6.1.31 aarch64,
 Python 3.10. Local validation: Linux, Python 3.12.
 
-The board was ahead of the local checkout. Its newer MFruit OS 1.4.0 and
+The board was ahead of the local checkout. Its newer mFruit OS 1.4.0 and
 companion source were recovered and reviewed before further changes.
 Configuration, secrets, user data, Git histories and radio addresses were preserved.
 
@@ -128,15 +128,15 @@ Configuration, secrets, user data, Git histories and radio addresses were preser
 
 | Check | Result |
 |---|---|
-| MFruit OS final local suite, including real daemon | 266 passed |
-| MFruit OS final Orange Pi suite, including real daemon | 266 passed |
+| mFruit OS final local suite, including real daemon | 266 passed |
+| mFruit OS final Orange Pi suite, including real daemon | 266 passed |
 | ConnectWifi | 137 passed, including separately rerun ShellCheck |
 | WalkieTalkie | 632 passed |
 | Messenger | 141 passed |
 | Dashboard | 82 passed |
 | Chatbot keyboard/startup | 12 passed locally and on Orange Pi |
 | Deployed chatbot TypeScript | `tsc --noEmit` passed |
-| MFruit OS self-test | 37 screens, local and Orange Pi |
+| mFruit OS self-test | 37 screens, local and Orange Pi |
 | Orange Pi targeted installer / Git updater | 23 / 6 passed |
 | Orange Pi targeted Bluetooth / shell wrapper | 15 / 12 passed |
 | Runtime pyflakes / Python 3.9 compatibility / shell syntax | Passed |
@@ -171,7 +171,7 @@ both failed before the fix.
 ## Deployment
 
 Deployed after the complete local and Orange Pi suites passed. The staged
-package passed its 37-screen self-test before activation; only the MFruit OS
+package passed its 37-screen self-test before activation; only the mFruit OS
 service was restarted. Existing daemon configuration and all older installed
 versions were retained.
 

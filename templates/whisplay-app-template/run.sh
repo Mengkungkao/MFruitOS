@@ -1,5 +1,5 @@
 #!/bin/sh
-# Entrypoint. MFruit OS runs this with the working directory set to the app
+# Entrypoint. mFruit OS runs this with the working directory set to the app
 # and WHISPLAY_APP_ID / WHISPLAY_OS_APP_DATA in the environment.
 cd "$(dirname "$0")" || exit 1
 PYTHON=python3

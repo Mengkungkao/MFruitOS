@@ -1,6 +1,6 @@
-# Contributing to MFruit OS
+# Contributing to mFruit OS
 
-MFruit OS targets a 512 MB Raspberry Pi Zero 2 W with one button, so every
+mFruit OS targets a 512 MB Raspberry Pi Zero 2 W with one button, so every
 change is judged by whether it stays light, deterministic, recoverable and
 usable with a single button. The binding rules are in
 [docs/platform/DEVELOPMENT_RULES.md](docs/platform/DEVELOPMENT_RULES.md);

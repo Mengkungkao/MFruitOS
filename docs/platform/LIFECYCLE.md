@@ -1,6 +1,6 @@
 # Lifecycle
 
-How MFruit OS starts, how it guarantees that selecting an app launches exactly
+How mFruit OS starts, how it guarantees that selecting an app launches exactly
 that app exactly once, and how it takes the screen back. Package lifecycle
 (install, update, rollback, uninstall) is in
 [apps/UPDATE_ROLLBACK.md](../apps/UPDATE_ROLLBACK.md).
@@ -50,7 +50,7 @@ The ApplicationManager knows nothing about Whisplay. One session at a time;
 requests while busy are refused and logged (`LAUNCH_REJECTED`), never queued;
 every session has an ID and every host report carries it. Session kinds:
 `app`, `page` (a host settings page) and `external` (an app found on screen
-that MFruit OS did not launch, for example after a launcher restart).
+that mFruit OS did not launch, for example after a launcher restart).
 Sources recorded on `LAUNCH_REQUEST`: `home`, `retry`, `settings`,
 `autostart`, `control`.
 
@@ -78,22 +78,22 @@ Sources recorded on `LAUNCH_REQUEST`: `home`, `retry`, `settings`,
 
 Decisions are made by `reconcile()`, which asks the daemon who is foreground
 (`health.ping` → `foreground_app_id`) instead of trusting event order: the
-`app_focus_revoked` caused by MFruit OS's own release can arrive *after* it has
+`app_focus_revoked` caused by mFruit OS's own release can arrive *after* it has
 re-acquired focus (caught by `tests/test_focus.py`).
 
 ## Launch gate and intruder eviction
 
 - **Hold fires on release** (`launcher/navigation/gestures.py`): reaching the
-  threshold only arms the hold ("Release to open"), so MFruit OS consumes the
+  threshold only arms the hold ("Release to open"), so mFruit OS consumes the
   whole gesture before handing the screen over.
 - **Tickets** (`scripts/mfruit-run`, `launcher/app_manager/lifecycle.py`):
   every app the daemon can start is registered with
-  `~/.whisplay-os/bin/mfruit-run <id>` — packages MFruit OS installed and
+  `~/.whisplay-os/bin/mfruit-run <id>` — packages mFruit OS installed and
   daemon apps it *adopted* (original registration saved under
-  `~/.whisplay-os/adopted/<id>/`, restored on uninstall). While MFruit OS holds
+  `~/.whisplay-os/adopted/<id>/`, restored on uninstall). While mFruit OS holds
   `state/launcher.lock`, `mfruit-run` starts an app only with the one-shot
-  ticket written just before MFruit OS's own `app.launch`; anything else is
-  `DENIED` in `logs/launch-gate.log`. Without MFruit OS the gate is open.
+  ticket written just before mFruit OS's own `app.launch`; anything else is
+  `DENIED` in `logs/launch-gate.log`. Without mFruit OS the gate is open.
 - **Intruder eviction** (`launcher/focus.py`): daemon pages open inside the
   daemon without a launch command and cannot be gated. A foreign app or page
   that takes the screen while a session is starting is closed with
@@ -117,11 +117,11 @@ re-acquired focus (caught by `tests/test_focus.py`).
 
 The launch-window tests run against the real daemon without the background
 wrapper. With the wrapper installed (the default) the daemon desktop ignores
-the button while MFruit OS runs, so a press during a launch does nothing.
+the button while mFruit OS runs, so a press during a launch does nothing.
 
 **Residual without the wrapper:** a daemon page can appear for a fraction of a
 second when the button is held on the daemon's desktop during an app's
-start-up; MFruit OS closes it and the requested app still opens.
+start-up; mFruit OS closes it and the requested app still opens.
 
 ## Leaving an app
 
@@ -172,7 +172,7 @@ APP_CLOSED app=alpha session=09db5fdb result=exited
 ```
 
 To find what caused a launch, look for `LAUNCH_REQUEST` and its `source`. A
-launch MFruit OS did not request appears as `DENIED` in `launch-gate.log`
+launch mFruit OS did not request appears as `DENIED` in `launch-gate.log`
 (apps) or `INTRUDER` (pages). `LAUNCH_REJECTED` shows refused requests and why;
 `LAUNCH_REFUSED_BY_DAEMON` records who held the screen when the daemon refused.
 
@@ -187,8 +187,8 @@ reproduced with the real daemon code in `tests/real_daemon/`.
 | RC1 | *Hold* fired at 0.7 s while the button was still down; the release reached the next screen owner (daemon desktop, a page, or the new app) | wrong app opened; two launches; a page opened and closed within a second | hold fires on release (1.1.0) |
 | RC2 | while an app starts, the daemon desktop owns the button and acts as an independent launcher | a press during start-up launched another app or opened a page | launch gate tickets; intruder eviction; background wrapper (1.2.0) |
 | RC3 | the daemon has one pending-launch slot; a second launch overwrites it | apps needing several focus attempts or giving up | single flight + gate |
-| RC4 | no single-flight rule in MFruit OS | autostart, control socket or a stale Retry started overlapping launches | `ApplicationManager` (1.1.0) |
-| RC5 | MFruit OS "followed" whatever app took the screen | RC1 masked as success | removed; a foreign app during a launch is an intruder |
+| RC4 | no single-flight rule in mFruit OS | autostart, control socket or a stale Retry started overlapping launches | `ApplicationManager` (1.1.0) |
+| RC5 | mFruit OS "followed" whatever app took the screen | RC1 masked as success | removed; a foreign app during a launch is an intruder |
 | RC6 | keyboards were not grabbed; tty1's autologin shell executed typed keys | a launcher restart that looked like an updater crash | `EVIOCGRAB` and per-key ownership routing (1.4.0) |
 
 The first fake daemon modelled neither the daemon desktop's button handling
@@ -197,5 +197,5 @@ misbehaved; the real-daemon harness now runs in the suite. The 2026-10-02
 investigation of the intermittent `test_press_during_launch_window_page_is_closed`
 failure found a daemon defect (a hold recognized as a tap,
 [Host API fact 8](HOST_API.md#whisplay-daemon-facts-the-design-depends-on)),
-not an MFruit OS defect; the test now synchronizes on observed daemon state
+not an mFruit OS defect; the test now synchronizes on observed daemon state
 ([record](../quality/records/2026-10-02-baseline-and-launch-window.md)).

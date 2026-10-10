@@ -2,10 +2,10 @@
 
 Two kinds of entry:
 
-* **adopted** (default): an app that is not a native MFruit OS package. Its
+* **adopted** (default): an app that is not a native mFruit OS package. Its
   own installers are replaced by generated ``manifest.json``, ``install.sh``
   (a venv with ``dependencies``), ``run.sh`` and ``test.sh`` (``prepare``).
-* **native** (``"native": true``): an MFruit OS package with its own manifest
+* **native** (``"native": true``): an mFruit OS package with its own manifest
   and hooks, installed exactly as published. The pinned source must carry
   the entry's ``id`` and ``version``; nothing in it is rewritten.
 
@@ -97,14 +97,14 @@ def check_entry(item: object) -> dict:
         raise CatalogError("requires must be a list of names")
     unknown = [n for n in needs if n not in REQUIREMENTS]
     if unknown:
-        raise CatalogError(f"needs {unknown!r}, unknown to MFruit OS {__version__}")
+        raise CatalogError(f"needs {unknown!r}, unknown to mFruit OS {__version__}")
     min_os = item.get("min_os_version")
     if min_os is not None:
         required = parse_version(min_os)
         if required is None:
             raise CatalogError(f"min_os_version {min_os!r} is not a semantic version")
         if required > parse_version(__version__):
-            raise CatalogError(f"needs MFruit OS {min_os} (running {__version__})")
+            raise CatalogError(f"needs mFruit OS {min_os} (running {__version__})")
     return item
 
 
@@ -201,7 +201,7 @@ def refresh(home: str, fetch, max_age: float = ONLINE_MAX_AGE) -> bool:
     if not isinstance(data, list):
         raise CatalogError("online catalogue is not a list")
     if data and not valid_entries(data, "online catalogue", report=False):
-        raise CatalogError("online catalogue has no entry this MFruit OS can use")
+        raise CatalogError("online catalogue has no entry this mFruit OS can use")
     previous = online(home)
     atomic_write_json(path, {"fetched_at": time.time(), "entries": data})
     changed = previous is None or previous["entries"] != entries(home)

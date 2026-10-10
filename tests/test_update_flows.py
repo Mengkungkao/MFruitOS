@@ -83,7 +83,7 @@ class UpdateScreenTests(TempHomeTestCase):
         self.rt.updater.online = False
         self.rt.registry.apps = Mock(return_value=[AppEntry("demo", "Demo", "os")])
         labels = [i.label for i in UpdaterScreen(self.rt).items()]
-        for label in ("Internet unavailable", "MFruit OS", "Demo", "Install app"):
+        for label in ("Internet unavailable", "mFruit OS", "Demo", "Install app"):
             self.assertIn(label, labels)
 
     def test_empty_versions_explains_missing_releases(self):
@@ -128,7 +128,7 @@ class UpdateScreenTests(TempHomeTestCase):
         self.rt.updater.mark_installed.assert_called_once_with("demo", "1.1.0")
 
     def test_missing_releases_do_not_report_everything_up_to_date(self):
-        info = UpdateInfo("mfruit-os", "MFruit OS", "system", error="No releases or version tags")
+        info = UpdateInfo("mfruit-os", "mFruit OS", "system", error="No releases or version tags")
         self.rt.updater._infos = {info.app_id: info}
         self.rt.updater.check = Mock()
         self.rt.updater.online = True

@@ -10,7 +10,7 @@
 
 - `~/.whisplay-daemon/app/whisplay-wifi-config.json` was written on 2026-09-30
   (an earlier Whisplay checkout registered its example `wifi_config_app.py`);
-  MFruit OS adopted it the same day (`launcher.log`: `ADOPTED app=whisplay-wifi-config`).
+  mFruit OS adopted it the same day (`launcher.log`: `ADOPTED app=whisplay-wifi-config`).
   It has been on the menu since then.
 - The fresh upstream clone (`1066486`) no longer has `example/wifi_config_app.py`,
   so opening it failed (`exit_code=2`, "The app exited before it opened a screen").
@@ -68,4 +68,4 @@ a release archive.
 | Pi: reset, uninstall (data kept), reinstall (data back), uninstall + delete (nothing left; shared radio store kept), fresh install | ok |
 | Pi: sideload while RadioConnect was open | **found: the first update went over the open app** (0.1.0 kept running from its old folder). Fixed: refused with "RadioConnect is open; close it, then install again" (verified after deploy) |
 | Orange Pi: update 0.1.0 → 0.2.0 | ok |
-| Both: MFruit OS deployed from `~/MFruitOS-candidate`, `install.sh --no-service`, launcher restart (no job running) | ok; check.sh 425 tests before deploying |
+| Both: mFruit OS deployed from `~/MFruitOS-candidate`, `install.sh --no-service`, launcher restart (no job running) | ok; check.sh 425 tests before deploying |

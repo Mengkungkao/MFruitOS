@@ -32,7 +32,7 @@ touched), configuration backed up to `~/mfruit-backups/`, installed with
 |---|---|
 | `mfruitctl catalog` right after the restart | `source: bundled` (no download yet) |
 | The same 3 s later | `source: online`; `cache/catalog.json` written; log "Fruit Store list updated from the online catalogue (2 apps)" |
-| Simulated online-only entry `demo-new-app` and an entry with `min_os_version: 9.0.0` written into `cache/catalog.json` | `mfruitctl catalog` and the Fruit Store screen (screenshot) list *Demo New App — Download*; the 9.0.0 entry is left out and logged "needs MFruit OS 9.0.0 (running 1.4.0)" |
+| Simulated online-only entry `demo-new-app` and an entry with `min_os_version: 9.0.0` written into `cache/catalog.json` | `mfruitctl catalog` and the Fruit Store screen (screenshot) list *Demo New App — Download*; the 9.0.0 entry is left out and logged "needs mFruit OS 9.0.0 (running 1.4.0)" |
 | Stored copy deleted, Fruit Store opened on the device | list downloaded from GitHub again: BTC Dashboard and RadioConnect only (screenshot) |
 
 ## Not verified

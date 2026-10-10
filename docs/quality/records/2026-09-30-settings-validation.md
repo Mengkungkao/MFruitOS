@@ -24,7 +24,7 @@ Recovery archive and installer log: `/home/orangepi/.mfruit-deploy-backups/setti
 
 ## Results
 
-All **296 MFruit OS tests passed locally and on Orange Pi**, including the real
+All **296 mFruit OS tests passed locally and on Orange Pi**, including the real
 hardware-daemon integration harness. The self-test rendered **39 screens**.
 Seven targeted negative controls failed against the original implementation.
 Python static checks, Python 3.9 compatibility and shell syntax passed. ShellCheck
@@ -54,7 +54,7 @@ screen and saved previous-build record were checked without downgrading producti
 
 ## Distribution conditions still requiring release or checkout work
 
-A fresh live GitHub/Git check completed. MFruit OS has no semantic releases/tags;
+A fresh live GitHub/Git check completed. mFruit OS has no semantic releases/tags;
 ConnectWifi and Messenger have no Git checkout metadata; chatbot and WalkieTalkie
 have local modifications and are correctly protected from automatic updates.
 The chatbot's nested checkout is now detected. The three Whisplay example apps'

@@ -5,15 +5,15 @@ Foreground -> (Background) -> Exit.
 
 Every app the daemon can start is registered with the launch command
 ``~/.whisplay-os/bin/mfruit-run <app_id>``: OS-managed packages, and daemon
-apps MFruit OS has *adopted* (their original registration is saved in
+apps mFruit OS has *adopted* (their original registration is saved in
 ``~/.whisplay-os/adopted/<id>/`` and restored on uninstall).
 
-``mfruit-run`` is the launch gate. While MFruit OS runs it starts an app only
+``mfruit-run`` is the launch gate. While mFruit OS runs it starts an app only
 with a one-shot ticket (``state/tickets/<app_id>`` = "<session> <expiry>")
-that MFruit OS writes just before asking the daemon to launch that app. The
+that mFruit OS writes just before asking the daemon to launch that app. The
 daemon's own desktop keeps the button while an app starts up; without the
 gate a press there could start a second app (root cause RC2). Without a
-running MFruit OS the gate is open, so the daemon desktop works as before.
+running mFruit OS the gate is open, so the daemon desktop works as before.
 
 The wrapper records pid, session and exit code in ``state/runs/<app_id>.json``
 — the daemon reports neither — so failures are attributed to the right session.
@@ -81,7 +81,7 @@ class AppLifecycle:
     def unregister(self, app_id: str, name: str) -> bool:
         """Remove ``app_id`` from whisplay-daemon. True if it is gone.
 
-        With MFruit OS's daemon wrapper this is ``mfruit.app.unregister``. A
+        With mFruit OS's daemon wrapper this is ``mfruit.app.unregister``. A
         plain daemon has no such command: ``persist: false`` makes it delete its
         JSON file, and an empty launch command makes the stale in-memory entry
         (named "<name> (removed)", hidden by the registry) harmless until the
@@ -132,14 +132,14 @@ class AppLifecycle:
                 and data.get("cwd") == os.path.join(self.paths.app_root(entry.id), "current"))
 
     def register_os(self, package_dir: str) -> bool:
-        """Register MFruit OS itself so the daemon desktop can summon it."""
+        """Register mFruit OS itself so the daemon desktop can summon it."""
         ctl = os.path.join(self.paths.bin_dir, "mfruitctl")
         try:
             self.client.register_app(
                 OS_APP_ID, OS_NAME, icon="OS",
                 launch_command=f"{shlex.quote(ctl)} summon",
                 cwd=package_dir, exit_gesture="none", priority=OS_PRIORITY,
-                # Esc is "back" inside MFruit OS, not "close MFruit OS".
+                # Esc is "back" inside mFruit OS, not "close mFruit OS".
                 use_daemon_default_log=True, persist=True, disable_esc_exit_key=True)
         except DaemonError as exc:
             log.warning("Could not register %s: %s", OS_APP_ID, exc)
@@ -192,9 +192,9 @@ class AppLifecycle:
     def acquire_instance_lock(self) -> bool:
         """Hold ``state/launcher.lock`` for the life of this process.
 
-        It proves to ``mfruit-run`` that MFruit OS is alive (the kernel releases
+        It proves to ``mfruit-run`` that mFruit OS is alive (the kernel releases
         it when the process dies, so a crash never leaves the gate closed) and
-        guarantees a single MFruit OS instance.
+        guarantees a single mFruit OS instance.
         """
         import fcntl
         path = os.path.join(self.paths.state_dir, "launcher.lock")
@@ -346,7 +346,7 @@ class AppLifecycle:
         The app normally exits by itself (it got app_exit_requested). If it is
         still running after ``grace`` seconds, its process group is stopped.
         Returns exited | terminated | killed | unknown (no process record for
-        this session, e.g. an app registered without the MFruit gate).
+        this session, e.g. an app registered without the mFruit gate).
         """
         state = self.run_state(app_id)
         if not state or state.get("session") != session_id:

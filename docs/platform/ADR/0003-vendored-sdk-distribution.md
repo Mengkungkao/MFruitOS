@@ -4,13 +4,13 @@ Status: Accepted in 1.3.0 (2026-09-30); recorded retroactively 2026-10-02.
 
 ## Context
 
-Every app must handle input and look like MFruit OS. Apps run on boards
-without a package index and must keep working when MFruit OS is not installed;
+Every app must handle input and look like mFruit OS. Apps run on boards
+without a package index and must keep working when mFruit OS is not installed;
 they cannot import the platform.
 
 ## Decision
 
-The SDK source is `mfruitos/sdk/` (used by MFruit OS itself). Apps carry a copy
+The SDK source is `mfruitos/sdk/` (used by mFruit OS itself). Apps carry a copy
 named `mfruit_sdk/`, created by `scripts/sdk-sync.sh`, with a `VENDORED` note
 naming the SDK version. SDK modules use relative imports, the standard library
 and Pillow only. `sdk-sync.sh --check` and `scripts/check-app.py` detect drift.
@@ -33,7 +33,7 @@ bump.
 
 ## Compatibility
 
-SDK 1.2.0 requires MFruit OS 1.4.0's key hub for keyboard input while the
+SDK 1.2.0 requires mFruit OS 1.4.0's key hub for keyboard input while the
 launcher runs, and falls back to direct evdev standalone. Deploy the OS and
 keyboard apps together ([SDK](../../apps/SDK.md#versions-and-compatibility)).
 

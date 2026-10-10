@@ -29,7 +29,7 @@ def registration(root: Path = PROJECT_ROOT) -> dict:
         "launch_command": str(root / "run.sh"),
         "cwd": str(root),
         "env": {"WHISPLAY_APP_ID": APP_ID},
-        # The MFruit controller owns gestures; the daemon must not count the
+        # The mFruit controller owns gestures; the daemon must not count the
         # same button burst again. Lists also keep their explicit Back rows.
         "exit_gesture": "none",
         # 190 is the slot of Whisplay's built-in WiFi (Bluetooth 200, Volume

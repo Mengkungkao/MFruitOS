@@ -1,24 +1,24 @@
-"""Hello MFruit -- the MFruit OS app template: a counter.
+"""Hello mFruit -- the mFruit OS app template: a counter.
 
     button            keyboard            action
     tap               Down, Right, Tab    +1
     2 clicks          Up, Left            -1
     hold, release     Enter               reset to 0
-    4 clicks          Esc                 leave the app, back to MFruit OS
+    4 clicks          Esc                 leave the app, back to mFruit OS
 
-It shows how an MFruit OS app is put together (docs/apps/APP_CONTRACT.md in the
-MFruit OS repository):
+It shows how an mFruit OS app is put together (docs/apps/APP_CONTRACT.md in the
+mFruit OS repository):
 
 * All input goes through mfruit_sdk.input.InputController -- the button and
-  any USB or Bluetooth keyboard -- so the controls are MFruit OS's own. It
+  any USB or Bluetooth keyboard -- so the controls are mFruit OS's own. It
   acts only while this app has the screen.
-* The screen uses MFruit OS's status bar (page name, WiFi, battery) and
+* The screen uses mFruit OS's status bar (page name, WiFi, battery) and
   footer hints, from mfruit_sdk.ui.
 * The manifest sets exit_gesture "none" and disable_esc_exit_key, and the
   app claims Esc at start-up: 4 clicks and Esc are the app's "back", and
   back from here leaves.
 
-mfruit_sdk/ is a copy of MFruit OS's mfruitos/sdk; refresh it with
+mfruit_sdk/ is a copy of mFruit OS's mfruitos/sdk; refresh it with
 MFruitOS/scripts/sdk-sync.sh <this app>/app.
 """
 
@@ -47,7 +47,7 @@ def render(count: int, status=None, armed: bool = False):
     status_bar(c, "Counter", status)
     middle = (CONTENT_TOP + CONTENT_BOTTOM) // 2
     c.text(SCREEN_W // 2, middle, str(count), 64, "bold", anchor="mm")
-    c.text(SCREEN_W // 2, middle + 48, "Hello MFruit", 14, "medium", c.theme.text_muted,
+    c.text(SCREEN_W // 2, middle + 48, "Hello mFruit", 14, "medium", c.theme.text_muted,
            anchor="mm")
     footer(c, [("release", "to reset")] if armed else HINTS)
     return c.image
@@ -108,7 +108,7 @@ class Counter:
         self.app.on_exit_request = self.done.set
         self.app.on_focus_changed = self.on_focus_changed
         # Before taking the screen: a registration makes the daemon redraw
-        # its desktop. (MFruit OS registers the package with the manifest's
+        # its desktop. (mFruit OS registers the package with the manifest's
         # disable_esc_exit_key too; this covers a copy started by hand.)
         own_escape_key(self.app.app_id)
         try:

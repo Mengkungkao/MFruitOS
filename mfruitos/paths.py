@@ -1,4 +1,4 @@
-"""Filesystem layout of MFruit OS and path-safety helpers.
+"""Filesystem layout of mFruit OS and path-safety helpers.
 
 Runtime data lives under ``~/.whisplay-os`` (override with WHISPLAY_OS_HOME)::
 

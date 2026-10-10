@@ -1,9 +1,9 @@
 # App development
 
-For people building or integrating applications for MFruit OS. An app is
-normally integrated **without changing MFruit OS**: it ships a manifest, uses
-the MFruit App SDK and goes through the managed package pipeline. The app owns
-its features, data and dependencies; MFruit OS owns registration, launching,
+For people building or integrating applications for mFruit OS. An app is
+normally integrated **without changing mFruit OS**: it ships a manifest, uses
+the mFruit App SDK and goes through the managed package pipeline. The app owns
+its features, data and dependencies; mFruit OS owns registration, launching,
 the foreground lifecycle and package activation.
 
 ## The app lifecycle and where each stage is documented
@@ -22,7 +22,7 @@ the foreground lifecycle and package activation.
 ## Integration levels
 
 1. **Adopted daemon app:** an app registered with whisplay-daemon runs inside
-   MFruit OS through the launch gate. This alone does not make it a native
+   mFruit OS through the launch gate. This alone does not make it a native
    package.
 2. **Native package:** root `manifest.json`, managed entrypoint, repeatable
    hooks, a smoke test, the vendored SDK and the app contract.

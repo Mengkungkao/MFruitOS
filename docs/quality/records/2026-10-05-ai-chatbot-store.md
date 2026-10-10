@@ -3,7 +3,7 @@
 ## Context
 
 The user asked for AI Chatbot in the Fruit Store (prebuilt release, system
-packages through an MFruit OS installer option, API keys copied by the user)
+packages through an mFruit OS installer option, API keys copied by the user)
 and for RadioConnect 0.5.0 to reach devices.
 
 ## Revisions
@@ -16,7 +16,7 @@ and for RadioConnect 0.5.0 to reach devices.
   (ubuntu-24.04-arm).
 - RadioConnect `29694c4` (0.5.0): source snapshot SHA-256 `8751ab02…dc32`,
   downloaded twice with the same digest; manifest `radioconnect` 0.5.0.
-- MFruit OS `1d18b35` plus uncommitted changes (catalogue entries,
+- mFruit OS `1d18b35` plus uncommitted changes (catalogue entries,
   `system_packages`, `setup-app.sh`, `install.sh --app`, Store updates for
   installed catalogue apps).
 
@@ -32,11 +32,11 @@ and for RadioConnect 0.5.0 to reach devices.
 
 | Step | Observed |
 |---|---|
-| Local build of the package, MFruit OS `safe_extract` + `load_manifest` on the Pi | accepted (32 s to extract) |
+| Local build of the package, mFruit OS `safe_extract` + `load_manifest` on the Pi | accepted (32 s to extract) |
 | The package's `install.sh` on the Pi | "AI Chatbot needs: mpg123 python3 cairosvg." and the setup command, exit 1 |
 | The same with that check bypassed (test copy) | Node.js 20.19.5 downloaded, SHA-256 checked, `runtime/` 94 MB, `node --version` v20.19.5 |
 | `test.sh` | Node checks pass; Python import stops at `cairosvg` (not installed) |
-| MFruit OS candidate `1.4.0-local20261005121024`, the new Store list loaded into `cache/catalog.json` | radioconnect 0.5.0 (installed 0.4.0: update offered); whisplay-ai-chatbot 1.0.0 with "System packages missing: libsox-fmt-mp3 mpg123 python3-cairosvg (run 'bash …/setup-app.sh whisplay-ai-chatbot' …)" |
+| mFruit OS candidate `1.4.0-local20261005121024`, the new Store list loaded into `cache/catalog.json` | radioconnect 0.5.0 (installed 0.4.0: update offered); whisplay-ai-chatbot 1.0.0 with "System packages missing: libsox-fmt-mp3 mpg123 python3-cairosvg (run 'bash …/setup-app.sh whisplay-ai-chatbot' …)" |
 | `setup-app.sh --check whisplay-ai-chatbot` | lists the same three packages, changes nothing |
 
 ## Not verified

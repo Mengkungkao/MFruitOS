@@ -81,7 +81,7 @@ class DaemonBoard:
     def start(self, timeout: float = 5.0):
         """Register, listen for events, then take the foreground. Listening
         comes first so no button event between the two is missed."""
-        # A daemon/MFruit launch already has a persistent registration. Keep
+        # A daemon/mFruit launch already has a persistent registration. Keep
         # its mfruit-run wrapper, working directory and logging configuration.
         managed = os.getenv("WHISPLAY_APP_ID") == self.app_id and (
             os.getenv("WHISPLAY_OS_APP_DIR") or os.getenv("MFRUIT_SESSION"))

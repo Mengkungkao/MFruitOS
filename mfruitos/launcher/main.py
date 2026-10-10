@@ -14,7 +14,7 @@ log = logging.getLogger("mfruitos.main")
 
 
 def parse_args(argv=None):
-    parser = argparse.ArgumentParser(prog="mfruitos", description="MFruit OS application platform")
+    parser = argparse.ArgumentParser(prog="mfruitos", description="mFruit OS application platform")
     parser.add_argument("--home", help="data directory (default ~/.whisplay-os)")
     parser.add_argument("--socket", help="hardware service socket path")
     parser.add_argument("--debug", action="store_true", help="debug logging")
@@ -22,7 +22,7 @@ def parse_args(argv=None):
                         help="import every module and render every screen offscreen, then exit")
     parser.add_argument("--preview", metavar="DIR",
                         help="render all screens to PNG files in DIR (no daemon needed)")
-    parser.add_argument("--version", action="version", version=f"MFruit OS {__version__}")
+    parser.add_argument("--version", action="version", version=f"mFruit OS {__version__}")
     return parser.parse_args(argv)
 
 
@@ -47,5 +47,5 @@ def main(argv=None) -> int:
     try:
         return runtime.run()
     except Exception:
-        log.critical("MFruit OS crashed", exc_info=True)
+        log.critical("mFruit OS crashed", exc_info=True)
         return 1

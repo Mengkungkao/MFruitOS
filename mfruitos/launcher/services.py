@@ -366,7 +366,7 @@ class ScreenServices:
                     self.updater.git_update(app, progress)
                 done.append(app.name)
             return done
-        extra = " MFruit OS itself is updated from System update." if (
+        extra = " mFruit OS itself is updated from System update." if (
             system and system.update_available) else ""
         self.start_job("Update all", work,
                        lambda names: f"Updated {len(names)} app(s).{extra}")
@@ -452,7 +452,7 @@ class ScreenServices:
         return self._package_task(f"Uninstall {entry.name}", work, done, on_error)
 
     def delete_app_data(self, app_id: str, on_done=None, on_error=None) -> bool:
-        """Delete what MFruit OS keeps for an uninstalled app (Installer.delete_data)."""
+        """Delete what mFruit OS keeps for an uninstalled app (Installer.delete_data)."""
         if self.registry.get(app_id) is not None:
             self.toast("Uninstall the app first", "error")
             return False
@@ -465,7 +465,7 @@ class ScreenServices:
         """Empty an installed app's data folder (Installer.reset_data)."""
         entry = self.registry.get(app_id)
         if entry is None or entry.kind != "os":
-            self.toast("Only apps installed by MFruit OS can be reset", "error")
+            self.toast("Only apps installed by mFruit OS can be reset", "error")
             return False
         if entry.running:
             self.toast("Stop the app before resetting it")
@@ -476,7 +476,7 @@ class ScreenServices:
     def rollback_system(self) -> None:
         self.start_job("Roll back system",
                        lambda progress: self.installer.rollback_to_previous(OS_APP_ID, system=True),
-                       lambda version: f"MFruit OS {version} restored. Restarting…",
+                       lambda version: f"mFruit OS {version} restored. Restarting…",
                        on_success=lambda _: self.loop.call_later(2.5, self.restart_launcher),
                        steps=("activate",))
 
@@ -528,6 +528,29 @@ class ScreenServices:
                                            "success" if r.ok else "error"))
 
     # ------------------------------------------------------------ misc
+    # ------------------------------------------------------------ power
+    def power_shutdown(self, reboot: bool = False) -> None:
+        """Safe shutdown or restart through mfruit-power.service."""
+        def failed(exc):
+            self.toast(("Power service not running" if isinstance(exc, OSError)
+                        else str(exc))[:40], "error")
+        self.run_task("power-shutdown",
+                      lambda: self.power.client.shutdown(reboot=reboot, reason="menu"),
+                      None, failed)
+
+    def open_power_menu(self) -> None:
+        """mFruit OS's power menu when the power service runs, else the daemon's page."""
+        from mfruitos.launcher.ui.screens.battery import PowerMenuScreen
+        if self.power.connected or not self.system_page_available("whisplay-system"):
+            self.push(PowerMenuScreen(self))
+        else:
+            self.open_system_page("whisplay-system")
+
+    def lock_screen(self) -> None:
+        self.router.home()
+        self._cancel_idle_timers()
+        self.backlight.off()
+
     def flush_settings(self) -> None:
         if self.settings.dirty:
             self.settings.save()

@@ -1,7 +1,7 @@
 # Update, rollback and uninstall
 
-How MFruit OS changes an installed app's version and what it guarantees when
-something fails. Updating MFruit OS itself is in
+How mFruit OS changes an installed app's version and what it guarantees when
+something fails. Updating mFruit OS itself is in
 [platform installation](../platform/INSTALLATION.md#updating-mfruit-os).
 
 Where to find it on the device: **Fruit Store → app** (Open, Update, Roll back,
@@ -56,9 +56,9 @@ Each asks first; the safe choice (Cancel, Keep data) is the first row.
 
 | Action | What happens | What stays |
 |---|---|---|
-| **Reset app** | empties the app's `data/` (and `backups/`) | the app, its version and its MFruit OS settings |
+| **Reset app** | empties the app's `data/` (and `backups/`) | the app, its version and its mFruit OS settings |
 | **Uninstall** | runs `uninstall.sh`, removes the code (`versions/`, `current`, `app.json`), unregisters it from whisplay-daemon and forgets its menu settings | `data/` and `backups/`, with an `uninstalled.json` note; the app is then listed in the Fruit Store as **Data kept** |
-| **Delete data** | only for an uninstalled app: removes its package folder, logs, run record and adoption record | nothing that MFruit OS keeps |
+| **Delete data** | only for an uninstalled app: removes its package folder, logs, run record and adoption record | nothing that mFruit OS keeps |
 
 Right after **Uninstall** the Fruit Store asks the second question, *Delete
 <App> data?*; **Keep data** leaves it for later. An app with no data is removed
@@ -68,10 +68,10 @@ if that install fails, the kept data is restored, never deleted.
 For an app registered directly with whisplay-daemon (kind `daemon`, such as the
 Whisplay examples), Uninstall removes the registration (through the daemon
 wrapper's `mfruit.app.unregister`; [Host API](../platform/HOST_API.md#whisplay-user-interface-in-the-background))
-and Delete data removes MFruit OS's adoption record and logs. Its own folder is
+and Delete data removes mFruit OS's adoption record and logs. Its own folder is
 never touched.
 
-Never touched by any of these: files outside MFruit OS's folders, such as
+Never touched by any of these: files outside mFruit OS's folders, such as
 data an app keeps in its own home-directory folder (`~/.whisplay-walkie`,
 `~/.lora-messenger`) or the shared radio store
 ([Configuration](../platform/CONFIGURATION.md#shared-radio-files)).

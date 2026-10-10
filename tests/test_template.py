@@ -1,7 +1,7 @@
-"""The app template (templates/whisplay-app-template) is a correct MFruit OS app.
+"""The app template (templates/whisplay-app-template) is a correct mFruit OS app.
 
 It is what new apps start from, so it must follow docs/apps/APP_CONTRACT.md: input
-through the SDK controller, MFruit OS's chrome, Esc and 4 clicks as the
+through the SDK controller, mFruit OS's chrome, Esc and 4 clicks as the
 app's own "back".
 """
 

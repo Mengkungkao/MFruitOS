@@ -1,9 +1,9 @@
 # Host API
 
-A **host** is everything MFruit OS needs from the device underneath it:
+A **host** is everything mFruit OS needs from the device underneath it:
 screen ownership, frame output, input, indicators, status and app processes.
 Today there is one host, whisplay-daemon on a Whisplay HAT (shipped with
-MFruit OS as the [Whisplay driver](../WHISPLAY_DRIVER.md)), and most of its
+mFruit OS as the [Whisplay driver](../WHISPLAY_DRIVER.md)), and most of its
 contract is **implicit**: platform code calls concrete Whisplay classes. This
 document records that contract as it exists, so it can be extracted into
 explicit interfaces one boundary at a time
@@ -29,6 +29,31 @@ session are dropped as `STALE_EVENT`. Outcomes: `exited`, `failed`,
 Whisplay implementation; `tests/test_application_manager.py` drives the
 manager with a fake host.
 
+### Battery board
+
+`mfruitos/hosts/pisugar/base.py` defines `Chip`, the second formal host
+boundary ([ADR 0012](ADR/0012-own-power-management.md)). The power service
+calls only these members. A board without a capability leaves it out of
+`features` and raises `Unsupported`.
+
+| Member | Meaning |
+|---|---|
+| `model`, `key`, `features`, `curve` | display name, config value, capabilities (`charging_control`, `power_restore`, `soft_poweroff`, `anti_mistouch`, `battery_protect`, `temperature`, `taps`, `rtc`, `current`), voltage→% curve |
+| `poll_interval`, `tap_interval` | sampling period; faster button sampling while presses are wanted (PiSugar 2) |
+| `init(settings)` | apply the explicit board settings (None = leave as is) |
+| `sample()` → `Sample` | voltage, current, external power, charging allowed, temperature |
+| `poll_taps()`, `poll_soft_poweroff()` | presses since the last call; the power button's shutdown request |
+| `get_/set_` `allow_charging`, `power_restore`, `soft_poweroff`, `anti_mistouch`, `battery_protect` | board settings |
+| `rtc` | an `rtc.Rtc` (UTC time, wake alarm with weekday mask, housekeeping) or None |
+
+Implementations: `pisugar3.PiSugar3`, `pisugar2.IP5209Board` (4/2 LEDs),
+`pisugar2.IP5312Board`, `pisugar2.UnknownPiSugar2` (read only),
+`sd3078.SD3078`. Test doubles: `fake.py` (registers, write protection,
+press latch, soft-shutdown handshake). Detection and the bus live in
+`detect.py` and `i2c.py`. The power-off at the end of a shutdown is
+`scripts/mfruit-power-off`, which is standalone because `/home` may already
+be unmounted by then.
+
 ## Implicit contract (Whisplay implementation)
 
 | Capability | What the platform needs | Whisplay implementation today | Formal? |
@@ -36,11 +61,11 @@ manager with a fake host.
 | Launch session | start/stop a session, report foreground and end | `ForegroundManager.start/stop` → daemon `app.launch`, `app.exit.request` | Yes (`Host`) |
 | Screen ownership | take, release and re-check the screen | `ForegroundManager.acquire/_release_own/reconcile` → `app.focus.acquire`, `app.focus.release`, `health.ping` (`foreground_app_id`) | No |
 | Frame output | write a 240×280 big-endian RGB565 frame | `daemon/framebuffer.Framebuffer.write` (mmap of `framebuffer.acquire`); `launcher/direct.DirectDisplay.write` in fallback. Both expose `attached` and `write(frame) -> bool`, selected by `Runtime._output()` | No (duck-typed) |
-| Button | press and release edges while MFruit OS owns the screen | daemon `button_pressed`/`button_released` events for `mfruit-os` → `FocusListener.on_button`; fallback: `WhisplayBoard` callbacks | No |
+| Button | press and release edges while mFruit OS owns the screen | daemon `button_pressed`/`button_released` events for `mfruit-os` → `FocusListener.on_button`; fallback: `WhisplayBoard` callbacks | No |
 | Keyboard | exclusive capture, key events, device list | `sdk/keys.KeyReader` (evdev, `EVIOCGRAB`, inotify) — Linux, not daemon-specific | No |
 | Backlight | brightness, dim, off | `system/hardware.BacklightController` → `backlight.set` | No |
 | RGB LED | colour per platform state, button feedback | `system/hardware.LedController` → `led.set` (`led.fade` available in the client) | No |
-| Battery | percent and charging | `system/hardware.read_battery` → pisugar-server socket (not the daemon) | No |
+| Battery board | percent, charging, safe shutdown, board settings, clock, power cut | mFruit OS power service (`power/`) over `hosts/pisugar/` drivers; the launcher follows its events (`launcher/power_link.py`), and falls back to `system/hardware.read_battery` (PiSugar's own server) when the service is not installed | Yes (`hosts/pisugar/base.Chip`) |
 | Wi-Fi level | 0–3 signal for the status bar | `system/system_info.wifi_level` (`/proc/net/wireless`) | No |
 | System pages | open the host's own settings pages | daemon internal pages (`whisplay-wifi`, `whisplay-bluetooth`, `whisplay-volume`, `whisplay-system`) launched as session kind `page` | Via `Host` |
 | App registration | make an app launchable through the gate | `AppLifecycle.register/adopt/restore_adopted` → `app.register` with `mfruit-run <id>` | No |
@@ -62,26 +87,26 @@ real-daemon tests run the copy bundled in `drivers/whisplay` (upstream
 daemon must either provide the same semantics or the platform must change.
 
 1. **`app.launch` is refused while another app is foreground.** To start an
-   app, MFruit OS releases its own focus first, then calls `app.launch`.
+   app, mFruit OS releases its own focus first, then calls `app.launch`.
 2. **`desktop_entered`, `screen_locked` and `screen_unlocked` are sent only to
-   global subscribers.** MFruit OS subscribes globally, so it also receives
+   global subscribers.** mFruit OS subscribes globally, so it also receives
    every app's scoped events and filters by `payload.app_id`.
 3. **A launch that dies before taking focus produces no event.** While — and
-   only while — a launch is pending, MFruit OS polls `app.list` every 0.25 s,
+   only while — a launch is pending, mFruit OS polls `app.list` every 0.25 s,
    bounded by the daemon's 8 s pending timeout.
-4. **Button events are forwarded raw** to the foreground app. MFruit OS
+4. **Button events are forwarded raw** to the foreground app. mFruit OS
    registers with `exit_gesture: "none"`, so the daemon does not count
    quad-clicks on the launcher; inside launched apps the app's registered
    exit gesture applies.
-5. **The daemon does not track processes it did not start.** MFruit OS runs
+5. **The daemon does not track processes it did not start.** mFruit OS runs
    from systemd and registers a launch command that only summons the running
    instance (`mfruitctl summon`).
 6. **A dead foreground app keeps the screen.** Hence the systemd watchdog and
    `ExecStopPost=mfruitctl release`, which asks the daemon to reclaim it.
 7. **The daemon's desktop is a second launcher.** Whenever no app owns the
-   screen — including while an app MFruit OS launched is still starting — the
+   screen — including while an app mFruit OS launched is still starting — the
    desktop handles the button with its own selection: a tap moves it, a
-   release after ≥0.7 s launches it. MFruit OS completes every gesture before
+   release after ≥0.7 s launches it. mFruit OS completes every gesture before
    handing the screen over, gates app launches with tickets and evicts daemon
    pages that appear during a launch ([Lifecycle](LIFECYCLE.md)).
 8. **The daemon can turn a hold into a tap.** `_monitor_loop` resets the press
@@ -91,8 +116,17 @@ daemon must either provide the same semantics or the platform must change.
    widens the window. Evidence: 2026-10-02 trace, press 3.535 s → release
    4.436 s, no `_launch_app`, selection advanced
    ([record](../quality/records/2026-10-02-baseline-and-launch-window.md)).
-   This is a daemon defect; MFruit OS must not depend on a desktop hold being
+   This is a daemon defect; mFruit OS must not depend on a desktop hold being
    recognized.
+9. **The daemon's PiSugar integration runs once, at its start**
+   (`_init_pisugar_integration`). With a PiSugar 3 it can read over I2C, it
+   polls the power button's raw bit every 20 ms and treats every short press
+   (≤0.6 s) as Home. Otherwise, when `/tmp/pisugar-server.sock` exists, it
+   installs a `set_button_shell <single> … > /tmp/whisplay-daemon-home.flag`
+   hook and polls that flag. It reads the battery with `get battery` every few
+   seconds. The power service therefore starts before the daemon
+   (`Before=whisplay-daemon.service`) and answers in PiSugar's format;
+   `tests/test_power.py` runs the daemon's own `PiSugarManager` against it.
 
 ## Daemon commands used
 
@@ -109,11 +143,11 @@ timeout (`daemon/client.py`).
 `scripts/whisplay-daemon-mfruit.py` starts the unmodified daemon from the
 installed Whisplay driver, `/usr/local/share/whisplay` (systemd drop-in
 written by `install.sh`), and patches five
-`WhisplayDaemon` methods. The patches act only while MFruit OS holds
+`WhisplayDaemon` methods. The patches act only while mFruit OS holds
 `state/launcher.lock` (checked through `/proc/locks`, never by taking the
 lock), during a bounded start-up grace period, and not in Daemon desktop mode:
 
-| Method | While MFruit OS runs |
+| Method | While mFruit OS runs |
 |---|---|
 | `_render_desktop` | draws nothing; the LCD keeps the last frame |
 | `_on_button_pressed` / `_on_button_released` | ignored when no app owns the screen |
@@ -121,7 +155,7 @@ lock), during a bounded start-up grace period, and not in Daemon desktop mode:
 | `_release_focus` | first draws the releasing owner's final frame |
 | `handle_command` | adds `mfruit.app.key`, `mfruit.page.key` and `mfruit.app.unregister` (below) |
 
-So during an app's start-up the LCD shows MFruit OS's "Opening <App>" screen
+So during an app's start-up the LCD shows mFruit OS's "Opening <App>" screen
 and a press does nothing. `tests/test_background_ui.py` tests this against
 the real daemon code, including a negative control without the wrapper. The
 launch-window tests in `tests/test_launch_lifecycle.py` run **without** the
@@ -131,7 +165,7 @@ wrapper to cover installations using `--no-background-daemon`.
 
 whisplay-daemon has no unregister command. `mfruit.app.unregister`
 (`{"app_id": ...}`) removes the app from the daemon's list and deletes its JSON
-file through the daemon's own `_save_app`. It is refused for MFruit OS, the
+file through the daemon's own `_save_app`. It is refused for mFruit OS, the
 daemon's built-in pages and an app that is running, starting or on screen.
 Without the wrapper the daemon answers `unknown command`; the launcher then
 re-registers the app as an empty, non-persistent "<name> (removed)" entry,
@@ -140,7 +174,7 @@ which the registry hides until the daemon restarts.
 
 ### LCD DC line parked low (always)
 
-One patch applies whether or not MFruit OS runs: `park_dc_low` wraps
+One patch applies whether or not mFruit OS runs: `park_dc_low` wraps
 `WhisplayBoard._send_data` and `_send_data_bytes` so the LCD's data/command
 line (BOARD 13: BCM 27 on a Pi, PH3 on an Orange Pi) is lowered after each
 transfer. With the SX126X LoRa HAT's stock M0/M1 jumpers that line is the
@@ -158,7 +192,7 @@ driver files stay unmodified.
 When the daemon's systemd unit is `inactive` or `failed` (never while it is
 starting), `launcher/direct.py` opens `WhisplayBoard` from the Whisplay
 driver's runtime (`/usr/local/share/whisplay`, else an older `~/Whisplay`
-checkout, else the copy in this MFruit OS version) to show *Daemon unavailable* with Retry / Restart daemon /
+checkout, else the copy in this mFruit OS version) to show *Daemon unavailable* with Retry / Restart daemon /
 Diagnostics, and releases the hardware as soon as the unit becomes active
 again. It is the only path that drives the HAT directly: without the daemon
 there is no framebuffer in which to show the problem.
@@ -175,7 +209,7 @@ the extraction sequence in [Part I §25](DEVELOPMENT_RULES.md#25-current-whispla
 | 3 | Foreground/focus | `launcher/focus.py` |
 | 4 | Input (button, keyboard routing) | `FocusListener.on_button`, `Runtime._on_hardware_key`, `sdk/keys.py` |
 | 5 | Display/framebuffer | `Framebuffer`, `DirectDisplay`, `Runtime._output()` |
-| 6 | LED, backlight, audio, power, battery | `system/hardware.py`, `system/diagnostics.py`, daemon pages |
+| 6 | LED, backlight, audio, power, battery | `system/hardware.py`, `system/diagnostics.py`, daemon pages; the battery board is done (`hosts/pisugar/base.Chip`, ADR 0012) |
 | 7 | MockHost | `tests/fake_daemon.py` (test double today) |
 | 8 | Shared contract tests against both hosts | `tests/test_focus.py`, `tests/test_launch_lifecycle.py` |
 

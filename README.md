@@ -1,8 +1,8 @@
-# MFruit OS
+# mFruit OS
 
 **A compact application platform for small Linux devices.**
 
-MFruit OS turns a Raspberry Pi Zero 2 W, Orange Pi Zero 2W or similar Linux
+mFruit OS turns a Raspberry Pi Zero 2 W, Orange Pi Zero 2W or similar Linux
 board with a display HAT into a small device: it boots into a launcher,
 installs and updates apps from GitHub with automatic rollback, and is used
 entirely with the HAT's single button.
@@ -17,25 +17,25 @@ entirely with the HAT's single button.
 
 It runs **on top of `whisplay-daemon`**, not instead of it. The daemon keeps
 owning the LCD, backlight, RGB LED, button and the foreground-app lifecycle;
-MFruit OS is a daemon foreground app that draws into the daemon's shared
+mFruit OS is a daemon foreground app that draws into the daemon's shared
 framebuffer. The daemon, the display driver and the sound card driver ship
-with MFruit OS as its [Whisplay driver](docs/WHISPLAY_DRIVER.md), so no
-separate Whisplay installation is needed. Keyboard-using apps need MFruit SDK 1.2.0 so they can receive
+with mFruit OS as its [Whisplay driver](docs/WHISPLAY_DRIVER.md), so no
+separate Whisplay installation is needed. Keyboard-using apps need mFruit SDK 1.2.0 so they can receive
 input through the launcher's key hub; button-only apps retain their integration.
 
-The interface uses MFruit OS names and app descriptions, such as **Radio
+The interface uses mFruit OS names and app descriptions, such as **Radio
 Message** beneath Messenger. Hardware integration identifiers, service names
 and storage paths remain stable for compatibility with existing installations.
 
 ```
 ┌─────────────────────────────┐
-│ MFruit OS                   │  launcher · settings · app manager
+│ mFruit OS                   │  launcher · settings · app manager
 │                             │  updater · diagnostics
 └──────────────┬──────────────┘
                │ daemon API (/tmp/whisplay-daemon.sock)
 ┌──────────────▼──────────────┐
 │ whisplay-daemon             │  LCD · button · LED · backlight · app lifecycle
-│ + sound card (drivers/)     │  MFruit OS Whisplay driver
+│ + sound card (drivers/)     │  mFruit OS Whisplay driver
 └──────────────┬──────────────┘
 ┌──────────────▼──────────────┐
 │ Display HAT                 │
@@ -44,7 +44,7 @@ and storage paths remain stable for compatibility with existing installations.
 
 ## Features
 
-- **Launcher** — apps discovered automatically from MFruit OS packages and the
+- **Launcher** — apps discovered automatically from mFruit OS packages and the
   daemon registry (nothing hard-coded); status badges for running, update
   available and broken apps.
 - **One-button navigation** — tap = next, double-click = previous,
@@ -62,10 +62,18 @@ and storage paths remain stable for compatibility with existing installations.
 - **System** — system info, diagnostics with hardware tests (display, button,
   LED, speaker), display/LED/button/audio settings, daemon WiFi / Bluetooth /
   Volume / Power pages.
+- **Power management** — mFruit OS's own service for PiSugar battery boards:
+  battery level, safe shutdown before the battery runs empty, the power
+  button's safe shutdown, power on when plugged in, wake-up alarm, and the
+  board switched off after *Shut down* (Settings → Battery, `mfruitctl power`;
+  [ADR 0012](docs/platform/ADR/0012-own-power-management.md)).
+- **Wi-Fi from a phone** — Settings → Wi-Fi → Phone Setup runs PiSugar's
+  sugar-wifi-conf so the PiSugar app can set the Wi-Fi over Bluetooth, with
+  a key made for this device ([ADR 0013](docs/platform/ADR/0013-phone-wifi-setup.md)).
 - **Keyboard** — plug in a USB keyboard or pair a Bluetooth one: arrows move,
-  Enter opens, Esc goes back, in MFruit OS and in its apps.
+  Enter opens, Esc goes back, in mFruit OS and in its apps.
 - **One user interface** — whisplay-daemon keeps running the hardware in the
-  background; MFruit OS is all you see, including its own "Opening <App>"
+  background; mFruit OS is all you see, including its own "Opening <App>"
   screen while an app starts.
 - **Deterministic launches** — exactly the selected app opens, once: one
   launch session at a time, and a launch gate stops whisplay-daemon's own
@@ -108,9 +116,9 @@ changes the installer makes, updating, rollback and uninstalling.
 | four quick clicks | Esc | back |
 
 Every screen shows its gestures in the footer and ends with a **Back** row.
-Apps built with the MFruit App SDK use the same controls, button and
+Apps built with the mFruit App SDK use the same controls, button and
 keyboard: four quick clicks (or Esc) go back a screen, and from an app's
-first screen they leave it; MFruit OS then takes the screen back. A
+first screen they leave it; mFruit OS then takes the screen back. A
 keyboard, USB or Bluetooth, is picked up as soon as it is plugged in or
 paired, and only the app on screen reads it.
 
@@ -128,11 +136,11 @@ mfruitctl help
 ## Building apps
 
 Any compatible daemon app works. To make it installable and updatable through
-MFruit OS, add a `manifest.json` and publish GitHub releases. Start from
+mFruit OS, add a `manifest.json` and publish GitHub releases. Start from
 [`templates/whisplay-app-template`](templates/whisplay-app-template) and read
-[Getting started](docs/apps/GETTING_STARTED.md): the [MFruit App SDK](docs/apps/SDK.md)
-gives your app MFruit OS's controls (button and keyboard) and look, and the
-[app contract](docs/apps/APP_CONTRACT.md) lists the rules MFruit apps follow.
+[Getting started](docs/apps/GETTING_STARTED.md): the [mFruit App SDK](docs/apps/SDK.md)
+gives your app mFruit OS's controls (button and keyboard) and look, and the
+[app contract](docs/apps/APP_CONTRACT.md) lists the rules mFruit apps follow.
 
 ```json
 {
@@ -156,13 +164,13 @@ gives your app MFruit OS's controls (button and keyboard) and look, and the
 ├── apps/<id>/      installed packages (versions/, current -> active version, data/)
 ├── bin/            mfruit-run, mfruitctl, boot-guard.sh
 ├── cache/          GitHub metadata, downloads
-├── config/settings.json
-├── logs/           launcher.log, updater.log, <app>.log
+├── config/         settings.json, power.json
+├── logs/           launcher.log, updater.log, power.log, <app>.log
 ├── state/          run state, control socket
-└── system/         MFruit OS itself (versions/, current)
+└── system/         mFruit OS itself (versions/, current)
 ```
 
-MFruit OS reads `~/.whisplay-daemon/app/` to discover daemon apps and only
+mFruit OS reads `~/.whisplay-daemon/app/` to discover daemon apps and only
 changes daemon registrations through the daemon's own `app.register` API.
 
 ## Project layout
@@ -173,11 +181,13 @@ mfruitos/
 ├── apps/         manifest validation, registry
 ├── updater/      installer, verifier, rollback, GitHub, commit tracking, catalogue
 ├── system/       settings, diagnostics, Bluetooth, hardware policy
+├── power/        power service (mfruit-power.service): battery, safe shutdown, PiSugar protocol
 ├── daemon/       whisplay-daemon client, event stream, framebuffer (the only socket code)
 ├── launcher/     runtime, focus/host, event loop, gestures, UI and screens
-└── sdk/          the MFruit App SDK (vendored into apps as mfruit_sdk)
+├── hosts/        hardware drivers: pisugar/ (battery boards), lora/ (radio)
+└── sdk/          the mFruit App SDK (vendored into apps as mfruit_sdk)
 scripts/          install.sh, uninstall.sh, mfruit-run, mfruitctl, check.sh, check-app.py, sdk-sync.sh …
-templates/        whisplay-app-template (an MFruit app built on the SDK)
+templates/        whisplay-app-template (an mFruit app built on the SDK)
 tests/            unit, integration, real-daemon and package-lifecycle tests
 docs/             platform/, apps/, quality/
 ```
@@ -198,7 +208,7 @@ with `python3 -m mfruitos --preview /tmp/screens`.
 ## License
 
 MIT — see [LICENSE](LICENSE). The bundled Inter font is under the SIL Open Font License.
-# MFruitOS
+# mFruit OS
 
 ## Settings and keyboard input (1.4.0)
 
@@ -208,7 +218,7 @@ opens from Settings > Wi-Fi > Choose a network and returns there when closed.
 Bluetooth shows saved and nearby devices with pairing codes and confirmation.
 Boot displays only the logo on a dark background.
 
-Deploy SDK 1.2.0 to all keyboard apps together with MFruit OS 1.4.0. MFruit OS
+Deploy SDK 1.2.0 to all keyboard apps together with mFruit OS 1.4.0. mFruit OS
 holds keyboards exclusively, preventing typed keys from reaching the console
 shell, and forwards keys to the foreground app. Daemon pages receive forwarded
-keys through the MFruit wrapper; Developer > Daemon desktop releases the grab.
+keys through the mFruit wrapper; Developer > Daemon desktop releases the grab.

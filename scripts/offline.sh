@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Offline packs: install MFruit OS and its Whisplay driver without internet.
+# Offline packs: install mFruit OS and its Whisplay driver without internet.
 #
 #   bash scripts/offline.sh find                  print the offline pack for this board, if any
 #   sudo bash scripts/offline.sh install PKG...   install the missing packages: from the
@@ -94,14 +94,14 @@ offline_shims() {  # PACK
   state="$dir/apt-state"
   {
     echo '#!/usr/bin/env bash'
-    echo '# apt-get against the MFruit OS offline pack only (scripts/offline.sh).'
+    echo '# apt-get against the mFruit OS offline pack only (scripts/offline.sh).'
     printf 'exec %q' "$REAL_APT_GET"
     while IFS= read -r opt; do printf ' %q' "$opt"; done < <(offline_apt_options "$pack" "$state")
     echo ' "$@"'
   } >"$dir/apt-get"
   cat >"$dir/wget" <<EOF
 #!/usr/bin/env bash
-# wget served from the MFruit OS offline pack (scripts/offline.sh).
+# wget served from the mFruit OS offline pack (scripts/offline.sh).
 out="" url=""
 while [ \$# -gt 0 ]; do
   case "\$1" in

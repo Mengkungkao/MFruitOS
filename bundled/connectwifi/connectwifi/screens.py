@@ -1,4 +1,4 @@
-"""MFruit OS-styled screens for the Wi-Fi manager.
+"""mFruit OS-styled screens for the Wi-Fi manager.
 
 The connection workflow stays independent of drawing: ``render`` receives an
 immutable ``View`` and returns one Pillow image for the Whisplay framebuffer.
@@ -23,7 +23,7 @@ MODE_CONNECTING = "connecting"
 MODE_RESULT = "result"
 
 # The main page is the Wi-Fi section of Settings: common actions first, then
-# setup alternatives and a predictable way back to MFruit OS.
+# setup alternatives and a predictable way back to mFruit OS.
 MENU_SCAN = 0
 MENU_HIDDEN = 1
 MENU_TOGGLE_BLE = 2
@@ -133,7 +133,7 @@ class Screens:
         t = c.theme
         status_bar(c, "Wi-Fi", device, dot=dot)
 
-        # A compact connection card replaces the separate MFruit status page.
+        # A compact connection card replaces the separate mFruit status page.
         c.rounded((MARGIN - 4, CONTENT_TOP, SCREEN_W - MARGIN + 4, 96), 12,
                   fill=t.surface)
         connected = bool(view.wifi_ssid)

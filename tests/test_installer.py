@@ -414,7 +414,7 @@ class UpdateServiceTests(TempHomeTestCase):
 
 
 class SystemUpdateTests(TempHomeTestCase):
-    """MFruit OS updating itself: self-test gate, activation, rollback."""
+    """mFruit OS updating itself: self-test gate, activation, rollback."""
 
     def os_package(self, version, break_code=False):
         import shutil
@@ -445,7 +445,7 @@ class SystemUpdateTests(TempHomeTestCase):
         old = os.path.join(self.paths.system_dir, "versions", "1.0.0-local")
         os.makedirs(old)
         with open(os.path.join(old, "manifest.json"), "w") as fp:
-            json.dump({"id": "mfruit-os", "type": "system", "name": "MFruit OS",
+            json.dump({"id": "mfruit-os", "type": "system", "name": "mFruit OS",
                        "version": "1.0.0", "entrypoint": "manifest.json"}, fp)
         os.symlink("versions/1.0.0-local", os.path.join(self.paths.system_dir, "current"))
         self.old = old

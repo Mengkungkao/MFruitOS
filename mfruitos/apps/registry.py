@@ -2,7 +2,7 @@
 
 Three sources are merged (never hard-coded):
 
-``os``      packages installed by MFruit OS under ~/.whisplay-os/apps/<id>/
+``os``      packages installed by mFruit OS under ~/.whisplay-os/apps/<id>/
             (``current`` -> versions/<ver>-<tag>/, ``app.json`` install record).
 ``daemon``  apps registered directly with whisplay-daemon
             (~/.whisplay-daemon/app/*.json or runtime app.register).
@@ -67,7 +67,7 @@ class AppEntry:
     exit_gesture: str = "quad_click"
     env: dict = field(default_factory=dict)
     disable_esc_exit_key: bool = False
-    adopted: bool = False          # daemon app routed through the MFruit launch gate
+    adopted: bool = False          # daemon app routed through the mFruit launch gate
     background: bool = False       # keep running after the user leaves it
     background_default: bool = False
     screen_bright: bool = False    # backlight held at 100% while it runs in the background
@@ -145,7 +145,7 @@ def missing_script(command: str, cwd: str) -> str:
 
 @dataclass
 class Leftover:
-    """An uninstalled app whose data MFruit OS still keeps."""
+    """An uninstalled app whose data mFruit OS still keeps."""
     id: str
     name: str
     kind: str                      # "os" | "daemon"
@@ -310,7 +310,7 @@ class AppRegistry:
                 entry.broken = "App files missing (uninstalled?)"
             elif missing_script(entry.launch_command, entry.cwd):
                 entry.broken = f"App files missing ({missing_script(entry.launch_command, entry.cwd)})"
-        # Optional: a legacy app that ships an MFruit manifest gets richer metadata.
+        # Optional: a legacy app that ships an mFruit manifest gets richer metadata.
         if entry.cwd and os.path.isfile(os.path.join(entry.cwd, "manifest.json")):
             try:
                 manifest = load_manifest(entry.cwd)

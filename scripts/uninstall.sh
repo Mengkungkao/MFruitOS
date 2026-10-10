@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# MFruit OS uninstaller.
+# mFruit OS uninstaller.
 #
 #   bash scripts/uninstall.sh          remove the service and launcher code,
 #                                      keep apps, settings and logs
@@ -23,6 +23,25 @@ if systemctl list-unit-files "$SERVICE" >/dev/null 2>&1; then
   sudo rm -f "/etc/systemd/system/$SERVICE"
   sudo systemctl daemon-reload
 fi
+say "Removing power management"
+if [ -f /etc/systemd/system/mfruit-power.service ]; then
+  sudo systemctl disable --now mfruit-power.service 2>/dev/null || true
+  sudo rm -f /etc/systemd/system/mfruit-power.service
+  sudo systemctl daemon-reload
+fi
+sudo rm -f /usr/lib/systemd/system-shutdown/mfruit-power-off /lib/systemd/system-shutdown/mfruit-power-off
+# PiSugar's own services, if the installer had stopped them.
+if [ -f "$OS_HOME/state/pisugar-services-disabled" ]; then
+  while read -r unit; do
+    case "$unit" in pisugar-server.service|pisugar-poweroff.service|sugar-wifi-config.service) ;; *) continue ;; esac
+    if systemctl cat "$unit" >/dev/null 2>&1; then
+      sudo systemctl enable "$unit" >/dev/null 2>&1 || true
+      [ "$unit" = pisugar-poweroff.service ] || sudo systemctl start "$unit" 2>/dev/null || true
+      echo "    $unit enabled again"
+    fi
+  done < "$OS_HOME/state/pisugar-services-disabled"
+  rm -f "$OS_HOME/state/pisugar-services-disabled"
+fi
 sudo rm -f /etc/sudoers.d/whisplay-os /usr/local/bin/mfruitctl \
   /etc/polkit-1/rules.d/49-mfruit-wifi.rules
 if [ -f /etc/systemd/system/mfruit-radio-setup.service ]; then
@@ -39,7 +58,7 @@ if [ -f /etc/systemd/system/whisplay-daemon.service.d/mfruit-os.conf ]; then
   RESTART_DAEMON=1
 fi
 
-say "Removing MFruit OS from the daemon desktop"
+say "Removing mFruit OS from the daemon desktop"
 PYTHONPATH="$OS_HOME/system/current" python3 - "$PURGE" "$OS_HOME" <<'PY' || true
 import os, sys
 purge, os_home = sys.argv[1] == "1", sys.argv[2]
@@ -83,4 +102,4 @@ fi
 if [ "${RESTART_DAEMON:-0}" = 1 ]; then
   sudo systemctl restart whisplay-daemon.service
 fi
-say "MFruit OS removed. whisplay-daemon's own desktop is available again."
+say "mFruit OS removed. whisplay-daemon's own desktop is available again."

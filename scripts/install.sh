@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# MFruit OS installer.
+# mFruit OS installer.
 #
 #   bash scripts/install.sh              install (or upgrade) and start the service
 #   bash scripts/install.sh --no-service install files only (no systemd changes)
@@ -20,12 +20,18 @@
 #                                        packages it needs (scripts/setup-app.sh, e.g.
 #                                        whisplay-ai-chatbot); repeatable. Without it the
 #                                        installer offers such apps (with --yes: skipped)
+#   bash scripts/install.sh --no-power   do not install mFruit OS's power management
+#                                        (mfruit-power.service and its shutdown hook)
+#   bash scripts/install.sh --no-wifi-setup
+#                                        do not install Wi-Fi from a phone (PiSugar's
+#                                        sugar-wifi-conf, run by mFruit OS on demand)
 #
 # Run as your normal user (the one whisplay-daemon runs as). sudo is used for
 # the Whisplay driver (drivers/whisplay/install.sh: packages, SPI/I2C/I2S
 # overlays, sound card module, whisplay-daemon.service; docs/WHISPLAY_DRIVER.md),
 # missing Python dependencies, NetworkManager, narrowly scoped polkit/sudoers
-# rules, the systemd unit and /usr/local/bin/mfruitctl link.
+# rules, the systemd units (launcher, power management), the power-off
+# shutdown hook and /usr/local/bin/mfruitctl link.
 set -euo pipefail
 
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -41,6 +47,8 @@ SOCKET=/tmp/whisplay-daemon.sock
 INSTALL_SERVICE=1
 BACKGROUND_DAEMON=1
 INSTALL_DRIVER=1
+INSTALL_POWER=1
+WIFI_SETUP=1
 REBOOT_NOW=0
 RADIO=ask
 DEV=0
@@ -54,12 +62,14 @@ while [ $# -gt 0 ]; do
     --no-service) INSTALL_SERVICE=0 ;;
     --no-background-daemon) BACKGROUND_DAEMON=0 ;;
     --no-driver) INSTALL_DRIVER=0 ;;
+    --no-power) INSTALL_POWER=0 ;;
+    --no-wifi-setup) WIFI_SETUP=0 ;;
     --reboot) REBOOT_NOW=1 ;;
     --radio) RADIO=1 ;;
     --no-radio) RADIO=0 ;;
     --dev) DEV=1 ;;
     --yes|-y) ASSUME_YES=1 ;;
-    -h|--help) sed -n '2,28p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,34p' "$0"; exit 0 ;;
     *) echo "Unknown option: $arg" >&2; exit 2 ;;
   esac
   shift
@@ -79,13 +89,13 @@ if [ "$TARGET_USER" = "root" ]; then
 fi
 
 VERSION="$(sed -n 's/^__version__ = "\(.*\)"/\1/p' "$SRC/mfruitos/__init__.py")"
-say "MFruit OS $VERSION for user $TARGET_USER"
+say "mFruit OS $VERSION for user $TARGET_USER"
 
 # ------------------------------------------------------------------ checks
 say "Checking system"
 OFFLINE_PACK="$(bash "$SRC/scripts/offline.sh" find 2>/dev/null || true)"
 [ -z "$OFFLINE_PACK" ] || ok "offline pack: $OFFLINE_PACK (packages and the sound card build need no internet)"
-[ "$(uname -s)" = "Linux" ] || fail "MFruit OS needs Linux"
+[ "$(uname -s)" = "Linux" ] || fail "mFruit OS needs Linux"
 ok "$(uname -sm)"
 if [ -r /proc/device-tree/model ]; then ok "device: $(tr -d '\0' </proc/device-tree/model)"; fi
 command -v systemctl >/dev/null || { [ "$INSTALL_SERVICE" = 0 ] || fail "systemd is required (or use --no-service)"; }
@@ -228,6 +238,21 @@ if [ "$FIRST_INSTALL" = 1 ]; then PROVISION_ARGS+=(--first-install); fi
 as_user env PYTHONPATH="$CODE_DIR" "$PYTHON" -m mfruitos.provision \
   --home "$OS_HOME" --daemon-home "$TARGET_HOME/.whisplay-daemon" --whisplay "$WHISPLAY_ROOT" "${PROVISION_ARGS[@]}"
 
+# Wi-Fi from a phone (docs/platform/ADR/0013-phone-wifi-setup.md): PiSugar's
+# sugar-wifi-conf, one pinned release checked by SHA-256, from the offline pack
+# or GitHub, into the OS home. It runs as the user only while wanted (Settings
+# > Wi-Fi > Phone Setup); nothing here needs root.
+if [ "$WIFI_SETUP" = 1 ]; then
+  say "Wi-Fi from a phone (PiSugar sugar-wifi-conf)"
+  WS_ARGS=(--home "$OS_HOME" install)
+  [ -z "$OFFLINE_PACK" ] || WS_ARGS+=(--offline "$OFFLINE_PACK")
+  if WS_OUT="$(as_user env PYTHONPATH="$CODE_DIR" "$PYTHON" -m mfruitos.system.wifi_setup "${WS_ARGS[@]}" 2>&1)"; then
+    ok "$(echo "$WS_OUT" | tail -n 1)"
+  else
+    warn "$(echo "$WS_OUT" | tail -n 1); Settings > Wi-Fi > Phone Setup stays unavailable until this installer runs again with internet or an offline pack"
+  fi
+fi
+
 # Keep the two most recent local installs (the updater manages its own).
 if [ "$DEV" = 0 ]; then
   ls -1dt "$OS_HOME"/system/versions/*-local* 2>/dev/null | tail -n +3 | while read -r old; do
@@ -287,16 +312,19 @@ for g in audio video gpio spi input; do getent group "$g" >/dev/null && GROUPS_L
 SUDOERS_TMP="$(mktemp)"
 TMP_FILES+=("$SUDOERS_TMP")
 SYSTEMCTL="$(command -v systemctl)"
-printf '%s ALL=(root) NOPASSWD: %s restart %s, %s restart %s\n' \
-  "$TARGET_USER" "$SYSTEMCTL" "$DAEMON_SERVICE" "$SYSTEMCTL" "$SERVICE" > "$SUDOERS_TMP"
+# poweroff/reboot: the power service's safe shutdown (low battery, the power
+# button) also works when the Whisplay driver's Power page rule is absent.
+printf '%s ALL=(root) NOPASSWD: %s restart %s, %s restart %s, %s poweroff, %s reboot\n' \
+  "$TARGET_USER" "$SYSTEMCTL" "$DAEMON_SERVICE" "$SYSTEMCTL" "$SERVICE" "$SYSTEMCTL" "$SYSTEMCTL" \
+  > "$SUDOERS_TMP"
 if sudo visudo -cf "$SUDOERS_TMP" >/dev/null; then
   sudo install -o root -g root -m 0440 "$SUDOERS_TMP" /etc/sudoers.d/whisplay-os
-  ok "sudoers: only 'systemctl restart' of the daemon and launcher"
+  ok "sudoers: only 'systemctl restart' of the daemon and launcher, poweroff and reboot"
 fi
 
 sudo tee /etc/systemd/system/$SERVICE >/dev/null <<EOF
 [Unit]
-Description=MFruit OS - app launcher for Whisplay
+Description=mFruit OS - app launcher for Whisplay
 Documentation=https://github.com/Mengkungkao/MFruitOS
 After=$DAEMON_SERVICE
 Wants=$DAEMON_SERVICE
@@ -335,7 +363,7 @@ if [ "$BACKGROUND_DAEMON" = 1 ] && [ -f "$WHISPLAY_ROOT/daemon/whisplay_daemon.p
   DROPIN_TMP="$(mktemp)"
   TMP_FILES+=("$DROPIN_TMP")
   cat > "$DROPIN_TMP" <<DROPIN
-# Installed by MFruit OS. While MFruit OS runs, whisplay-daemon does not draw
+# Installed by mFruit OS. While mFruit OS runs, whisplay-daemon does not draw
 # its own desktop and ignores the button when no app owns the screen; the
 # hardware, apps and daemon pages are unchanged. Delete this file and run
 # "systemctl daemon-reload && systemctl restart whisplay-daemon" to undo.
@@ -354,15 +382,98 @@ elif [ -f "$DROPIN_DIR/mfruit-os.conf" ]; then
   ok "whisplay-daemon user interface left in the foreground"
   RESTART_DAEMON=1
 fi
+# ------------------------------------------------------------------ power
+# mFruit OS's own power management (docs/platform/ADR/0012-own-power-management.md).
+# mfruit-power.service drives a PiSugar battery board over I2C as the user,
+# with the i2c group and CAP_SYS_TIME (only to move the clock forward from the
+# board's clock at boot). It starts before the daemon, which looks for the
+# PiSugar socket once at start. The root-owned shutdown hook switches the
+# board off after a power-off, when nothing is mounted read-write any more.
+# PiSugar's own services drive the same board, so they are stopped and
+# disabled; scripts/uninstall.sh enables them again.
+POWER_SERVICE=mfruit-power.service
+POWER_HOOK_DIR=/usr/lib/systemd/system-shutdown
+[ -d "$POWER_HOOK_DIR" ] || POWER_HOOK_DIR=/lib/systemd/system-shutdown
+RESTART_POWER=0
+if [ "$INSTALL_POWER" = 1 ]; then
+  say "Power management ($POWER_SERVICE)"
+  POWER_GROUPS=""
+  getent group i2c >/dev/null && POWER_GROUPS="i2c"
+  [ -n "$POWER_GROUPS" ] || warn "no i2c group: the power service may not reach /dev/i2c-*"
+  PISUGAR_DISABLED="$OS_HOME/state/pisugar-services-disabled"
+  for unit in pisugar-server.service pisugar-poweroff.service; do
+    if systemctl is-enabled --quiet "$unit" 2>/dev/null || systemctl is-active --quiet "$unit" 2>/dev/null; then
+      sudo systemctl disable --now "$unit" >/dev/null 2>&1 || true
+      grep -qx "$unit" "$PISUGAR_DISABLED" 2>/dev/null || echo "$unit" | as_user tee -a "$PISUGAR_DISABLED" >/dev/null
+      ok "PiSugar's $unit stopped and disabled (mFruit OS drives the battery board now)"
+    fi
+  done
+  POWER_TMP="$(mktemp)"
+  TMP_FILES+=("$POWER_TMP")
+  cat > "$POWER_TMP" <<EOF
+[Unit]
+Description=mFruit OS - power management (battery board, safe shutdown)
+Documentation=https://github.com/Mengkungkao/MFruitOS
+Before=$DAEMON_SERVICE $SERVICE
+StartLimitIntervalSec=0
+
+[Service]
+Type=notify
+NotifyAccess=main
+User=$TARGET_USER
+Group=$TARGET_GROUP
+SupplementaryGroups=$POWER_GROUPS
+AmbientCapabilities=CAP_SYS_TIME
+Environment=HOME=$TARGET_HOME
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=$OS_HOME/system/current
+WorkingDirectory=$OS_HOME/system/current
+ExecStart=$PYTHON -m mfruitos.power serve
+Restart=always
+RestartSec=3
+WatchdogSec=60
+TimeoutStartSec=20
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  if ! sudo cmp -s "$POWER_TMP" "/etc/systemd/system/$POWER_SERVICE"; then
+    sudo install -m 0644 "$POWER_TMP" "/etc/systemd/system/$POWER_SERVICE"
+  fi
+  sudo systemd-analyze verify "/etc/systemd/system/$POWER_SERVICE" 2>&1 | grep -v "^$" | sed 's/^/    /' || true
+  HOOK_TMP="$(mktemp)"
+  TMP_FILES+=("$HOOK_TMP")
+  sed "s|@POWER_CONFIG@|$OS_HOME/config/power.json|" "$SRC/scripts/mfruit-power-off" > "$HOOK_TMP"
+  sudo install -D -o root -g root -m 0755 "$HOOK_TMP" "$POWER_HOOK_DIR/mfruit-power-off"
+  ok "shutdown hook $POWER_HOOK_DIR/mfruit-power-off (the battery board switches off after a power-off)"
+  RESTART_POWER=1
+fi
+
+# PiSugar's own installer runs sugar-wifi-conf as an always-on root service with
+# the default key; mFruit OS runs the same tool on demand as the user, so that
+# service is stopped and disabled (scripts/uninstall.sh enables it again).
+if [ "$WIFI_SETUP" = 1 ]; then
+  for unit in sugar-wifi-config.service; do
+    if systemctl is-enabled --quiet "$unit" 2>/dev/null || systemctl is-active --quiet "$unit" 2>/dev/null; then
+      sudo systemctl disable --now "$unit" >/dev/null 2>&1 || true
+      PISUGAR_DISABLED="$OS_HOME/state/pisugar-services-disabled"
+      grep -qx "$unit" "$PISUGAR_DISABLED" 2>/dev/null || echo "$unit" | as_user tee -a "$PISUGAR_DISABLED" >/dev/null
+      ok "PiSugar's $unit stopped and disabled (mFruit OS runs Wi-Fi from a phone on demand)"
+    fi
+  done
+fi
+
 sudo systemctl daemon-reload
 sudo systemctl enable "$SERVICE" >/dev/null 2>&1
+[ "$RESTART_POWER" = 0 ] || sudo systemctl enable "$POWER_SERVICE" >/dev/null 2>&1
 
 # Radio apps need a LoRa HAT set up (packages, UART, dialout, module settings).
 # setup-radio.sh owns that; it stops before provisioning when a reboot is due.
 RADIO_SCRIPT="$OS_HOME/system/current/scripts/setup-radio.sh"
 [ -f "$RADIO_SCRIPT" ] || RADIO_SCRIPT="$SRC/scripts/setup-radio.sh"
 RADIO_PENDING=0
-# Python with the installed MFruit OS (Fruit Store list, install queue).
+# Python with the installed mFruit OS (Fruit Store list, install queue).
 os_py() { as_user env PYTHONPATH="$OS_HOME/system/current" python3 "$@"; }
 # Fruit Store apps that need the radio, e.g. "RadioConnect" (updater/autoinstall.py).
 RADIO_APPS="$(os_py -c 'from mfruitos.updater import autoinstall, catalog
@@ -427,9 +538,9 @@ fi
 if [ "$REBOOT_REQUIRED" = 1 ]; then
   # The display bus and sound card appear only after a reboot; both services
   # are enabled and start then.
-  say "MFruit OS $VERSION installed; reboot to finish the setup"
+  say "mFruit OS $VERSION installed; reboot to finish the setup"
   [ "$AUDIO_FAILED" = 0 ] || warn "no sound card yet: rerun this installer with internet or an offline pack (docs/WHISPLAY_DRIVER.md)"
-  echo "    After the reboot MFruit OS starts by itself. To check it: bash $SRC/scripts/setup-device.sh --check"
+  echo "    After the reboot mFruit OS starts by itself. To check it: bash $SRC/scripts/setup-device.sh --check"
   if [ "$RADIO_PENDING" = 1 ] && [ -f /etc/systemd/system/mfruit-radio-setup.service ]; then
     echo "    After the reboot the radio settings are written by themselves${RADIO_APPS:+, then $RADIO_APPS installs}."
   elif [ "$RADIO_PENDING" = 1 ]; then
@@ -447,6 +558,8 @@ if [ "$REBOOT_REQUIRED" = 1 ]; then
   fi
   exit 0
 fi
+# The power service first: the daemon looks for its PiSugar socket at start.
+[ "$RESTART_POWER" = 0 ] || sudo systemctl restart "$POWER_SERVICE"
 if [ "${RESTART_DAEMON:-0}" = 1 ]; then
   warn "restarting whisplay-daemon (running apps are closed)"
   sudo systemctl restart "$DAEMON_SERVICE"
@@ -458,9 +571,22 @@ if systemctl is-active --quiet "$SERVICE"; then
 else
   warn "$SERVICE is not running; see: journalctl -u $SERVICE -n 50"
 fi
+if [ "$RESTART_POWER" = 1 ]; then
+  if systemctl is-active --quiet "$POWER_SERVICE"; then
+    POWER_STATE="$(as_user env PYTHONPATH="$OS_HOME/system/current" WHISPLAY_OS_HOME="$OS_HOME" "$PYTHON" -c '
+from mfruitos import power
+from mfruitos.paths import resolve_paths
+from mfruitos.power.client import PowerClient
+status = PowerClient(power.api_socket(resolve_paths())).status()
+print(status["model"] or status["error"])' 2>/dev/null || true)"
+    ok "$POWER_SERVICE is running${POWER_STATE:+: $POWER_STATE}"
+  else
+    warn "$POWER_SERVICE is not running; see: journalctl -u $POWER_SERVICE -n 50"
+  fi
+fi
 systemctl status "$SERVICE" --no-pager -n 5 || true
 
-say "MFruit OS $VERSION installed"
+say "mFruit OS $VERSION installed"
 [ "$AUDIO_FAILED" = 0 ] || warn "no sound card yet: rerun this installer with internet or an offline pack (docs/WHISPLAY_DRIVER.md)"
 echo "    status:  systemctl status whisplay-os"
 echo "    logs:    journalctl -u whisplay-os -f    (or $OS_HOME/logs/)"

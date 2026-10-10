@@ -39,7 +39,7 @@ def check_daemon(client: WhisplayDaemonClient) -> CheckResult:
 
 
 def daemon_ui_in_background() -> bool:
-    """True if whisplay-daemon runs through MFruit OS's background wrapper."""
+    """True if whisplay-daemon runs through mFruit OS's background wrapper."""
     for pid in os.listdir("/proc"):
         if not pid.isdigit():
             continue
@@ -59,7 +59,7 @@ def check_daemon_ui() -> CheckResult:
 
 
 def check_keyboard(devices: list) -> CheckResult:
-    """USB / Bluetooth keyboards MFruit OS is reading (none is fine)."""
+    """USB / Bluetooth keyboards mFruit OS is reading (none is fine)."""
     if devices:
         return CheckResult("Keyboard", True, ", ".join(devices))
     return CheckResult("Keyboard", None, "none plugged in")

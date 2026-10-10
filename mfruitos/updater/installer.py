@@ -166,7 +166,7 @@ class Installer:
         root = self.paths.app_root(app_id)
         current = rollback.current_target(root)
         if not os.path.isdir(root) or current is None:
-            raise InstallError("check", "App is not installed by MFruit OS")
+            raise InstallError("check", "App is not installed by mFruit OS")
         record = self.read_record(root)
         script = os.path.join(current, "uninstall.sh")
         if os.path.isfile(script):
@@ -199,11 +199,11 @@ class Installer:
         return True
 
     def delete_data(self, app_id: str) -> list[str]:
-        """Delete what MFruit OS keeps for an app that is no longer installed:
+        """Delete what mFruit OS keeps for an app that is no longer installed:
         its package folder (data, backups), logs, run record and adoption
         record. Refused while the app is installed. Returns what was removed.
 
-        Files outside MFruit OS's folders (a daemon app's own folder, data an
+        Files outside mFruit OS's folders (a daemon app's own folder, data an
         app keeps under the home directory, the shared radio store) are never
         touched.
         """
@@ -217,11 +217,11 @@ class Installer:
 
     def reset_data(self, app_id: str) -> int:
         """Empty an installed app's data folder (a fresh start; the app and its
-        settings in MFruit OS stay). Returns the number of entries removed."""
+        settings in mFruit OS stay). Returns the number of entries removed."""
         self._check_app_id(app_id, "reset")
         root = self.paths.app_root(app_id)
         if rollback.current_target(root) is None:
-            raise InstallError("check", "App is not installed by MFruit OS")
+            raise InstallError("check", "App is not installed by mFruit OS")
         data = os.path.join(root, "data")
         count = 0
         for name in sorted(os.listdir(data)) if os.path.isdir(data) else []:
@@ -397,7 +397,7 @@ class _Job:
         except ManifestError as exc:
             raise InstallError("verify", f"Invalid package: {exc}") from exc
         if self.system and (manifest.type != "system" or manifest.id != OS_APP_ID):
-            raise InstallError("verify", "This is not an MFruit OS system package")
+            raise InstallError("verify", "This is not an mFruit OS system package")
         if not self.system and manifest.type != "app":
             raise InstallError("verify", "System packages cannot be installed as apps")
         if self.req.app_id and manifest.id != self.req.app_id:

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only preflight for a native MFruit OS app source/release directory."""
+"""Read-only preflight for a native mFruit OS app source/release directory."""
 
 from __future__ import annotations
 
@@ -120,11 +120,11 @@ def check_package(directory: str | Path) -> list[str]:
 
         rules = root / RULES_PATH
         if not rules.is_file():
-            errors.append(f"missing {RULES_PATH}; copy docs/apps/APP_CONTRACT.md from MFruit OS")
+            errors.append(f"missing {RULES_PATH}; copy docs/apps/APP_CONTRACT.md from mFruit OS")
         elif not _inside(rules, root):
             errors.append(f"{RULES_PATH}: rules must be inside the package")
         elif rules.read_bytes() != (ROOT / CONTRACT_PATH).read_bytes():
-            errors.append(f"{RULES_PATH}: differs from MFruit OS docs/apps/APP_CONTRACT.md")
+            errors.append(f"{RULES_PATH}: differs from mFruit OS docs/apps/APP_CONTRACT.md")
     except (OSError, RuntimeError, ValueError) as exc:
         errors.append(f"cannot inspect package contents: {exc}")
     return errors

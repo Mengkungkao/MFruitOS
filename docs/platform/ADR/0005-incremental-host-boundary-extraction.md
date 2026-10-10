@@ -6,7 +6,7 @@ Status: Accepted 2026-10-02. Implementation PLANNED.
 
 Only `ApplicationManager.Host` is a formal host interface. Focus, frame
 output, input, LED, backlight, battery and process stop call concrete Whisplay
-classes from several modules ([Host API](../HOST_API.md)). MFruit OS cannot run
+classes from several modules ([Host API](../HOST_API.md)). mFruit OS cannot run
 on another host or a MockHost, and contract tests run only against
 whisplay-daemon.
 

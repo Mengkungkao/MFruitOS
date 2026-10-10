@@ -1,13 +1,13 @@
 # Whisplay driver
 
-MFruit OS includes the driver for the PiSugar Whisplay HAT. A fresh
+mFruit OS includes the driver for the PiSugar Whisplay HAT. A fresh
 installation no longer needs a separate `git clone` of
 [PiSugar/Whisplay](https://github.com/PiSugar/Whisplay) or its installers:
 `bash scripts/install.sh` sets up the driver on a supported board. Decision
 record: [ADR 0008](platform/ADR/0008-bundled-whisplay-driver.md).
 
 ```text
-MFruit OS ──► MFruit OS Whisplay driver (drivers/whisplay) ──► Whisplay HAT
+mFruit OS ──► mFruit OS Whisplay driver (drivers/whisplay) ──► Whisplay HAT
               whisplay-daemon + runtime + sound card
 ```
 
@@ -19,15 +19,15 @@ MFruit OS ──► MFruit OS Whisplay driver (drivers/whisplay) ──► Whisp
 | `daemon/` (`whisplay-daemon`) | Owns the hardware for everyone: LCD, backlight, LED, button, foreground app and shared framebuffer; app registry and socket API `/tmp/whisplay-daemon.sock`; WiFi, Bluetooth, Volume and Power pages; USB/Bluetooth keyboard reader; PiSugar integration ([Host API](platform/HOST_API.md)) |
 | `runtime/whisplay_client.py` | Client library that daemon apps use for frames, button and LED |
 | `audio/whisplay-soundcard/` | `snd-soc-whisplay-soundcard` kernel module for the WM8960 or ES8389 codec, device-tree overlays per board, ALSA card `whisplaysound`, boot volume service |
-| `install.sh`, `uninstall.sh` | MFruit OS code: board detection, buses, packages, sound card build, device access, systemd unit, update, rollback and removal |
+| `install.sh`, `uninstall.sh` | mFruit OS code: board detection, buses, packages, sound card build, device access, systemd unit, update, rollback and removal |
 
 These files are copied unmodified from Whisplay commit `c73051e`, and
-`scripts/check.sh` verifies them against checksums. MFruit OS's own changes
+`scripts/check.sh` verifies them against checksums. mFruit OS's own changes
 to daemon behaviour stay in `scripts/whisplay-daemon-mfruit.py`. What was
 copied, what was left out (the demo apps, Whisplay's image builder, docs) and
 the licences: [drivers/whisplay/UPSTREAM.md](../drivers/whisplay/UPSTREAM.md).
 
-| Whisplay component | Before | MFruit OS now |
+| Whisplay component | Before | mFruit OS now |
 |---|---|---|
 | Display (ST7789 over SPI) | `~/Whisplay/runtime/whisplay.py` | `/usr/local/share/whisplay/runtime/whisplay.py` (same code) |
 | SPI | `raspi-config do_spi` / Orange Pi `spi1-cs0-spidev` overlay by Whisplay's installer | `drivers/whisplay/install.sh` (same settings) |
@@ -36,8 +36,8 @@ the licences: [drivers/whisplay/UPSTREAM.md](../drivers/whisplay/UPSTREAM.md).
 | Button | daemon from `~/Whisplay` | daemon from `/usr/local/share/whisplay` |
 | LED and backlight | daemon from `~/Whisplay` | daemon from `/usr/local/share/whisplay` |
 | Device tree | Whisplay installers (I2C, I2S, SPI, sound card overlay) | `drivers/whisplay/install.sh` (same overlays) |
-| Startup | `whisplay-daemon.service` written by Whisplay | `whisplay-daemon.service` written by MFruit OS (same settings) |
-| Shutdown | daemon's Power page (sudoers rule from Whisplay) | same page, same sudoers rule from MFruit OS |
+| Startup | `whisplay-daemon.service` written by Whisplay | `whisplay-daemon.service` written by mFruit OS (same settings) |
+| Shutdown | daemon's Power page (sudoers rule from Whisplay) | same page, same sudoers rule from mFruit OS |
 
 ## Where it lives
 
@@ -45,14 +45,14 @@ the licences: [drivers/whisplay/UPSTREAM.md](../drivers/whisplay/UPSTREAM.md).
 |---|---|
 | Source in this repository | [`drivers/whisplay/`](../drivers/whisplay/) |
 | Runtime and daemon on the device | `/usr/local/share/whisplay/` (root-owned; `MFRUIT_DRIVER` records the version; `/usr/local/share/whisplay.previous` is the copy before the last update) |
-| Service | `/etc/systemd/system/whisplay-daemon.service`; MFruit OS's drop-in `whisplay-daemon.service.d/mfruit-os.conf` starts it through `whisplay-daemon-mfruit.py` |
+| Service | `/etc/systemd/system/whisplay-daemon.service`; mFruit OS's drop-in `whisplay-daemon.service.d/mfruit-os.conf` starts it through `whisplay-daemon-mfruit.py` |
 | Kernel module | `/lib/modules/$(uname -r)/kernel/sound/soc/codecs/snd-soc-whisplay-soundcard.ko` |
 | Overlays | Raspberry Pi: `/boot/firmware/overlays/whisplay-soundcard.dtbo` and `config.txt`; Orange Pi: `/boot/overlay-user/` and `/boot/orangepiEnv.txt`; Radxa: `/boot/dtbo/` |
 | ALSA configuration | `/etc/asound.conf` (`whisplaysound`); `whisplay-soundcard-warmup.service` sets speaker and mic to 80 at boot |
 | Daemon settings and app registrations (user data, never overwritten) | `~/.whisplay-daemon/` |
 | Replaced service unit | `/var/backups/mfruitos/whisplay-daemon.service.<time>` |
 
-## How MFruit OS sets it up and starts it
+## How mFruit OS sets it up and starts it
 
 `scripts/install.sh` runs `sudo bash drivers/whisplay/install.sh --user <you>`
 unless `--no-driver` or `--no-service` is given. It needs no internet when the
@@ -60,7 +60,7 @@ packages are present or an [offline pack](#offline-installation) is next to the
 code. The driver installer:
 
 1. detects the board (Raspberry Pi, Orange Pi Zero 2W or Zero 3W, Radxa ZERO
-   3W, Radxa Cubie A7Z); on any other board it changes nothing and MFruit OS
+   3W, Radxa Cubie A7Z); on any other board it changes nothing and mFruit OS
    carries on without it;
 2. installs missing packages: `python3-spidev`, `python3-libgpiod`,
    `python3-pil`, `alsa-utils` and `fonts-dejavu-core` (the daemon's pages
@@ -83,7 +83,7 @@ When steps 3 to 5 changed something, both services are enabled and the
 installer asks "Reboot now?" (`--reboot` reboots without asking; with `--yes`
 it only says so). At every boot the kernel loads the overlays and
 the sound card. systemd then starts `whisplay-daemon`, whose `WhisplayBoard()`
-resets and initialises the LCD, LED and button, and then `whisplay-os` (MFruit
+resets and initialises the LCD, LED and button, and then `whisplay-os` (mFruit
 OS, `After=whisplay-daemon`).
 
 **Existing installations** that used `~/Whisplay` change over on the next
@@ -94,7 +94,7 @@ exists. New installations no longer get Whisplay's demo games.
 
 ## Offline installation
 
-The MFruit OS code, including this driver, is complete in the repository. Two
+The mFruit OS code, including this driver, is complete in the repository. Two
 things cannot be: Debian packages that a fresh image lacks, and the kernel
 headers and build tools for the sound card module, which is built for the
 board's own kernel. An **offline pack** carries both, so a board installs
@@ -108,8 +108,10 @@ with no internet:
    ```
 
    This writes `offline/<board>-<os>-<release>-<arch>/` (about 200 MB: the
-   packages with all their dependencies as a local apt repository, and the
-   files the sound card build downloads) and the same as a `.tar.gz`. It
+   packages with all their dependencies as a local apt repository, the
+   files the sound card build downloads, and PiSugar's sugar-wifi-conf for
+   Wi-Fi from a phone, [ADR 0013](platform/ADR/0013-phone-wifi-setup.md)) and
+   the same as a `.tar.gz`. It
    installs nothing. Keep the `.tar.gz`, for example as an asset of a GitHub
    release of your MFruitOS repository (`offline/` is not committed).
 2. For each offline board: download the MFruitOS code (GitHub *Download ZIP*

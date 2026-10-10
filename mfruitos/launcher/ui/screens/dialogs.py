@@ -345,12 +345,12 @@ class LogScreen(Screen):
 
 
 class LoadingScreen(Screen):
-    """"Opening <app>" — the last frame MFruit OS draws before an app starts.
+    """"Opening <app>" — the last frame mFruit OS draws before an app starts.
 
     With Whisplay's user interface in the background (whisplay-daemon-mfruit.py)
     the daemon keeps this frame on the LCD until the app draws its own, so the
     user never sees the daemon's desktop while an app starts up. It is static:
-    MFruit OS no longer owns the screen once the app is starting.
+    mFruit OS no longer owns the screen once the app is starting.
     """
 
     show_status = True

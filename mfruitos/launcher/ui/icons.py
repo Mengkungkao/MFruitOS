@@ -240,6 +240,12 @@ def _lock(p: _Pen):
     p.line((0.7, 0.44), (0.7, 0.5))
 
 
+def _battery(p: _Pen):
+    p.rrect(0.08, 0.3, 0.8, 0.7, 0.07)
+    p.rrect(0.82, 0.42, 0.92, 0.58, 0.02, fill=True)
+    p.rrect(0.16, 0.38, 0.56, 0.62, 0.03, fill=True)
+
+
 def _dot(p: _Pen):
     p.circle(0.5, 0.5, 0.3, fill=True)
 
@@ -253,6 +259,7 @@ ICONS = {
     "down": _arrow_down, "chevron": _chevron, "back": _back, "trash": _trash,
     "play": _play, "stop": _stop, "bolt": _bolt, "warning": _warning, "package": _box,
     "search": _search, "rollback": _rollback, "list": _list, "lock": _lock, "dot": _dot,
+    "battery": _battery,
 }
 
 

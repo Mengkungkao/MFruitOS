@@ -12,7 +12,7 @@ decision:
 - Each app carried its own `provision_radio.py` and SX126X driver; radio
   setup (packages incl. `libcodec2`, UART, serial console, getty, module
   provisioning) lived only in WalkieTalkie's own installer and needs root and
-  often a reboot, which MFruit OS app hooks cannot do (they run as the user,
+  often a reboot, which mFruit OS app hooks cannot do (they run as the user,
   noninteractively, [Part I §11](../DEVELOPMENT_RULES.md#11-application-dependencies)).
 - Messenger found the radio settings by reading `../WalkieTalkie/config.yaml`,
   which does not exist under managed installs.
@@ -27,7 +27,7 @@ decision:
    password: packages, UART, serial console, getty, `dialout`, reboot
    handling, provisioning (default band AU915, 920 MHz, 2400 bps). No
    passwordless root rule is added.
-2. **One shared radio store** at `<MFruit OS home>/shared/radio/` (0700), owned
+2. **One shared radio store** at `<mFruit OS home>/shared/radio/` (0700), owned
    by the SDK module `mfruit_sdk.radio` (SDK 1.3.0): `radio.json` (written only
    by the setup), `device.json` (Device ID and name), `keys.json` (the existing
    WalkieTalkie key format), `contacts.json`. Pairing in one app is pairing in

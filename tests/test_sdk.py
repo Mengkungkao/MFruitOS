@@ -1,4 +1,4 @@
-"""MFruit App SDK: keyboard decoding, button gestures, the input controller, chrome."""
+"""mFruit App SDK: keyboard decoding, button gestures, the input controller, chrome."""
 
 import os
 import tempfile
@@ -574,7 +574,7 @@ if __name__ == "__main__":
 
 
 class KeyHubTests(unittest.TestCase):
-    """MFruit OS holds the keyboards and hands keys to the app on screen."""
+    """mFruit OS holds the keyboards and hands keys to the app on screen."""
 
     def setUp(self):
         from mfruitos.launcher.keyhub import KeyHub

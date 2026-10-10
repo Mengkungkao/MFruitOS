@@ -2,8 +2,8 @@
 
 Usage: python3 runner.py <whisplay_src> <socket_path> <home> [<mfruit_lock>]
 
-With <mfruit_lock>, MFruit OS's whisplay-daemon-mfruit.py patches are applied
-(daemon user interface in the background while MFruit OS runs).
+With <mfruit_lock>, mFruit OS's whisplay-daemon-mfruit.py patches are applied
+(daemon user interface in the background while mFruit OS runs).
 
 Protocol on stdin/stdout, one line each:
   press | release        -> {"ok": true}

@@ -1,7 +1,7 @@
 """Whisplay's user interface in the background (scripts/whisplay-daemon-mfruit.py).
 
-Runs the REAL whisplay-daemon code with MFruit OS's daemon wrapper patches and
-MFruit OS on top, driven by simulated physical button presses.
+Runs the REAL whisplay-daemon code with mFruit OS's daemon wrapper patches and
+mFruit OS on top, driven by simulated physical button presses.
 """
 
 import hashlib
@@ -45,7 +45,7 @@ class BackgroundUiTests(unittest.TestCase):
         self.thread = threading.Thread(target=self.rt.run, daemon=True)
         self.thread.start()
         self.wait(lambda: self.rt.focus.has_focus and not self.rt._booting
-                  and self.rt.router.top is self.rt.home_screen, "MFruit OS home", 20)
+                  and self.rt.router.top is self.rt.home_screen, "mFruit OS home", 20)
         time.sleep(0.5)
         self.base = self.daemon.state()
 
@@ -179,7 +179,7 @@ class BackgroundUiTests(unittest.TestCase):
 
     def test_keys_reach_an_app_that_does_not_use_the_key_hub(self):
         # Plain Whisplay apps (Jump Game, Flappy Bird) read Space from /dev/input
-        # as their button and leave Esc to the daemon. MFruit OS holds every
+        # as their button and leave Esc to the daemon. mFruit OS holds every
         # keyboard, so it forwards both through the wrapper instead.
         from mfruitos.sdk.keys import DOWN, UP, KeyEvent
         from mfruitos.daemon.client import DaemonRequestError

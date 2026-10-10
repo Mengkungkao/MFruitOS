@@ -1,6 +1,6 @@
 # Platform / OS development
 
-For people and agents who change MFruit OS itself. Building an app instead?
+For people and agents who change mFruit OS itself. Building an app instead?
 Start at [app development](../apps/README.md). Investigating a failure? Use
 [quality](../quality/README.md).
 
@@ -10,7 +10,7 @@ Start at [app development](../apps/README.md). Investigating a failure? Use
 | [Architecture](ARCHITECTURE.md) | What exists today, who owns what, and how it maps to the target layers. |
 | [Directory structure](DIRECTORY_STRUCTURE.md) | Where each responsibility and each piece of device data lives. |
 | [Lifecycle](LIFECYCLE.md) | Launch sessions, the launch gate, leaving apps, launcher start-up and shutdown. |
-| [Host API](HOST_API.md) | What MFruit OS needs from a host; whisplay-daemon facts; planned interfaces. |
+| [Host API](HOST_API.md) | What mFruit OS needs from a host; whisplay-daemon facts; planned interfaces. |
 | [Installation](INSTALLATION.md) | Board preparation, install, system changes, update, rollback, uninstall. |
 | [Configuration](CONFIGURATION.md) | Settings schema, environment variables, shipped configuration. |
 | [Security](SECURITY.md) | What is enforced, what is not, and how to report problems. |

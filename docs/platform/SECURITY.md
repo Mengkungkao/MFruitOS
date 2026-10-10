@@ -1,6 +1,6 @@
 # Security and safety
 
-**MFruit OS does not provide a security sandbox.** Apps run as the device user
+**mFruit OS does not provide a security sandbox.** Apps run as the device user
 with that user's permissions. Package checks protect the device from
 malformed or accidentally unsafe packages and keep installs recoverable; they
 do not contain a malicious app once it runs
@@ -13,6 +13,7 @@ do not contain a malicious app once it runs
 | The device user and processes running as that user | trusted (they can already do anything the launcher can) |
 | Package archives, sideloaded folders, release metadata, catalogue downloads | untrusted input until validated |
 | whisplay-daemon and its socket | trusted host service |
+| The power service (`mfruit-power.service`) and its sockets | trusted platform service running as the user; both sockets are 0600 |
 | The launch gate (tickets, lock) | lifecycle correctness, **not** a security boundary: any process running as the user can write a ticket |
 
 ## Implemented protections
@@ -27,9 +28,10 @@ do not contain a malicious app once it runs
 | Package hooks | run as the user, stdin `/dev/null`, new session, allowlisted environment (`PATH`, `HOME`, `USER`, `LOGNAME`, `LANG`, `LC_ALL`, `XDG_RUNTIME_DIR` plus the `WHISPLAY_*` contract), timeouts 15 min (install/update) and 2 min (test/uninstall) | `updater/installer.py` |
 | Deletion | managed deletions only strictly inside an allowed root; symlinks are unlinked, never followed; protected system paths and `$HOME` refused | `updater/rollback.py` (`safe_rmtree`), `paths.py` |
 | Stopping apps | signals only a process group whose leader `/proc` confirms is `mfruit-run <id>`; refuses PGID ≤ 1 and the launcher's own group | `launcher/app_manager/lifecycle.py` |
-| Local sockets | `state/` is mode 0700; `control.sock` and `keys.sock` are 0600 | `paths.py`, `launcher/control.py`, `launcher/keyhub.py` |
+| Local sockets | `state/` is mode 0700; `control.sock`, `keys.sock` and `power.sock` are 0600; the PiSugar-protocol socket `/tmp/pisugar-server.sock` is 0600 and is not taken over when another program (PiSugar's server) answers on it | `paths.py`, `launcher/control.py`, `launcher/keyhub.py`, `power/server.py` |
+| Power | the power service runs as the user with the `i2c` group and only `CAP_SYS_TIME` (ambient; dropped for every command and hook it starts), used only to move the clock forward from the battery board's clock when the clock is not synchronised; it never moves the clock backwards. PiSugar-protocol commands that cut the power at once, change the board's I2C address or set web credentials are refused. The shutdown hook is a root-owned copy in `/usr/lib/systemd/system-shutdown/`, never a link into user-writable files, and acts only on *poweroff* | `power/`, `scripts/mfruit-power-off` ([ADR 0012](ADR/0012-own-power-management.md)) |
 | Keyboard | all keyboards grabbed exclusively, so typed keys never reach the console shell (RC6) | `sdk/keys.py`, `launcher/runtime.py` |
-| Privileges | launcher runs as the user, never root; sudoers allows only two `systemctl restart` commands (validated with `visudo -c`); polkit grants only the listed NetworkManager actions to one user | `scripts/install.sh` ([Installation](INSTALLATION.md#system-changes-and-why-they-are-needed)) |
+| Privileges | launcher and power service run as the user, never root; sudoers allows only two `systemctl restart` commands plus `systemctl poweroff` and `systemctl reboot` (validated with `visudo -c`); polkit grants only the listed NetworkManager actions to one user | `scripts/install.sh` ([Installation](INSTALLATION.md#system-changes-and-why-they-are-needed)) |
 
 ## Known gaps
 
@@ -53,6 +55,21 @@ planned. Do not describe them as protected.
   impersonate this radio's encrypted traffic.
 - **Capabilities/permissions** for apps are PLANNED only; no manifest field
   restricts what an app may do.
+- **Wi-Fi from a phone** ([ADR 0013](ADR/0013-phone-wifi-setup.md)): while
+  PiSugar's sugar-wifi-conf runs, anyone in Bluetooth range can read the
+  device's Wi-Fi name, addresses and the configured information, and the key
+  (8 random characters by default) is all that guards setting the Wi-Fi
+  network and running the configured commands. The tool does not pair, so the
+  key travels unencrypted and could be captured by a nearby BLE sniffer while
+  it is used; make a new key afterwards if that matters. Its SSH tunnel
+  reaches the local sshd without the key (an SSH login is still needed). It
+  runs only while wanted (by default only while Settings → Wi-Fi → Phone Setup is open),
+  as the user, never as root; the binary is PiSugar's, pinned by SHA-256.
+- **Power control is open to the user's processes:** any app running as the
+  user can ask the power service (or `sudo -n systemctl poweroff`) to shut the
+  device down, change power settings, or set PiSugar-protocol tap hooks, which
+  run shell commands as the user (no escalation: the same user could run
+  them directly).
 
 ## Handling secrets
 
@@ -65,5 +82,5 @@ secrets in their data directory and ship `.env.example` files;
 
 Report suspected vulnerabilities privately to the repository owner
 ([Mengkungkao](https://github.com/Mengkungkao)) before publishing details.
-Include the MFruit OS version, the package or input involved and the observed
+Include the mFruit OS version, the package or input involved and the observed
 effect.

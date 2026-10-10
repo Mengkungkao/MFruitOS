@@ -15,7 +15,7 @@ Incoming origin/main: `69423af`.
 - `69423af` fix: open Wi-Fi directly from Settings and add button LED feedbac
 - `17714ee` fix: harden Bluetooth pairing and device operation recovery
 - `57d6d17` update continue for next tasks
-- `f5fe300` feat: align MFruit OS app lifecycle and input contracts
+- `f5fe300` feat: align mFruit OS app lifecycle and input contracts
 
 ### ConnectWifi
 
@@ -23,7 +23,7 @@ Incoming origin/main: `82abbed`.
 Merge commit: `0f1edf6`.
 
 - `82abbed` feat: unify Wi-Fi settings UI and require explicit Back selection
-- `33a0d7e` chore: sync MFruit App SDK 1.2.0 and app rules
+- `33a0d7e` chore: sync mFruit App SDK 1.2.0 and app rules
 
 ### WalkieTalkie
 
@@ -31,15 +31,15 @@ Incoming origin/main: `58af425`.
 Merge commit: `a99c4bd`.
 
 - `58af425` fix: make Status explicit and add hold-to-select Back navigation
-- `b25e098` feat: align WalkieTalkie with MFruit OS app controls and lifecycle
+- `b25e098` feat: align WalkieTalkie with mFruit OS app controls and lifecycle
 
 ### Messenger
 
 Incoming origin/main: `43e06e7`.
 Merge commit: `6d46d15`.
 
-- `43e06e7` feat: describe Messenger as Radio Message in MFruit OS
-- `527d775` feat: align Messenger with MFruit OS app input and lifecycle rules
+- `43e06e7` feat: describe Messenger as Radio Message in mFruit OS
+- `527d775` feat: align Messenger with mFruit OS app input and lifecycle rules
 
 ### ai-chatbot
 
@@ -47,18 +47,18 @@ Incoming origin/main: `4620648`.
 Merge commit: `7df8249`.
 
 - `4620648` fix: defer OpenCV import until camera conversion
-- `68273da` feat: align ai-chatbot with MFruit OS app input and lifecycle model
+- `68273da` feat: align ai-chatbot with mFruit OS app input and lifecycle model
 
 ### whisplay-crypto-dashboard
 
 Incoming origin/main: `42e4e2c`.
 Merge commit: `d67a661`.
 
-- `42e4e2c` feat: align crypto dashboard with MFruit OS app behavior
+- `42e4e2c` feat: align crypto dashboard with mFruit OS app behavior
 
 ## Resolution decisions
 
-- MFruit OS keeps upstream direct Settings → Wi-Fi launch, button LED feedback,
+- mFruit OS keeps upstream direct Settings → Wi-Fi launch, button LED feedback,
   Bluetooth recovery, lifecycle contracts and SDK changes. The additional
   pending-pair cancellation/shutdown guards and their regression tests remain.
 - ConnectWifi keeps upstream Wi-Fi screens, network flows, LED feedback and
@@ -80,8 +80,8 @@ ancestry; the deployed runtime already contains the combined implementation.
 
 ## Post-resolution verification
 
-All 1,304 local Python tests passed: MFruit OS 284, ConnectWifi 137, WalkieTalkie
-637, Messenger 147, dashboard 86 and chatbot 13. MFruit OS rendered 37 screens.
+All 1,304 local Python tests passed: mFruit OS 284, ConnectWifi 137, WalkieTalkie
+637, Messenger 147, dashboard 86 and chatbot 13. mFruit OS rendered 37 screens.
 SDK synchronization, native template package preflight, whitespace and unresolved
 conflict checks passed.
 
