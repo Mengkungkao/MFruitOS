@@ -104,8 +104,13 @@ register-level fakes modelled on the boards' published interface
 (2026-10-10, [record](records/2026-10-10-power-management.md)). On the Pi
 Zero 2 W the service found a PiSugar 2 on I2C bus 1, read a plausible
 voltage and level, and set the board's clock (DEVICE VERIFIED, 2026-10-10).
-Still unknown: the current's sign (it read −0.39 A while charging), plug and
-unplug detection, the battery curve fit, the button, the low-battery
+Fixed 2026-10-10: on a board that cannot sense external power, noise and
+load changes in the voltage were reported as charging, which also cancelled
+the low-battery countdown ([record](records/2026-10-10-battery-charging-judgement.md)).
+The 14:31 "charging" reading in the first record came from that same rule,
+so the −0.39 A it was read with most likely means discharging.
+Still unknown: the current's sign (NOT VERIFIED on battery), the new charging
+judgement's thresholds on a real PiSugar 2, plug and unplug detection, the battery curve fit, the button, the low-battery
 shutdown, the board switching off at the end of a power-off, wake alarms,
 and everything on a PiSugar 3 (press timing, output switch-off). Next: the
 [power checklist](VALIDATION.md#hardware-checklist--power-management) P2–P8

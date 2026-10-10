@@ -6,6 +6,17 @@ the OS version.
 
 ## Unreleased
 
+### Fixed (2026-10-10, battery shown as charging)
+- **A PiSugar 2 that cannot sense external power (four LEDs) no longer
+  shows "charging" on battery.** Charging was guessed from one-second
+  voltage samples, so noise and the voltage recovering after a load (a radio
+  transmitting) looked like charging, in the status bar, Settings → Battery
+  and every app that reads PiSugar's socket (RadioConnect). The same guess
+  cancelled and restarted the low-battery countdown, so the safe shutdown
+  could be put off until the battery died. It is now judged from a 0.1 V
+  step (plugging in or out, seen within seconds) or three minutes of rising
+  minute averages (starting on external power).
+
 ### Added (2026-10-10, power management)
 - **mFruit OS has its own power management** for PiSugar battery boards
   (PiSugar 3, PiSugar 2 with 4 or 2 LEDs, PiSugar 2 Pro): a new

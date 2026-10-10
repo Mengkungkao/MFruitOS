@@ -179,6 +179,93 @@ class LowBatteryTests(unittest.TestCase):
         self.assertGreaterEqual(len(runner.commands), 2)
 
 
+def discharging_volts(seconds: int, start: float = 3.85, seed: int = 7) -> list:
+    """One reading a second from a board on battery: falling 3 mV a minute,
+    a few millivolts of noise, and a 25 mV dip for 3 s every 45 s (a radio
+    transmitting) that recovers when the load ends."""
+    import random
+    rand = random.Random(seed)
+    volts = []
+    for t in range(seconds):
+        v = start - 0.003 * t / 60.0 + rand.uniform(-0.004, 0.004)
+        if t % 45 < 3:
+            v -= 0.025
+        volts.append(v)
+    return volts
+
+
+def old_rule_fires(volts: list) -> bool:
+    """PiSugar's rule (oldest < mean < newest over the last 30 samples)."""
+    for end in range(3, len(volts) + 1):
+        window = volts[max(0, end - 30):end]
+        mean = sum(window) / len(window)
+        if window[0] < mean < window[-1]:
+            return True
+    return False
+
+
+class ChargingJudgementTests(unittest.TestCase):
+    """A PiSugar 2 with four LEDs cannot sense external power, so charging is
+    judged from the voltage (mfruitos/power/charging.py)."""
+
+    def feed(self, service, board, clock, volts, judged=None):
+        for v in volts:
+            board.set_battery(v)
+            clock.advance(1.0)
+            service.tick()
+            if judged is not None:
+                judged.append(service.charging())
+
+    def test_a_discharging_board_is_never_judged_charging(self):
+        volts = discharging_volts(15 * 60)
+        self.assertTrue(old_rule_fires(volts), "the scenario must reproduce the old fault")
+        service, board, clock, *_ = make_service(board=FakeIP5209(leds=4), model="pisugar2-4led")
+        judged = []
+        self.feed(service, board, clock, volts, judged)
+        self.assertEqual(sum(judged), 0)
+        self.assertFalse(service.view()["charging"])
+
+    def test_noise_does_not_cancel_the_low_battery_shutdown(self):
+        volts = discharging_volts(200, start=3.47, seed=3)     # about 3 %
+        self.assertTrue(old_rule_fires(volts[:120]))
+        service, board, clock, events, runner, _ = make_service(
+            board=FakeIP5209(leds=4), model="pisugar2-4led", safe_shutdown_delay=120)
+        self.feed(service, board, clock, volts)
+        self.assertNotIn(power.LOW_BATTERY_CANCELLED, names(events))
+        self.assertEqual(len(runner.commands), 1)
+        self.assertEqual(runner.commands[0][-1], "poweroff")
+
+    def test_plugging_in_and_out_is_seen_within_seconds(self):
+        service, board, clock, *_ = make_service(board=FakeIP5209(leds=4), model="pisugar2-4led")
+        self.feed(service, board, clock, discharging_volts(5 * 60))
+        self.assertFalse(service.charging())
+        charging = [3.84 + 0.15 + 0.006 * t / 60.0 for t in range(5 * 60)]
+        judged = []
+        self.feed(service, board, clock, charging, judged)
+        self.assertTrue(all(judged[15:]), "charging within 15 s of plugging in")
+        judged = []
+        self.feed(service, board, clock, discharging_volts(60, start=3.86), judged)
+        self.assertFalse(any(judged[15:]), "not charging within 15 s of unplugging")
+
+    def test_starting_on_external_power_is_seen_from_the_rise(self):
+        import random
+        rand = random.Random(11)
+        rising = [3.80 + 0.006 * t / 60.0 + rand.uniform(-0.004, 0.004) for t in range(8 * 60)]
+        service, board, clock, *_ = make_service(board=FakeIP5209(leds=4, volts=rising[0]),
+                                                 model="pisugar2-4led")
+        judged = []
+        self.feed(service, board, clock, rising, judged)
+        self.assertFalse(any(judged[:3 * 60]), "three rising minutes are needed")
+        self.assertTrue(all(judged[5 * 60:]))
+
+    def test_a_board_that_senses_power_is_not_second_guessed(self):
+        service, board, clock, *_ = make_service(board=FakeIP5209(leds=2), model="pisugar2-2led")
+        board.set_battery(3.85, plugged=True)
+        clock.advance(1.0)
+        service.tick()
+        self.assertTrue(service.charging())
+
+
 class BoardEventTests(unittest.TestCase):
     def test_soft_shutdown_powers_off(self):
         service, board, clock, events, runner, _ = make_service()

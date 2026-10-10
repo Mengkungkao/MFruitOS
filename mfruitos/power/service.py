@@ -41,6 +41,7 @@ from mfruitos import power
 from mfruitos.hosts.pisugar import base, detect
 from mfruitos.hosts.pisugar.base import Unsupported
 from mfruitos.hosts.pisugar.rtc import local_to_utc_alarm
+from mfruitos.power.charging import ChargeJudge
 from mfruitos.power.config import CHIP_KEYS, SCHEMA, PowerConfig
 from mfruitos.system.settings import Invalid
 
@@ -147,6 +148,7 @@ class PowerService:
         self._failures = 0
         self._voltages: deque = deque(maxlen=WINDOW)
         self._currents: deque = deque(maxlen=WINDOW)
+        self._charge = ChargeJudge()      # boards that cannot sense external power
         self.sample: base.Sample | None = None
         self.low_since: float | None = None
         self._low_notice_at = 0.0
@@ -216,6 +218,7 @@ class PowerService:
         self.sample = None
         self._voltages.clear()
         self._currents.clear()
+        self._charge.reset()
         self._failures = 0
 
     # ================================================================ timing
@@ -268,6 +271,7 @@ class PowerService:
             log.warning("Battery board not answering: %s", self.error)
             self.sample = None
             self._voltages.clear()
+            self._charge.reset()
             self._emit_state(force=True)
 
     # ================================================================ sampling
@@ -281,6 +285,8 @@ class PowerService:
         self.sample = sample
         if base.plausible(sample.voltage):
             self._voltages.append(sample.voltage)
+            if sample.plugged is None:
+                self._judge_charging(now, sample.voltage)
         if sample.current is not None:
             self._currents.append(sample.current)
         if not self.chip.tap_interval:
@@ -313,11 +319,16 @@ class PowerService:
             return None
         if self.sample.plugged is not None:
             return bool(self.sample.plugged and self.sample.allow_charging is not False)
-        # Boards that cannot sense external power: a rising voltage means charging.
-        if len(self._voltages) < 3:
-            return False
-        mean = self.voltage()
-        return self._voltages[0] < mean < self._voltages[-1]
+        # Boards that cannot sense external power: judged from the voltage
+        # (mfruitos/power/charging.py explains how, and why not sample to sample).
+        return self._charge.charging
+
+    def _judge_charging(self, now: float, volts: float) -> None:
+        before = self._charge.charging
+        if self._charge.add(now, volts) != before:
+            log.info("Battery %s (judged from the voltage: %s)",
+                     "charging" if self._charge.charging else "not charging",
+                     self._charge.reason)
 
     # ================================================================ events
     def _taps(self, taps: list) -> None:

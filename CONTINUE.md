@@ -6,6 +6,21 @@ History: [docs/quality/records/](docs/quality/records/README.md) (the previous
 hand-off is preserved verbatim in
 [2026-10-01-handoff.md](docs/quality/records/2026-10-01-handoff.md)).
 
+## Session 2026-10-10 (later) — battery shown as charging; RadioConnect listen before talk
+
+The owner reported that RadioConnect sometimes shows the battery charging with
+no charger, and asked for listen before talk on the devices.
+
+| # | Step | Status |
+|---|---|---|
+| C1 | Battery "charging" on battery. RadioConnect only shows the PiSugar socket's `battery_charging`, which `mfruit-power.service` decided for the Pi Zero's PiSugar 2 (no power sensing) with PiSugar's sample-to-sample voltage rule. Noise and load recovery fired it, and each false "charging" also cancelled the low-battery countdown | FIXED, uncommitted: `mfruitos/power/charging.py` (0.1 V step, or three rising minute averages); `ChargingJudgementTests` 5 tests, negative control 4 of 5 fail on the old rule; check.sh green (655). ADR 0012 amended, KI-13, CHANGELOG, [record](docs/quality/records/2026-10-10-battery-charging-judgement.md). NOT VERIFIED on the PiSugar 2: the Pi Zero was unreachable all session |
+| C2 | Listen before talk in RadioConnect 0.6.0 | DONE in `~/RadioConnect` (uncommitted; its `CONTINUE.md` row L2): 699 tests; Orange Pi runs the 0.6.0 sideload. Its module does not answer the channel-level query, so it listens to heard traffic only. Not yet in the Fruit Store list |
+
+Next (owner): deploy mFruit OS to the Pi Zero and watch Settings → Battery on
+battery and on the charger; install RadioConnect 0.6.0 on the Pi Zero too (two
+radios contending is the real listen-before-talk check); commit, push, then
+pin 0.6.0 in `config/catalog.json`.
+
 ## Session 2026-10-10 — own power management, rename to mFruit OS, phone Wi-Fi setup
 
 The user asked: (1) go through PiSugar's pisugar-power-manager-rs and create

@@ -34,6 +34,11 @@ PiSugar's project. That project is GPL v3; mFruit OS is MIT.
   - **Safe shutdown**: below `safe_shutdown_level` % (default 5) while
     unplugged, a `safe_shutdown_delay` countdown (default 30 s) is announced.
     External power cancels it. At zero, `sudo -n systemctl poweroff` runs.
+    A board that cannot sense external power (PiSugar 2 with four LEDs, or
+    an unconfigured PiSugar 2) is judged charging from its voltage: a step
+    up of 0.1 V, or three minutes of rising minute averages
+    (`mfruitos/power/charging.py`; amended 2026-10-10 after sample-to-sample
+    noise was reported as charging).
   - **Soft shutdown**: the PiSugar 3 power button can ask for this shutdown
     instead of cutting the power.
   - **Board settings and clock**: power on when plugged in, anti-mistouch,

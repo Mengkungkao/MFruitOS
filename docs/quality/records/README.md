@@ -10,6 +10,7 @@ Name new records `YYYY-MM-DD-topic.md` and add them to the top of this list.
 
 | Date | Record | Scope |
 |---|---|---|
+| 2026-10-10 | [Battery shown as charging](2026-10-10-battery-charging-judgement.md) | PiSugar 2 (four LEDs) judged charging from voltage noise; new judgement, regression tests with negative control (automated only) |
 | 2026-10-10 | [Wi-Fi from a phone](2026-10-10-phone-wifi-setup.md) | PiSugar's sugar-wifi-conf installed and run by mFruit OS; BLE checks from the dev machine against the Orange Pi |
 | 2026-10-10 | [Own power management, rename to mFruit OS](2026-10-10-power-management.md) | mFruit power service and PiSugar drivers (automated only; no PiSugar device reachable) |
 | 2026-10-05 | [Radio auto-setup](2026-10-05-radio-autosetup.md) | Queued RadioConnect installed by the launcher on the Pi; next-boot radio service verified only with `systemd-analyze` |
