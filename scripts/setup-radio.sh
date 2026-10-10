@@ -115,7 +115,14 @@ if [ "$BOARD" = raspberrypi ]; then
     ok "enable_uart=1 in $BOOT_CONFIG"
   elif ask "add enable_uart=1 to $BOOT_CONFIG (needs a reboot)?"; then
     sudo cp -n "$BOOT_CONFIG" "$BOOT_CONFIG.mfruit.bak"
-    echo "enable_uart=1" | sudo tee -a "$BOOT_CONFIG" >/dev/null && ok "added" && NEED_REBOOT=1
+    # On a line of its own in the [all] section: after a model filter such as
+    # [cm4] it would apply to that model only (drivers/whisplay/install.sh,
+    # ensure_all_section).
+    PREFIX=""
+    [ ! -s "$BOOT_CONFIG" ] || [ -z "$(tail -c 1 "$BOOT_CONFIG")" ] || PREFIX=$'\n'
+    LAST_SECTION="$(grep -E '^[[:space:]]*\[[^]]*\]' "$BOOT_CONFIG" | tail -n 1 | tr -d '[:space:]' || true)"
+    [ -z "$LAST_SECTION" ] || [ "$LAST_SECTION" = "[all]" ] || PREFIX="$PREFIX"$'\n[all]\n'
+    printf '%senable_uart=1\n' "$PREFIX" | sudo tee -a "$BOOT_CONFIG" >/dev/null && ok "added" && NEED_REBOOT=1
   else
     bad "the LoRa HAT needs the UART: enable_uart=1 in $BOOT_CONFIG"
   fi

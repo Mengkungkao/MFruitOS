@@ -14,7 +14,8 @@ bash scripts/check.sh            # what CI runs
 bash scripts/check.sh --quick    # skip the full unit suite
 ```
 
-It runs: Python syntax for 3.9, the unit and integration suite (including the
+It runs: Python syntax for 3.9 (and no `X | Y` type unions evaluated at run
+time, which need 3.10), the unit and integration suite (including the
 real-daemon tests against the bundled daemon), the offscreen self-test, shell
 syntax, the Whisplay driver checksums and Whisplay's own daemon unit tests,
 the template package preflight, the SDK copy check, the Markdown link check
@@ -90,6 +91,27 @@ driver. Faked are only the device tree, systemd and the reported kernel
 release (`tests/fresh_install/fakes/`). It needs an offline pack and Docker,
 so CI does not run it; record its results. It does not replace a boot on
 real hardware.
+
+### Other distributions
+
+`bash tests/distro/run.sh` runs the suite on Ubuntu 22.04 and 24.04 and Debian
+12 and 13 with each distribution's own Python, Pillow, gpiod and codec
+packages, without root or Docker (user namespaces; the host is not changed):
+
+```bash
+bash tests/distro/run.sh prepare ubuntu-24.04   # download, verify, unpack, packages (once)
+bash tests/distro/run.sh check ubuntu-24.04     # scripts/check.sh as a normal user
+bash tests/distro/run.sh install ubuntu-24.04   # install.sh --no-service twice, then the self-test
+APP_DIR=~/RadioConnect bash tests/distro/run.sh user ubuntu-24.04 \
+  bash -c 'cd /src/app && MFRUIT_FONT_DIR=/src/MFruitOS/assets/fonts python3 -m pytest -q -p no:cacheprovider'
+```
+
+`MFRUIT_DISTRO_ARCH=armhf` runs a 32-bit system on an arm64 host whose CPU
+runs 32-bit code (as 32-bit Raspberry Pi OS does on a 64-bit kernel).
+The checkout is mounted read-only, so a test that writes into the source tree
+fails there. Containers have no systemd, udev, kernel or hardware: the
+[tested systems](../platform/INSTALLATION.md#tested-systems) table says what
+this covers and what still needs a board.
 
 ## Timing-sensitive tests
 

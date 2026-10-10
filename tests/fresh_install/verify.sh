@@ -3,7 +3,7 @@
 # container by tests/fresh_install/rehearse.sh (as the board user, after
 # `bash scripts/install.sh --yes`). Exit status = number of failed checks.
 set -u
-cd "$(dirname "$0")/../.."
+cd "$(dirname "$0")/../.." || exit 1
 fails=0
 expect() {
   local what="$1"
@@ -19,7 +19,7 @@ set +e  # the sourced installer turns errexit on; every check here must run
 echo "==> checks"
 expect "no network in this container (offline)" bash -c '! getent hosts github.com'
 expect "install log: packages came from the offline pack" grep -q "from the offline pack" ~/install.log
-expect "install log: asks for the reboot" grep -q "reboot to finish the Whisplay driver" ~/install.log
+expect "install log: asks for the reboot" grep -q "installed; reboot to finish the setup" ~/install.log
 for pkg in python3-pil python3-venv network-manager python3-spidev python3-libgpiod python3-numpy \
     python3-smbus alsa-utils i2c-tools device-tree-compiler libasound2-plugins sox make gcc \
     fonts-dejavu-core bluez python3-dbus python3-gi; do
@@ -58,6 +58,15 @@ expect "daemon settings created" test -f ~/.whisplay-daemon/settings.json
 expect "mFruit OS active version" test -f ~/.whisplay-os/system/current/mfruitos/__init__.py
 expect "mFruit OS self-test" env PYTHONPATH="$HOME/.whisplay-os/system/current" python3 -m mfruitos --self-test
 expect "Wi-Fi app provisioned" test -f ~/.whisplay-os/apps/connectwifi/current/manifest.json
+expect "Wi-Fi permission: polkit rule" test -f /etc/polkit-1/rules.d/49-mfruit-wifi.rules
+if [ "$(pkaction --version 2>/dev/null | awk '{ print $NF }')" = 0.105 ]; then
+  expect "  and as .pkla for polkit 0.105" sudo test -f /etc/polkit-1/localauthority/50-local.d/49-mfruit-wifi.pkla
+fi
+# systemd refuses a unit naming a group that does not exist (216/GROUP).
+for unit in whisplay-daemon.service whisplay-os.service mfruit-power.service; do
+  expect "$unit names only existing groups" bash -c \
+    "for g in \$(sed -n 's/^SupplementaryGroups=//p' /etc/systemd/system/$unit); do getent group \"\$g\" >/dev/null || exit 1; done"
+done
 expect "no build files left in the source tree" bash -c \
   '[ -z "$(find drivers/whisplay/audio -name "*.o" -o -name "*.ko" -o -name "*.dtbo" | head -1)" ]'
 

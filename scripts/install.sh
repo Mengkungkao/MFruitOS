@@ -112,7 +112,15 @@ if ! "$PYTHON" -c "import PIL" 2>/dev/null; then
   warn "Pillow missing; installing python3-pil"
   sudo bash "$SRC/scripts/offline.sh" install python3-pil || fail "could not install Pillow"
 fi
-ok "Pillow $("$PYTHON" -c 'import PIL; print(PIL.__version__)')"
+PIL_VERSION="$("$PYTHON" -c 'import PIL; print(PIL.__version__)')"
+# Pillow 9.0 (Ubuntu 22.04's) is the oldest tested; 8.1 (Debian 11, Raspberry Pi
+# OS Bullseye) lacks the rounded rectangles every screen is drawn with.
+"$PYTHON" - "$PIL_VERSION" <<'PY' || fail "Pillow 9.0 or newer is required; this system has $PIL_VERSION (Debian 11 / Raspberry Pi OS Bullseye are not supported)"
+import re, sys
+match = re.match(r"(\d+)\.(\d+)", sys.argv[1])
+sys.exit(0 if match and (int(match.group(1)), int(match.group(2))) >= (9, 0) else 1)
+PY
+ok "Pillow $PIL_VERSION"
 if ! "$PYTHON" -c "import venv, ensurepip" 2>/dev/null; then
   warn "Python venv support missing; installing python3-venv"
   sudo bash "$SRC/scripts/offline.sh" install python3-venv || fail "python3-venv is required for App installer"
@@ -180,7 +188,12 @@ else
     | as_user tar -xf - -C "$CODE_DIR"
   ok "code: $CODE_DIR"
 fi
-PREVIOUS="$(readlink -f "$OS_HOME/system/current" 2>/dev/null || true)"
+# Only an existing link: readlink -f also answers for a missing "current"
+# (its folder exists), and that name was then "restored" as a self-loop.
+PREVIOUS=""
+if [ -e "$OS_HOME/system/current" ]; then
+  PREVIOUS="$(readlink -f "$OS_HOME/system/current" 2>/dev/null || true)"
+fi
 as_user ln -sfn "$CODE_DIR" "$OS_HOME/system/current.tmp"
 as_user mv -T "$OS_HOME/system/current.tmp" "$OS_HOME/system/current"
 ok "active version -> $(readlink "$OS_HOME/system/current")"
@@ -208,7 +221,9 @@ else
     as_user ln -sfn "$PREVIOUS" "$OS_HOME/system/current"
     fail "self-test failed; previous version restored"
   fi
-  fail "self-test failed"
+  # A first installation: there is nothing to go back to, so nothing stays active.
+  as_user rm -f "$OS_HOME/system/current"
+  fail "self-test failed; nothing was activated"
 fi
 
 # Record local installs too, so Settings can roll back without a GitHub release.
@@ -279,6 +294,7 @@ if ! command -v nmcli >/dev/null; then
   sudo bash "$SRC/scripts/offline.sh" install network-manager || fail "NetworkManager is required for Settings > Wi-Fi"
   command -v nmcli >/dev/null || fail "nmcli is still unavailable after installing NetworkManager"
 fi
+# >>> wifi permission
 sudo mkdir -p /etc/polkit-1/rules.d
 POLKIT_TMP="$(mktemp)"
 TMP_FILES+=("$POLKIT_TMP")
@@ -293,7 +309,65 @@ print('  ].indexOf(action.id) !== -1) return polkit.Result.YES;')
 print('});')
 PYRULE
 sudo install -m 0644 "$POLKIT_TMP" /etc/polkit-1/rules.d/49-mfruit-wifi.rules
+# polkit before 0.106 (Ubuntu 22.04, Debian 11) ignores JavaScript rules and
+# reads .pkla files only; Debian's polkitd-pkla package adds .pkla support to
+# newer versions. Write the same grant as a .pkla wherever one is read.
+POLKIT_VERSION="$(pkaction --version 2>/dev/null | awk '{ print $NF }' || true)"
+POLKIT_PKLA=/etc/polkit-1/localauthority/50-local.d/49-mfruit-wifi.pkla
+if { [ -n "$POLKIT_VERSION" ] && [ "$(printf '%s\n' "$POLKIT_VERSION" 0.106 | sort -V | head -n 1)" != 0.106 ]; } \
+    || [ -d /etc/polkit-1/localauthority ]; then
+  if "$PYTHON" - "$TARGET_USER" > "$POLKIT_TMP" <<'PYPKLA'
+import re, sys
+user = sys.argv[1]
+if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9._-]*[$]?", user):
+    sys.exit(1)   # no quoting exists in .pkla files
+print("[mFruit OS: Wi-Fi settings for " + user + "]")
+print("Identity=unix-user:" + user)
+print("Action=" + ";".join("org.freedesktop.NetworkManager." + action for action in
+      ["wifi.scan", "network-control", "settings.modify.system", "enable-disable-wifi"]))
+print("ResultAny=yes")
+print("ResultInactive=yes")
+print("ResultActive=yes")
+PYPKLA
+  then
+    sudo mkdir -p "$(dirname "$POLKIT_PKLA")"
+    sudo install -m 0644 "$POLKIT_TMP" "$POLKIT_PKLA"
+    ok "polkit ${POLKIT_VERSION:-?}: Wi-Fi permission also as $POLKIT_PKLA"
+  else
+    warn "user name $TARGET_USER cannot be written to a polkit .pkla file; Settings > Wi-Fi may be refused"
+  fi
+fi
 rm -f "$POLKIT_TMP"
+# <<< wifi permission
+
+# >>> wifi checks
+# Whether NetworkManager now lets this user scan and join from outside a login
+# session, as the launcher runs (a systemd --user unit has no session either).
+NM_PERMS="$(as_user timeout 20 systemd-run --user --pipe --wait --quiet \
+            nmcli -t -f permission,value general permissions 2>/dev/null || true)"
+if [ -n "$NM_PERMS" ]; then
+  if echo "$NM_PERMS" | grep -qx 'org.freedesktop.NetworkManager.wifi.scan:yes' \
+      && echo "$NM_PERMS" | grep -qx 'org.freedesktop.NetworkManager.network-control:yes'; then
+    ok "NetworkManager lets mFruit OS scan and join Wi-Fi (checked outside a login session)"
+  else
+    warn "NetworkManager refuses Wi-Fi scans or joins outside a login session (polkit ${POLKIT_VERSION:-?}): Settings > Wi-Fi will not work; docs/quality/TROUBLESHOOTING.md"
+  fi
+fi
+# Ubuntu Server, also for Raspberry Pi, leaves Wi-Fi to netplan and
+# systemd-networkd, and netplan marks that interface unmanaged for
+# NetworkManager. Settings > Wi-Fi cannot change it then; say how to hand it over.
+WIFI_UNMANAGED="$(nmcli -t -f DEVICE,TYPE,STATE device 2>/dev/null \
+                  | awk -F: '$2 == "wifi" && $3 == "unmanaged" { printf "%s ", $1 }' || true)"
+if [ -n "$WIFI_UNMANAGED" ]; then
+  warn "NetworkManager does not manage ${WIFI_UNMANAGED% }: Settings > Wi-Fi cannot scan or join with it"
+  if [ -d /etc/netplan ]; then
+    warn "netplan gives it to systemd-networkd. To give it to NetworkManager (the configured network is kept):"
+    echo "        printf 'network:\\n  version: 2\\n  renderer: NetworkManager\\n' | sudo tee /etc/netplan/90-networkmanager.yaml"
+    echo "        sudo chmod 600 /etc/netplan/90-networkmanager.yaml && sudo netplan generate && sudo reboot"
+    echo "    (docs/platform/INSTALLATION.md#ubuntu-server-wi-fi-and-netplan)"
+  fi
+fi
+# <<< wifi checks
 
 # A fresh Raspberry Pi OS image can start with Bluetooth soft-blocked (rfkill),
 # and Settings > Bluetooth then fails with org.bluez.Error.Failure. Lift that on
@@ -306,8 +380,15 @@ if [ "$FIRST_INSTALL" = 1 ]; then
   done
 fi
 
+# >>> service groups
+# Groups the launcher gets on top of the user's own: the LCD and button (SPI,
+# GPIO) for the fallback screen, sound and input. Only existing groups may be
+# listed: systemd refuses a unit naming a missing one (216/GROUP). Ubuntu for
+# Raspberry Pi has no gpio group and gives SPI, GPIO and I2C to dialout.
 GROUPS_LIST=""
 for g in audio video gpio spi input; do getent group "$g" >/dev/null && GROUPS_LIST="$GROUPS_LIST $g"; done
+if ! getent group gpio >/dev/null && getent group dialout >/dev/null; then GROUPS_LIST="$GROUPS_LIST dialout"; fi
+# <<< service groups
 
 SUDOERS_TMP="$(mktemp)"
 TMP_FILES+=("$SUDOERS_TMP")
@@ -397,8 +478,15 @@ POWER_HOOK_DIR=/usr/lib/systemd/system-shutdown
 RESTART_POWER=0
 if [ "$INSTALL_POWER" = 1 ]; then
   say "Power management ($POWER_SERVICE)"
-  POWER_GROUPS=""
-  getent group i2c >/dev/null && POWER_GROUPS="i2c"
+  # >>> power groups
+  # The group that owns /dev/i2c-* (i2c on Raspberry Pi OS and Orange Pi OS,
+  # dialout on Ubuntu for Raspberry Pi); before the bus exists, the usual one.
+  POWER_GROUPS="$(stat -c %G /dev/i2c-[0-9]* 2>/dev/null | grep -vx root | head -n 1 || true)"
+  if [ -z "$POWER_GROUPS" ]; then
+    if getent group i2c >/dev/null; then POWER_GROUPS=i2c
+    elif getent group dialout >/dev/null; then POWER_GROUPS=dialout; fi
+  fi
+  # <<< power groups
   [ -n "$POWER_GROUPS" ] || warn "no i2c group: the power service may not reach /dev/i2c-*"
   # /dev/i2c-N comes from the kernel's i2c-dev module. Turning the bus on in the
   # boot config (dtparam=i2c_arm=on, as the Whisplay driver does) does not load

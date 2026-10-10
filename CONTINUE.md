@@ -6,6 +6,24 @@ History: [docs/quality/records/](docs/quality/records/README.md) (the previous
 hand-off is preserved verbatim in
 [2026-10-01-handoff.md](docs/quality/records/2026-10-01-handoff.md)).
 
+## Session 2026-10-10 (evening) — other distributions: Ubuntu, Orange Pi Ubuntu, Ubuntu for Raspberry Pi
+
+The owner asked to test and debug everything so far and make sure installing
+works on Ubuntu, Orange Pi Ubuntu and Ubuntu for Raspberry Pi. No Ubuntu
+Raspberry Pi board exists here: those parts are container and simulated-board
+evidence only (KI-17).
+
+| # | Step | Status |
+|---|---|---|
+| X1 | Matrix: full `check.sh` and RadioConnect's suite as a normal user in Ubuntu 22.04/24.04 and Debian 11/12/13 arm64 roots (new `tests/distro/run.sh`, no root/Docker) | DONE before the fixes: Ubuntu 22.04, 24.04, Debian 13 green (658); Debian 12's real-daemon teardown needed `pkill` (procps, missing in the container only); Debian 11 failed (below). Rerun after the fixes: see the record |
+| X2 | Bugs found and fixed (all with regression tests and negative controls, uncommitted): daemon unit named a missing `gpio` group (Ubuntu for Pi: 216/GROUP, no display); sound card build had no `make`/`gcc` and did not compile on 6.8-6.11 kernels (KCFLAGS mapping, KI-19); Wi-Fi polkit rule ignored by polkit 0.105 (now also `.pkla`, plus a session-less check); runtime `float \| None` broke Python 3.9 (check.sh guard); Pillow 9.0 now required and checked; failed first install claimed a restore and left a self-loop; 32-bit userland got the 64-bit phone tool; `config.txt` appends now go into `[all]`; uninstall deletes code only where mFruit OS code is; RadioConnect: too-old libcodec2 (0.9) crashed `available()`, a font-dependent test | DONE in the source; check.sh green (674) on the dev machine |
+| X3 | Simulated Raspberry Pi on Ubuntu 24.04 (fake device tree, Ubuntu's real config.txt): `drivers/whisplay/install.sh` as root | DONE: packages, SPI kept, module built for 6.8.0-1065-raspi, overlay, ALSA config, `[all]` lines, unit groups `audio video i2c input dialout`. NOT on a board |
+| X4 | Netplan: Ubuntu Server's Wi-Fi is unmanaged for NetworkManager (netplan writes NM_UNMANAGED=1), so SSH is safe but Settings > Wi-Fi cannot change it | DOCUMENTED + detected by install.sh and setup-device.sh; hand-over steps checked with `netplan generate` only |
+| X5 | Boards and rehearsal after the fixes | DONE: Orange Pi (Ubuntu 22.04) full suite 674 OK, preflight passes; Docker fresh offline install on the Orange Pi (`rehearse.sh --suite`): 55 checks, 0 failed, 4 real-daemon modules OK; Pi Zero preflight passes, suite found a test reaching `raspi-config` (fixed, 22 driver tests then OK there). Files-only installs on both boards (backups in `~/mfruit-backups/*-before-distro-fixes/`), launcher restarted via sudoers; RadioConnect reopened |
+| X6 | KI-16 (found while deploying): a Keep-running or adopted app that exits stayed "running" | FIXED + DEVICE VERIFIED on both boards (cleared in 0.8-1.1 s without reload; `tests/device/keep_running_exit.py`) |
+| X7 | 32-bit: Debian 13 armhf root on this host (64-bit kernel, 32-bit userland, like 32-bit Raspberry Pi OS) | DONE: full suite, RadioConnect suite, files-only install; the old phone-setup choice (aarch64) could not start there, the fixed one (armv7) runs. `tests/distro/run.sh` takes `MFRUIT_DISTRO_ARCH=armhf` |
+| X8 | Final matrix on the final tree | DONE: mFruit OS 681 tests green on Ubuntu 22.04/24.04, Debian 12/13, Debian 13 armhf and Debian 11 (Python 3.9 + Pillow 9.0.1); RadioConnect 716 on all but armhf, where a pre-existing test race failed once (fixed: wait on the counter, not a fixed sleep) |
+
 ## Session 2026-10-10 (later) — battery shown as charging; RadioConnect listen before talk
 
 The owner reported that RadioConnect sometimes shows the battery charging with
@@ -18,10 +36,27 @@ no charger, and asked for listen before talk on the devices.
 | C4 | SDK 1.5.0: `Row.mark`, a status light after a list row's label (for RadioConnect's in-range light after each name) | DONE, uncommitted: `mfruitos/sdk/ui/chrome.py`, 3 tests in `tests/test_sdk.py`, synced into the template and RadioConnect; SDK.md version row, CHANGELOG; check.sh green (658). Messenger, WalkieTalkie, ConnectWifi, the AI Chatbot and the dashboard stay on 1.4.0 (compatible; reported stale by check-app until synced) |
 | C2 | Listen before talk in RadioConnect 0.6.0 | DONE in `~/RadioConnect` (uncommitted; its `CONTINUE.md` row L2): 699 tests; Orange Pi runs the 0.6.0 sideload. Its module does not answer the channel-level query, so it listens to heard traffic only. Not yet in the Fruit Store list |
 
-Next (owner): deploy mFruit OS to the Pi Zero and watch Settings → Battery on
-battery and on the charger; install RadioConnect 0.6.0 on the Pi Zero too (two
-radios contending is the real listen-before-talk check); commit, push, then
-pin 0.6.0 in `config/catalog.json`.
+Devices at 17:26: the owner's install put this work on the Pi Zero
+(`1.4.0-local20261010170726`), but since its 17:04 boot **nothing answers on
+its I2C bus 1** (a read-only scan found no device, not even the PiSugar's
+clock), so the power service reports "no PiSugar battery board found". It
+answered at 14:31. Either the PiSugar is off the board or its battery is flat
+and the board unpowered. RadioConnect 0.6.0 now runs on both boards.
+
+Next (owner):
+1. On each board, the system part: `bash ~/MFruitOS/scripts/install.sh` as your
+   normal user (it asks for the sudo password): units with existing groups, the
+   polkit `.pkla` on Ubuntu 22.04, build tools. It restarts the daemon once (the
+   unit's groups changed), closing open apps.
+2. Ubuntu for Raspberry Pi on a real Pi Zero 2 W (KI-17): install, reboot, the
+   validation checklists; Wi-Fi hand-over if Ubuntu Server
+   (docs/platform/INSTALLATION.md#ubuntu-server-wi-fi-and-netplan).
+3. Reattach or charge the Pi Zero's PiSugar (not on I2C since 17:04), then
+   check Settings → Battery on battery and on the charger.
+4. RadioConnect 0.6.0 with today's three fixes on both boards; two radios
+   contending (hold talk on one) is the real listen-before-talk check.
+5. Commit and push both repos, then pin RadioConnect 0.6.0 in `config/catalog.json`;
+   report KI-19 to PiSugar.
 
 ## Session 2026-10-10 — own power management, rename to mFruit OS, phone Wi-Fi setup
 

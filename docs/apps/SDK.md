@@ -3,7 +3,7 @@
 The SDK makes an app handle input and look like mFruit OS. Its source is
 `mfruitos/sdk/` (mFruit OS uses it too); every app carries a copy named
 `mfruit_sdk/` ([ADR 0003](../platform/ADR/0003-vendored-sdk-distribution.md)).
-It needs Python 3.9+ and Pillow (UI only), imports only itself, the standard
+It needs Python 3.9+ and Pillow 9.0+ (UI only; Pillow 8.1 lacks rounded rectangles), imports only itself, the standard
 library and Pillow, and uses relative imports so the copy works under its new
 package name.
 

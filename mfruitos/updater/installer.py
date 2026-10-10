@@ -21,7 +21,7 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
-from typing import Callable
+from typing import Callable, Optional
 
 from mfruitos import OS_APP_ID
 from mfruitos.apps.manifest import (Manifest, ManifestError, is_safe_relative_path,
@@ -46,7 +46,9 @@ MIN_FREE_BYTES = 50 * 1024 * 1024
 ENTRYPOINT_FILE = ".mfruit-entrypoint"
 KEPT_ON_UNINSTALL = ("data", "backups")
 
-Progress = Callable[[str, str, float | None], None]
+# Optional, not "float | None": this alias is evaluated at import, and the
+# | form needs Python 3.10 (check.sh guards against it).
+Progress = Callable[[str, str, Optional[float]], None]
 
 
 class InstallError(Exception):

@@ -45,7 +45,8 @@ if [ -f "$OS_HOME/state/pisugar-services-disabled" ]; then
   rm -f "$OS_HOME/state/pisugar-services-disabled"
 fi
 sudo rm -f /etc/sudoers.d/whisplay-os /usr/local/bin/mfruitctl \
-  /etc/polkit-1/rules.d/49-mfruit-wifi.rules
+  /etc/polkit-1/rules.d/49-mfruit-wifi.rules \
+  /etc/polkit-1/localauthority/50-local.d/49-mfruit-wifi.pkla
 if [ -f /etc/systemd/system/mfruit-radio-setup.service ]; then
   # Left by scripts/setup-radio.sh when the radio settings were never written.
   sudo systemctl disable mfruit-radio-setup.service 2>/dev/null || true
@@ -98,7 +99,13 @@ if [ "$PURGE" = 1 ]; then
     *) echo "Refusing to delete unexpected path $OS_HOME" >&2; exit 1 ;;
   esac
 else
-  rm -rf -- "$OS_HOME/system" "$OS_HOME/bin"
+  # Only where mFruit OS code is: a WHISPLAY_OS_HOME set to the home folder by
+  # mistake must not lose ~/bin.
+  if [ "${OS_HOME:-/}" != / ] && { [ -d "$OS_HOME/system/versions" ] || [ -L "$OS_HOME/system/current" ]; }; then
+    rm -rf -- "${OS_HOME:?}/system" "${OS_HOME:?}/bin"
+  else
+    echo "    no mFruit OS code under $OS_HOME; nothing deleted there" >&2
+  fi
   say "Kept apps, settings and logs in $OS_HOME (use --purge to delete them)"
 fi
 if [ "${RESTART_DAEMON:-0}" = 1 ]; then

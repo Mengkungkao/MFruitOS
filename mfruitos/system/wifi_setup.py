@@ -50,6 +50,7 @@ import re
 import secrets
 import shutil
 import signal
+import struct
 import subprocess
 import sys
 import threading
@@ -114,9 +115,20 @@ OFF, UNAVAILABLE, STARTING, WAITING, PHONE, DONE, FAILED = (
 
 
 # ============================================================ the binary
+def userland_bits() -> int:
+    """32 or 64: what this Python, and so the system's userland, is built for."""
+    return struct.calcsize("P") * 8
+
+
 def machine() -> str:
+    """The build to download. A 64-bit kernel can run a 32-bit system (the
+    32-bit Raspberry Pi OS on a Pi Zero 2 W, 3 or 4 may report aarch64), and
+    the program has to match the system's libraries, not the kernel."""
     raw = platform.machine()
-    return MACHINE_ALIASES.get(raw, raw)
+    arch = MACHINE_ALIASES.get(raw, raw)
+    if arch == "aarch64" and userland_bits() == 32:
+        return "armv7l"
+    return arch
 
 
 def glibc() -> tuple | None:

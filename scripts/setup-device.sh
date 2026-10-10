@@ -63,6 +63,11 @@ try:
     import PIL
 except ImportError:
     raise SystemExit("FAIL: Pillow is missing; on Debian/Ubuntu install python3-pil before continuing")
+import re
+_pil = re.match(r"(\d+)\.(\d+)", PIL.__version__)
+if not _pil or (int(_pil.group(1)), int(_pil.group(2))) < (9, 0):
+    raise SystemExit(f"FAIL: Pillow 9.0 or newer is required; this system has {PIL.__version__} "
+                     "(Debian 11 / Raspberry Pi OS Bullseye are not supported)")
 
 sys.path.insert(0, sys.argv[1])
 from mfruitos import __version__
@@ -91,6 +96,33 @@ if systemctl cat mfruit-power.service >/dev/null 2>&1; then
   fi
 else
   ok "  not installed yet; scripts/install.sh installs mfruit-power.service (--no-power skips it)"
+fi
+# Settings > Wi-Fi works through NetworkManager, outside a login session.
+printf 'Wi-Fi:\n'
+if ! command -v nmcli >/dev/null 2>&1; then
+  ok "  NetworkManager not installed yet; scripts/install.sh installs it"
+  if networkctl list 2>/dev/null | awk '$3 == "wlan" && $5 == "configured"' | grep -q .; then
+    printf '  NOTE: systemd-networkd (netplan) runs Wi-Fi here; NetworkManager will not take it over by itself (docs/platform/INSTALLATION.md#ubuntu-server-wi-fi-and-netplan)\n'
+  fi
+else
+  WIFI_UNMANAGED="$(nmcli -t -f DEVICE,TYPE,STATE device 2>/dev/null \
+                    | awk -F: '$2 == "wifi" && $3 == "unmanaged" { printf "%s ", $1 }' || true)"
+  if [ -n "$WIFI_UNMANAGED" ]; then
+    printf '  WARN: NetworkManager does not manage %s, so Settings > Wi-Fi cannot change it (docs/platform/INSTALLATION.md#ubuntu-server-wi-fi-and-netplan)\n' "${WIFI_UNMANAGED% }"
+  else
+    ok "  NetworkManager manages Wi-Fi"
+  fi
+  NM_PERMS="$(timeout 20 systemd-run --user --pipe --wait --quiet \
+              nmcli -t -f permission,value general permissions 2>/dev/null || true)"
+  if [ -z "$NM_PERMS" ]; then
+    ok "  could not ask NetworkManager from outside this session (no user systemd); skipped"
+  elif echo "$NM_PERMS" | grep -qx 'org.freedesktop.NetworkManager.wifi.scan:yes' \
+      && echo "$NM_PERMS" | grep -qx 'org.freedesktop.NetworkManager.network-control:yes'; then
+    ok "  NetworkManager allows scans and joins outside a login session"
+  else
+    printf '  NOTE: NetworkManager refuses scans or joins outside a login session; scripts/install.sh adds the permission (polkit %s)\n' \
+      "$(pkaction --version 2>/dev/null | awk '{ print $NF }' || echo '?')"
+  fi
 fi
 if systemctl is-active --quiet pisugar-server.service 2>/dev/null; then
   printf "  NOTE: PiSugar's pisugar-server is running; scripts/install.sh stops and disables it\n"

@@ -10,6 +10,7 @@ Name new records `YYYY-MM-DD-topic.md` and add them to the top of this list.
 
 | Date | Record | Scope |
 |---|---|---|
+| 2026-10-10 | [Other distributions](2026-10-10-distro-matrix.md) | Ubuntu 22.04/24.04 and Debian 11/12/13 suites without root; a simulated Raspberry Pi on Ubuntu 24.04; ten bugs fixed (groups, sound card build, polkit 0.105, Python 3.9, Pillow floor, ...) |
 | 2026-10-10 | [Battery shown as charging](2026-10-10-battery-charging-judgement.md) | PiSugar 2 (four LEDs) judged charging from voltage noise; new judgement, regression tests with negative control (automated only) |
 | 2026-10-10 | [Wi-Fi from a phone](2026-10-10-phone-wifi-setup.md) | PiSugar's sugar-wifi-conf installed and run by mFruit OS; BLE checks from the dev machine against the Orange Pi |
 | 2026-10-10 | [Own power management, rename to mFruit OS](2026-10-10-power-management.md) | mFruit power service and PiSugar drivers (automated only; no PiSugar device reachable) |

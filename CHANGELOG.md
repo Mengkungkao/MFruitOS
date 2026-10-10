@@ -6,6 +6,36 @@ the OS version.
 
 ## Unreleased
 
+### Fixed (2026-10-10, other distributions; found with tests/distro on Ubuntu 22.04/24.04, Debian 11/12/13)
+- **Ubuntu for Raspberry Pi:** `whisplay-daemon.service` named the `gpio`
+  group, which Ubuntu does not have, and systemd refuses such a unit (no
+  display). Units now list only existing groups, plus `dialout`, which owns
+  SPI, GPIO and I2C there; the power service takes the group of `/dev/i2c-*`.
+- **Sound card on Ubuntu for Raspberry Pi:** the build stopped at "make:
+  command not found" (no compiler on Ubuntu Server), and on kernels 6.8 to
+  6.11 (Ubuntu 24.04) Whisplay's source did not compile. The driver installs
+  `make` and `gcc` and maps the renamed ALSA function there (KI-19).
+- **Wi-Fi settings on polkit 0.105 (Ubuntu 22.04, Orange Pi OS Jammy):** the
+  permission was written only as a JavaScript rule, which that polkit ignores;
+  the launcher could not scan or join from outside a login session. It is
+  also written as a `.pkla` file now, and the installer checks the result.
+  On Ubuntu Server, where netplan owns Wi-Fi, the installer and
+  `setup-device.sh --check` explain how to hand it to NetworkManager.
+- **Python 3.9:** a type alias evaluated at import (`float | None`) stopped
+  the launcher before Python 3.10; `check.sh` now rejects run-time unions.
+  Pillow 9.0 is required and checked (Debian 11's 8.1 lacks rounded
+  rectangles); before, such a system failed only at the self-test.
+- **A failed first installation** claimed "previous version restored" and
+  left `system/current` pointing to itself; now nothing stays active.
+- **An app with *Keep running*, or adopted after a launcher restart, that
+  exits stayed "running"** in the launcher: its update or reinstall was
+  refused ("is open") and the screen stayed held bright until
+  `mfruitctl reload` (KI-16). The launcher now watches its process after it
+  leaves, without stopping it, and refreshes.
+- Phone Wi-Fi setup picks the 32-bit build on a 32-bit system with a 64-bit
+  kernel; lines added to `config.txt` go into its `[all]` section on a line of
+  their own; `uninstall.sh` deletes code only where mFruit OS code is.
+
 ### Added (2026-10-10, SDK 1.5.0)
 - **SDK 1.5.0:** a list row can show a small status light right after its
   name (`Row(mark=..., mark_hollow=...)`), such as RadioConnect's "this radio

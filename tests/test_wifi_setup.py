@@ -149,6 +149,18 @@ class AssetTests(TempHomeTestCase):
                 patch("platform.machine", return_value="aarch64"):
             self.assertIn("2.30 or newer", wifi_setup.unavailable_reason())
 
+    def test_a_32_bit_system_on_a_64_bit_kernel_gets_the_32_bit_build(self):
+        with patch("platform.machine", return_value="aarch64"), \
+                patch.object(wifi_setup, "userland_bits", return_value=32):
+            self.assertEqual(wifi_setup.machine(), "armv7l")
+        with patch("platform.machine", return_value="aarch64"), \
+                patch.object(wifi_setup, "userland_bits", return_value=64):
+            self.assertEqual(wifi_setup.machine(), "aarch64")
+        with patch("platform.machine", return_value="armv7l"), \
+                patch.object(wifi_setup, "userland_bits", return_value=32):
+            self.assertEqual(wifi_setup.machine(), "armv7l")
+        self.assertIn(wifi_setup.userland_bits(), (32, 64))
+
     def test_offline_file_key_matches_the_shell_helper(self):
         url = wifi_setup.download_url(wifi_setup.choose("aarch64", (2, 41)))
         shell = subprocess.run(["bash", "-c", f"source {ROOT}/scripts/offline.sh; "

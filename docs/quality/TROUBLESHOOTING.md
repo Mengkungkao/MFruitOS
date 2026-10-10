@@ -39,6 +39,9 @@ Daemon-managed apps that are not mFruit OS packages may log to
 | Settings reset to defaults | A corrupt `settings.json` is kept as `settings.json.broken-<date>` and logged; fix or delete it. |
 | Button feels slow | Single clicks wait for the double-click window (300 ms). Lower *Settings → Button → Click speed*, or set double/triple click to *Nothing*. |
 | A system update rolled back by itself | The new version failed to start three times; `boot-guard` restored the previous one. See the journal for the failure. |
+| Settings → Wi-Fi shows no networks, an old list, or cannot join | `systemd-run --user --pipe --wait nmcli -t -f permission,value general permissions` must show `wifi.scan:yes` and `network-control:yes`; if not, rerun `install.sh` (polkit 0.105, as on Ubuntu 22.04, reads only the `.pkla` file it writes). If `nmcli device` lists the Wi-Fi device as *unmanaged*, netplan owns it: [Ubuntu Server: Wi-Fi and netplan](../platform/INSTALLATION.md#ubuntu-server-wi-fi-and-netplan). |
+| No sound after a system update | A new kernel; the sound card module was built for the old one. Rerun `bash ~/.whisplay-os/system/current/scripts/install.sh` ([Ubuntu for Raspberry Pi](../platform/INSTALLATION.md#ubuntu-for-raspberry-pi)). |
+| `whisplay-daemon.service` fails with status 216/GROUP | The unit names a group the system lacks (Ubuntu for Raspberry Pi has no `gpio`). Rerun `install.sh`: it lists only existing groups. |
 | `dnsmasq.service` fails on the Orange Pi | Port 53 is held by the DNS stub at 127.0.0.53; unrelated to mFruit OS. Wi-Fi still works. |
 
 ## Running the launcher interactively

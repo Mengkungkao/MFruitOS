@@ -76,6 +76,21 @@ pi_boot_config() {
   else echo "$SYSROOT/boot/config.txt"; fi
 }
 
+# Lines appended to config.txt belong to the section the file ends in: after a
+# model filter such as [cm4] they would apply to that model only. Stock Raspberry
+# Pi OS and Ubuntu files end in [all]; an edited one may not, and one without a
+# final newline would glue the next line onto its last. Both are put right
+# before anything is appended (here, and by the sound card installer).
+ensure_all_section() {
+  local cfg="$1" last
+  [ -f "$cfg" ] || return 0
+  if [ -s "$cfg" ] && [ -n "$(tail -c 1 "$cfg")" ]; then echo >>"$cfg"; fi
+  last="$(grep -E '^[[:space:]]*\[[^]]*\]' "$cfg" | tail -n 1 | tr -d '[:space:]' || true)"
+  if [ -n "$last" ] && [ "$last" != "[all]" ]; then
+    printf '\n[all]\n' >>"$cfg"
+  fi
+}
+
 # The LCD's SPI device per board (runtime/whisplay.py: bus, CS 0).
 spi_device() {
   case "$1" in
@@ -141,12 +156,16 @@ enable_overlay_copy() {
 # its fallback font, so without it the pages crash (found by
 # tests/fresh_install on Ubuntu 22.04). Optional: numpy (fast RGB565), smbus
 # (PiSugar 3 button), i2c-tools (codec probe), bluez, python3-dbus and
-# python3-gi (the daemon's Bluetooth page and pairing agent).
+# python3-gi (the daemon's Bluetooth page and pairing agent), make and gcc
+# (the sound card module build: Whisplay's installer adds them on Orange Pi
+# only, and Ubuntu for Raspberry Pi ships without them, so the build stopped
+# at "make: command not found").
 REQUIRED=(module:spidev:python3-spidev module:gpiod:python3-libgpiod module:PIL:python3-pil
           command:aplay:alsa-utils command:amixer:alsa-utils
           file:/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:fonts-dejavu-core)
 OPTIONAL=(module:numpy:python3-numpy module:smbus:python3-smbus command:i2cdetect:i2c-tools
-          command:bluetoothctl:bluez module:dbus:python3-dbus module:gi:python3-gi)
+          command:bluetoothctl:bluez module:dbus:python3-dbus module:gi:python3-gi
+          command:make:make command:gcc:gcc)
 
 missing_packages() {  # required|optional|all
   local entry kind name list=()
@@ -239,6 +258,7 @@ enable_buses() {
     raspberry_pi)
       # I2C and I2S are enabled by the sound card installer (dtparam lines).
       local boot_cfg; boot_cfg="$(pi_boot_config)"
+      ensure_all_section "$boot_cfg"
       if grep -Eq '^[[:space:]]*dtparam=spi=on' "$boot_cfg" 2>/dev/null; then
         ok "SPI enabled"
       else
@@ -273,13 +293,29 @@ enable_buses() {
   esac
 }
 
+# Whisplay's sound card source calls asoc_substream_to_rtd() before Linux 6.12
+# and snd_soc_substream_to_rtd() from 6.12, but the old name was removed in 6.8
+# (renamed in 6.7), so it failed to compile on 6.8 to 6.11, which Ubuntu 24.04
+# for Raspberry Pi runs (6.8). There the old name is mapped to the new one with
+# kbuild's KCFLAGS, without changing the bundled source.
+soundcard_kcflags() {
+  local release="$1" major minor
+  major="${release%%.*}"
+  minor="${release#*.}"
+  minor="${minor%%[!0-9]*}"
+  case "$major$minor" in ''|*[!0-9]*) return 0 ;; esac
+  if [ "$major" -eq 6 ] && [ "$minor" -ge 8 ] && [ "$minor" -lt 12 ]; then
+    echo "-Dasoc_substream_to_rtd=snd_soc_substream_to_rtd"
+  fi
+}
+
 # Whisplay's own sound card installer, run from a temporary copy (it builds
 # in its source folder, which may be a git checkout or a FAT SD card); with an
 # offline pack its apt-get and wget calls are served from the pack. A failure
 # leaves the display, button and LED working and is reported, so the rest of
 # the installation finishes.
 install_audio() {
-  local platform="$1" shims="" rc=0 work
+  local platform="$1" shims="" rc=0 work kcflags
   if [ "$REBUILD_AUDIO" = 0 ] && audio_installed "$platform"; then
     ok "sound card driver already installed for kernel $(uname -r)"
     return 0
@@ -290,9 +326,14 @@ install_audio() {
       warn "the offline pack was made on kernel $(pack_value "$PACK" KERNEL); this board runs $(uname -r)"
     shims="$(offline_shims "$PACK")"
   fi
+  # Whisplay's installer appends its dtparam/dtoverlay lines to config.txt.
+  [ "$platform" != raspberry_pi ] || ensure_all_section "$(pi_boot_config)"
   work="$(mktemp -d /var/tmp/mfruit-soundcard.XXXXXX)"
   cp -R "$SOUNDCARD_DIR/." "$work/"
-  PATH="${shims:+$shims:}$PATH" WHISPLAY_PLATFORM="$platform" bash "$work/scripts/install.sh" || rc=$?
+  kcflags="$(soundcard_kcflags "$(uname -r)")"
+  [ -z "$kcflags" ] || log "kernel $(uname -r): building with $kcflags"
+  PATH="${shims:+$shims:}$PATH" WHISPLAY_PLATFORM="$platform" \
+    KCFLAGS="${KCFLAGS:+$KCFLAGS }$kcflags" bash "$work/scripts/install.sh" || rc=$?
   rm -rf "$work"
   [ -z "$shims" ] || rm -rf "$shims"
   if [ "$rc" = 0 ]; then
@@ -329,6 +370,24 @@ EOF
   chgrp gpio /dev/gpiochip* /dev/spidev* 2>/dev/null || true
   chmod g+rw /dev/gpiochip* /dev/spidev* 2>/dev/null || true
   ok "GPIO and SPI device access for group gpio"
+}
+
+# Groups whisplay-daemon gets on top of the user's own, for the LCD (SPI), the
+# button and LED (GPIO), sound and input. Who owns those device files differs:
+# Raspberry Pi OS uses gpio, spi and i2c; the Orange Pi rule above uses gpio;
+# Ubuntu for Raspberry Pi gives them all to dialout (ubuntu-raspi-settings,
+# 99-gpio.rules) and has no gpio group. systemd refuses to start a unit whose
+# SupplementaryGroups= names a group that does not exist (status 216/GROUP),
+# so only existing groups are listed.
+daemon_groups() {
+  local group found=""
+  for group in audio video gpio spi i2c input; do
+    getent group "$group" >/dev/null 2>&1 && found="$found $group"
+  done
+  if ! getent group gpio >/dev/null 2>&1 && getent group dialout >/dev/null 2>&1; then
+    found="$found dialout"
+  fi
+  echo "${found# }"
 }
 
 # The daemon's built-in Power page runs these two commands (same rule as Whisplay).
@@ -379,11 +438,12 @@ EOF
 }
 
 install_daemon_service() {
-  local user="$1" home uid group python_bin tmp
+  local user="$1" home uid group python_bin tmp groups
   home="$(getent passwd "$user" | cut -d: -f6)"
   uid="$(id -u "$user")"
   group="$(id -gn "$user")"
   python_bin="$(command -v python3)"
+  groups="$(daemon_groups)"
   install -d -m 0755 -o "$user" -g "$group" "$home/.whisplay-daemon" "$home/.whisplay-daemon/app"
   if [ ! -f "$home/.whisplay-daemon/settings.json" ]; then
     printf '{\n  "apps_dir": "%s"\n}\n' "$home/.whisplay-daemon/app" >"$home/.whisplay-daemon/settings.json"
@@ -405,7 +465,7 @@ After=network.target
 Type=simple
 User=$user
 Group=audio
-SupplementaryGroups=audio video gpio input
+SupplementaryGroups=$groups
 WorkingDirectory=$DRIVER_DIR
 ExecStart=$python_bin $DRIVER_DIR/daemon/whisplay_daemon.py
 Environment=HOME=$home

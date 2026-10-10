@@ -142,21 +142,61 @@ by hand (`sudo rm -rf` of that build). Proposed fix, not made yet: run the root
 Python with bytecode writing off; let the installer remove such a build with
 sudo after its containment check, or warn and go on.
 
-### KI-16 An app that just exited can stay "running" in the launcher
+### KI-16 An app that just exited can stay "running" in the launcher (fixed)
 
-Seen on the Orange Pi, 2026-10-10 16:32, with RadioConnect 0.6.0 and *Keep
-running* on. The app was closed with daemon `app.exit.request`. Its process
-ended and the session went to IDLE, but `mfruitctl apps` kept `"running":
-true` while the daemon's own `app.list` said `false`. Installing it was then
-refused ("RadioConnect is open; close it, then install again"), twice. The
-launcher also logged "Backlight held at 100% for radioconnect" at the session
-end, and the hold stayed. `mfruitctl reload` cleared both. Earlier the same
-day the same steps worked three times. Hypothesis, not proven: the registry
-reads `app.list` once at the session end (`on_session_ended` →
-`refresh_registry`). When the daemon has not yet noted the exit, the stale
-`running` stays, because nothing reads the list again. Next: reproduce with
-the real daemon, then refresh again when the daemon reports the app stopped,
-or trust the ended session; add a regression test.
+Seen on the Orange Pi (16:32) and the Pi Zero 2 W (17:23), 2026-10-10, with
+RadioConnect 0.6.0 and *Keep running* on: after daemon `app.exit.request` the
+process ended and the session went to IDLE, but `mfruitctl apps` kept
+`"running": true` while the daemon's `app.list` said `false`. Installs were
+refused ("RadioConnect is open"), and the backlight stayed held at 100 %
+until `mfruitctl reload`. Root cause: the registry reads `app.list` when the
+session ends, which can be before the process has gone; for ordinary apps
+`_close_app_after_session` refreshes again once the process is gone (fixed
+for them on 2026-10-03), but it returned early for apps that may keep
+running, so nothing refreshed, and the same for an app adopted after a
+launcher restart (session kind `external`). Fix (2026-10-10): for those apps
+it now watches the process for up to 10 s without stopping it
+(`AppLifecycle.wait_exited`), then refreshes. Tests:
+`tests/test_app_close_refresh.py` (negative controls: the old early returns
+fail them). DEVICE VERIFIED 2026-10-10 on the Pi Zero 2 W
+(`1.4.0-local20261010235737`) and the Orange Pi (`1.4.0-local20261010235849`):
+an adopted and a launched RadioConnect with *Keep running*, asked to exit,
+were listed as not running 0.8 to 1.1 s later, without a reload.
+
+### KI-17 Ubuntu for Raspberry Pi has not run on a board
+
+mFruit OS's own suite passes on Ubuntu 22.04 and 24.04 userlands, files-only
+installs work there, and on a simulated Raspberry Pi running Ubuntu 24.04 the
+Whisplay driver installs: packages, `config.txt` lines in `[all]`, the sound
+card module built against the 6.8.0-1065-raspi headers, its overlay, ALSA
+configuration, and a daemon unit with existing groups only
+([record](records/2026-10-10-distro-matrix.md)). Not verified on a board: the
+module loading at boot and the codec working, the LCD and button through
+`dialout`, `whisplay-daemon` starting, Bluetooth (Ubuntu may need
+`pi-bluetooth`), Wi-Fi after handing it to NetworkManager
+([netplan steps](../platform/INSTALLATION.md#ubuntu-server-wi-fi-and-netplan)).
+Next: a Pi Zero 2 W with Ubuntu Server 24.04, the install and the
+[validation checklists](VALIDATION.md).
+
+### KI-18 The sound card module is not rebuilt after a kernel update
+
+`drivers/whisplay/install.sh` builds the Whisplay sound card module for the
+running kernel. After a kernel update and reboot (automatic on Ubuntu with
+unattended-upgrades, by `apt upgrade` on Raspberry Pi OS) the module is
+missing for the new kernel and there is no sound until the installer runs
+again; display, button and LED keep working. Documented
+([Ubuntu for Raspberry Pi](../platform/INSTALLATION.md#ubuntu-for-raspberry-pi),
+[Troubleshooting](TROUBLESHOOTING.md)). Next: rebuild on kernel install (a
+DKMS package, or a kernel postinst hook), or have the launcher notice and offer
+the rebuild.
+
+### KI-19 Whisplay's sound card source and Linux 6.8 to 6.11
+
+The bundled source (upstream `c73051e`) calls `asoc_substream_to_rtd()` on
+kernels before 6.12, but that name was removed in 6.8, so it did not compile
+on Ubuntu 24.04's 6.8 kernel. mFruit OS maps the name with kbuild's `KCFLAGS`
+on 6.8 to 6.11 (`soundcard_kcflags`, tested); the files stay upstream's. Next:
+report to PiSugar (the switch belongs at 6.8, or 6.7 where both names exist).
 
 ## Physical checks outstanding
 

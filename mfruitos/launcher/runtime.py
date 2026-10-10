@@ -398,9 +398,23 @@ class Runtime(ScreenServices):
     def _close_app_after_session(self, session) -> None:
         """Leaving an app closes it completely unless it may keep running."""
         entry = self.registry.get(session.app_id)
-        if session.kind != "app" or entry is None or entry.background:
+        if session.kind not in ("app", "external") or entry is None:
             return
         app_id, session_id = session.app_id, session.id
+        if entry.background or session.kind == "external":
+            # It may stay running (Keep running), or mFruit OS adopted it after
+            # a restart and does not own it: it is not stopped. But when it is
+            # exiting, the refresh at the session end saw it still running, and
+            # nothing else refreshes: installs were refused ("is open") and the
+            # screen stayed held bright (KI-16). Watch the process, then refresh.
+            watch_session = session_id if session.kind == "app" else None
+
+            def watched(result):
+                lifecycle_log.info("APP_LEFT app=%s session=%s process=%s", app_id, session_id, result)
+                self.refresh_registry(query_daemon=True)
+            self.run_task(f"watch-{app_id}", lambda: self.lifecycle.wait_exited(app_id, watch_session),
+                          watched, lane="cleanup")
+            return
 
         def done(result):
             lifecycle_log.info("APP_CLOSED app=%s session=%s result=%s", app_id, session_id, result)

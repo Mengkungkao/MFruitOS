@@ -361,6 +361,25 @@ class AppLifecycle:
             time.sleep(0.2)
         return self._stop_group(pid, app_id)
 
+    def wait_exited(self, app_id: str, session_id: str | None, grace: float = 10.0) -> str:
+        """After the user left an app that may keep running: wait, at most
+        ``grace`` seconds, for its process to end if it is ending. Never stops
+        it. ``session_id`` None accepts the app's process record from any
+        session (an app adopted after a launcher restart has a session of its
+        own). Returns exited | running | unknown (no process record)."""
+        state = self.run_state(app_id)
+        if not state or (session_id is not None and state.get("session") != session_id):
+            return "unknown"
+        pid = state.get("pid")
+        if state.get("state") == "exited" or not isinstance(pid, int):
+            return "exited"
+        deadline = time.monotonic() + grace
+        while time.monotonic() < deadline:
+            if not self._is_wrapper(pid, app_id):
+                return "exited"
+            time.sleep(0.2)
+        return "running"
+
     def _stop_group(self, pid: int, app_id: str, kill_after: float = 2.0) -> str:
         if pid <= 1 or not self._is_wrapper(pid, app_id):
             return "exited"

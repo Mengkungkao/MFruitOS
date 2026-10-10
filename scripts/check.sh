@@ -25,14 +25,49 @@ py39_syntax() {
   "$PYTHON" - <<'PY'
 import ast, pathlib, sys
 bad = 0
-# Python scripts without the .py suffix are listed explicitly.
+TYPE_NAMES = {"int", "str", "float", "bool", "bytes", "dict", "list", "tuple", "set", "type", "object"}
+
+def typeish(node):
+    return ((isinstance(node, ast.Constant) and node.value is None)
+            or (isinstance(node, ast.Name) and node.id in TYPE_NAMES)
+            or isinstance(node, ast.Subscript)
+            or (isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr)))
+
+def runtime_unions(tree):
+    """'X | None' outside annotations: valid 3.9 syntax, but evaluated at run
+    time it raises TypeError before Python 3.10 (annotations are strings with
+    'from __future__ import annotations')."""
+    skip = set()
+    for node in ast.walk(tree):
+        parts = []
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            args = node.args
+            parts = [a.annotation for a in args.posonlyargs + args.args + args.kwonlyargs
+                     + [args.vararg, args.kwarg] if a is not None] + [node.returns]
+        elif isinstance(node, ast.AnnAssign):
+            parts = [node.annotation]
+        for part in parts:
+            if part is not None:
+                skip.update(id(n) for n in ast.walk(part))
+    return [node for node in ast.walk(tree)
+            if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr)
+            and id(node) not in skip and typeish(node.left) and typeish(node.right)]
+
+# Python scripts without the .py suffix are listed explicitly. The bundled
+# Whisplay driver is upstream's (not edited here).
 for path in sorted(pathlib.Path(".").rglob("*.py")) + [pathlib.Path("scripts/mfruit-power-off")]:
     if any(part in {".git", "__pycache__", ".venv", "node_modules"} for part in path.parts):
         continue
     try:
-        ast.parse(path.read_text(encoding="utf-8"), str(path), feature_version=(3, 9))
+        tree = ast.parse(path.read_text(encoding="utf-8"), str(path), feature_version=(3, 9))
     except SyntaxError as exc:
         print(f"{path}:{exc.lineno}: not Python 3.9 syntax: {exc.msg}")
+        bad += 1
+        continue
+    if path.parts[:2] == ("drivers", "whisplay"):
+        continue
+    for node in runtime_unions(tree):
+        print(f"{path}:{node.lineno}: 'X | Y' evaluated at run time needs Python 3.10; use Optional/Union")
         bad += 1
 sys.exit(1 if bad else 0)
 PY
@@ -44,7 +79,7 @@ shell_syntax() {
     [ -f "$f" ] || continue
     if head -1 "$f" | grep -q bash; then bash -n "$f" || ok=1; else sh -n "$f" || ok=1; fi
   done
-  for f in tests/fresh_install/*.sh tests/fresh_install/fakes/systemctl; do bash -n "$f" || ok=1; done
+  for f in tests/fresh_install/*.sh tests/fresh_install/fakes/systemctl tests/distro/*.sh; do bash -n "$f" || ok=1; done
   for f in tests/fresh_install/fakes/udevadm tests/fresh_install/fakes/uname tests/fresh_install/fakes/depmod; do
     sh -n "$f" || ok=1
   done
@@ -66,7 +101,7 @@ whitespace() {
   git diff --check 4b825dc642cb6eb9a060e54bf8d69288fbee4904 HEAD -- . && git diff --check && git diff --cached --check
 }
 
-step "Python 3.9 syntax" py39_syntax
+step "Python 3.9 syntax and run-time unions" py39_syntax
 step "shell syntax" shell_syntax
 step "LF line endings" line_endings
 step "whitespace" whitespace

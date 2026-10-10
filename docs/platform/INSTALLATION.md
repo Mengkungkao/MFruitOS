@@ -17,8 +17,8 @@ supported board it also installs the bundled
 |---|---|
 | Board | Raspberry Pi Zero 2 W (primary target), Orange Pi Zero 2W; the driver also supports Orange Pi Zero 3W, Radxa ZERO 3W and Radxa Cubie A7Z (not validated with mFruit OS) |
 | HAT | PiSugar Whisplay |
-| OS | Raspberry Pi OS / Debian 12+, Ubuntu 22.04+ (systemd) |
-| Python | 3.9 or newer |
+| OS | Raspberry Pi OS / Debian 12+, Ubuntu 22.04+ (systemd); what was tested where: [Tested systems](#tested-systems) |
+| Python | 3.9 or newer, with Pillow 9.0 or newer (Debian 11 and Raspberry Pi OS Bullseye ship Pillow 8.1 and are not supported; the installer stops there) |
 | Hardware service | installed by mFruit OS: [Whisplay driver](../WHISPLAY_DRIVER.md) (`whisplay-daemon.service` runs as your normal user) |
 | Network | needed on the first install for missing packages and the sound card build (kernel headers), unless an [offline pack](../WHISPLAY_DRIVER.md#offline-installation) is next to the code |
 | Packages | Pillow (`python3-pil`), Python venv support (`python3-venv`), NetworkManager for Wi-Fi. Optional: `git` (updates for git-installed apps), `alsa-utils` (speaker test) |
@@ -158,7 +158,7 @@ What the installer does, in order:
 | `/usr/lib/systemd/system-shutdown/mfruit-power-off` (root-owned copy of `scripts/mfruit-power-off`; skipped with `--no-power`) | switches a PiSugar off at the end of a power-off, after every filesystem is read-only; without it the halted Pi keeps draining the battery | yes |
 | PiSugar's `pisugar-server.service` and `pisugar-poweroff.service` stopped and disabled, when present (listed in `~/.whisplay-os/state/pisugar-services-disabled`) | they drive the same battery board; two owners would fight over it | enabled again |
 | PiSugar's `sugar-wifi-config.service` stopped and disabled, when present (same list; skipped with `--no-wifi-setup`) | it runs the same Bluetooth service as root all the time with the default key; mFruit OS runs it on demand as the user | enabled again |
-| `/etc/polkit-1/rules.d/49-mfruit-wifi.rules` | grants the target user the listed NetworkManager scan/control/settings actions, because the service has no interactive polkit session | yes |
+| `/etc/polkit-1/rules.d/49-mfruit-wifi.rules`, and `/etc/polkit-1/localauthority/50-local.d/49-mfruit-wifi.pkla` where polkit reads `.pkla` files (before 0.106, such as Ubuntu 22.04, or with Debian's `polkitd-pkla`) | grants the target user the listed NetworkManager scan/control/settings actions, because the service has no interactive polkit session; polkit 0.105 ignores the JavaScript rule | yes |
 | `/usr/local/bin/mfruitctl` symlink | `mfruitctl` on the PATH | yes |
 | Bluetooth rfkill soft block lifted (first install only) | fresh Raspberry Pi OS images can start with Bluetooth blocked; Settings > Bluetooth needs it on. systemd-rfkill keeps the state | no (turn it off in Settings) |
 
@@ -251,6 +251,76 @@ registrations and the daemon desktop. The Whisplay driver (`whisplay-daemon`)
 and apps registered directly with it are never removed; the driver has its own
 `drivers/whisplay/uninstall.sh`. Use `--purge` only when managed apps and
 their data are intentionally being discarded.
+
+## Ubuntu for Raspberry Pi
+
+Ubuntu Server and Desktop for Raspberry Pi differ from Raspberry Pi OS in ways
+the installer handles:
+
+- **Device groups.** SPI, GPIO and I2C belong to `dialout` (Ubuntu's
+  `99-gpio.rules`); there is no `gpio` group. The services list only groups
+  that exist and add `dialout` there (systemd refuses a unit that names a
+  missing group).
+- **Sound card build.** Kernel headers come from `linux-headers-$(uname -r)`;
+  the Whisplay driver installs `make` and `gcc` for the module build. On
+  kernels 6.8 to 6.11 (Ubuntu 24.04: 6.8) it maps a function the bundled
+  source still calls by its old name (`asoc_substream_to_rtd`).
+- **Kernel updates.** Ubuntu installs kernel updates by itself
+  (unattended-upgrades). The sound card module is built for one kernel, so
+  after an update and reboot there is no sound until the installer runs again:
+  `bash ~/.whisplay-os/system/current/scripts/install.sh` (the display and
+  button keep working). Raspberry Pi OS needs the same after a kernel upgrade.
+- **Wi-Fi.** Ubuntu Server leaves it to netplan; see below.
+
+The boot files are `/boot/firmware/config.txt` and `cmdline.txt` (as on
+Raspberry Pi OS Bookworm and later). Lines the installers add go to the
+file's `[all]` section.
+
+### Ubuntu Server: Wi-Fi and netplan
+
+Settings → Wi-Fi works through NetworkManager. Ubuntu Server (also for
+Raspberry Pi) configures Wi-Fi with netplan for systemd-networkd and
+wpa_supplicant, and netplan tells NetworkManager to leave that interface
+alone. The installer adds NetworkManager, but the interface stays with
+netplan, so Settings → Wi-Fi cannot scan or join with it; the installer and
+`setup-device.sh --check` say so. Nothing breaks, and SSH stays up.
+
+To hand Wi-Fi to NetworkManager, keeping the network netplan has configured
+(netplan writes the same network as a NetworkManager connection; checked with
+`netplan generate` on Ubuntu 22.04, not yet on a device):
+
+```bash
+printf 'network:\n  version: 2\n  renderer: NetworkManager\n' | sudo tee /etc/netplan/90-networkmanager.yaml
+sudo chmod 600 /etc/netplan/90-networkmanager.yaml
+sudo netplan generate     # checks the configuration; nothing changes until the reboot
+sudo reboot
+```
+
+Do this with a keyboard and screen or an Ethernet cable at hand the first
+time: if the network does not come back, deleting the file and rebooting
+returns to netplan's own setup. Ubuntu Desktop already uses NetworkManager.
+
+## Tested systems
+
+The matrix behind this list is in the
+[2026-10-10 record](../quality/records/2026-10-10-distro-matrix.md); repeat it
+with `tests/distro/run.sh` ([Testing](../quality/TESTING.md#other-distributions)).
+Container runs use the distribution's own Python, Pillow, gpiod and codec
+packages on arm64; they cannot show hardware, systemd or kernel behaviour.
+
+| System | Python, Pillow | Automated (containers) | Boards running mFruit OS |
+|---|---|---|---|
+| Raspberry Pi OS Trixie / Debian 13 | 3.13, 11.1 | full suite, files-only install | Raspberry Pi Zero 2 W |
+| 32-bit Raspberry Pi OS / Debian 13 armhf on a 64-bit kernel | 3.13 (32-bit), 11.1 | full suite, files-only install (the 32-bit phone setup build) | none |
+| Raspberry Pi OS Bookworm / Debian 12 | 3.11, 9.4 | full suite, files-only install | none |
+| Ubuntu 22.04 (Orange Pi OS Jammy, Ubuntu for Raspberry Pi) | 3.10, 9.0 | full suite, files-only install, sound card module build against the raspi kernel headers; on the Orange Pi, a complete offline install with sudo in a fresh `ubuntu:22.04` container (`tests/fresh_install/rehearse.sh`: 55 checks, real-daemon tests) | Orange Pi Zero 2W; no Raspberry Pi |
+| Ubuntu 24.04 (Ubuntu for Raspberry Pi) | 3.12, 10.2 | full suite, files-only install, Whisplay driver install on a simulated Raspberry Pi (6.8 raspi kernel headers) | none |
+| Debian 11 / Raspberry Pi OS Bullseye | 3.9, 8.1 | the installer stops: Pillow 8.1 is too old (with Pillow 9.0 the suite passes on Python 3.9) | not supported |
+
+Both boards run the 2026-10-10 launcher code (a files-only install). The
+system part of that day's installer changes (groups in the units, the polkit
+`.pkla`, the sound card build tools, `config.txt` sections) has not been
+installed on either board yet; it needs `sudo bash scripts/install.sh` there.
 
 ## Radio setup (LoRa apps)
 

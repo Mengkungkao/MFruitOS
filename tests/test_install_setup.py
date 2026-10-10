@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -45,6 +46,111 @@ class WifiPolicyTests(unittest.TestCase):
         policy = self.policy(username)
         self.assertIn("subject.user === " + json.dumps(username) + " && [", policy)
         self.assertNotIn(username, policy)
+
+
+def installer_block(name):
+    source = (SCRIPTS / "install.sh").read_text(encoding="utf-8")
+    return source.split(f"# >>> {name}\n", 1)[1].split(f"# <<< {name}\n", 1)[0]
+
+
+@unittest.skipUnless(BASH, "bash is required for installer shell tests")
+class InstallerBlockTests(unittest.TestCase):
+    """Installer blocks run alone, with command doubles and /etc in a temp dir."""
+
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory(prefix="mfruit-install-block-")
+        self.addCleanup(temp.cleanup)
+        self.tmp = Path(temp.name)
+        self.bin = self.tmp / "bin"
+        self.bin.mkdir()
+        self.command("sudo", '"$@"\n')
+
+    def command(self, name, body):
+        target = self.bin / name
+        target.write_text("#!/bin/sh\n" + body, encoding="utf-8")
+        target.chmod(0o755)
+
+    def run_block(self, name, prelude="", **env):
+        block = installer_block(name).replace("/etc/polkit-1", (self.tmp / "polkit-1").as_posix())
+        script = ('ok() { echo "ok $*"; }; warn() { echo "warn $*"; }; '
+                  'as_user() { "$@"; }; TMP_FILES=()\n' + prelude + "\n" + block +
+                  '\necho "GROUPS_LIST=${GROUPS_LIST-}"; echo "POWER_GROUPS=${POWER_GROUPS-}"\n')
+        full = dict(os.environ, PATH=f"{self.bin}{os.pathsep}{os.environ['PATH']}",
+                    PYTHON=sys.executable, TARGET_USER="fixture")
+        full.update(env)
+        return subprocess.run([BASH, "-c", "set -euo pipefail\n" + script], env=full,
+                              text=True, capture_output=True, timeout=30)
+
+    # ------------------------------------------------------- Wi-Fi permission
+    def pkla(self):
+        return self.tmp / "polkit-1" / "localauthority" / "50-local.d" / "49-mfruit-wifi.pkla"
+
+    def test_old_polkit_gets_the_grant_as_a_pkla_file_too(self):
+        self.command("pkaction", 'echo "pkaction version 0.105"\n')
+        result = self.run_block("wifi permission")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue((self.tmp / "polkit-1" / "rules.d" / "49-mfruit-wifi.rules").is_file())
+        pkla = self.pkla().read_text().splitlines()
+        self.assertIn("Identity=unix-user:fixture", pkla)
+        actions = next(l for l in pkla if l.startswith("Action=")).split("=", 1)[1].split(";")
+        self.assertEqual(actions, ["org.freedesktop.NetworkManager." + a for a in
+                                   ("wifi.scan", "network-control", "settings.modify.system",
+                                    "enable-disable-wifi")])
+        self.assertIn("ResultAny=yes", pkla)
+
+    def test_new_polkit_reads_only_the_rule(self):
+        self.command("pkaction", 'echo "pkaction version 124"\n')
+        result = self.run_block("wifi permission")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue((self.tmp / "polkit-1" / "rules.d" / "49-mfruit-wifi.rules").is_file())
+        self.assertFalse(self.pkla().exists())
+
+    def test_new_polkit_with_pkla_support_gets_both(self):
+        self.command("pkaction", 'echo "pkaction version 122"\n')
+        (self.tmp / "polkit-1" / "localauthority").mkdir(parents=True)   # Debian's polkitd-pkla
+        result = self.run_block("wifi permission")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue(self.pkla().is_file())
+
+    def test_a_user_name_pkla_cannot_hold_is_not_written(self):
+        self.command("pkaction", 'echo "pkaction version 0.105"\n')
+        result = self.run_block("wifi permission", TARGET_USER="bad name]")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse(self.pkla().exists())
+        self.assertIn("cannot be written to a polkit .pkla file", result.stdout)
+
+    # ------------------------------------------------------- service groups
+    def groups(self, existing):
+        self.command("getent", 'if [ "$1" = group ]; then for g in $FAKE_GROUPS; do '
+                               '[ "$g" = "$2" ] && exit 0; done; exit 2; fi; exit 2\n')
+        result = self.run_block("service groups", FAKE_GROUPS=existing)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        return re.search(r"^GROUPS_LIST=(.*)$", result.stdout, re.M).group(1).split()
+
+    def test_launcher_groups_exist_on_each_system(self):
+        self.assertEqual(self.groups("audio video gpio spi i2c input dialout"),
+                         ["audio", "video", "gpio", "spi", "input"])          # Raspberry Pi OS
+        self.assertEqual(self.groups("audio video input dialout"),
+                         ["audio", "video", "input", "dialout"])             # Ubuntu for Raspberry Pi
+        self.assertEqual(self.groups("audio video"), ["audio", "video"])
+
+    def power_groups(self, existing, device_groups):
+        self.command("getent", 'if [ "$1" = group ]; then for g in $FAKE_GROUPS; do '
+                               '[ "$g" = "$2" ] && exit 0; done; exit 2; fi; exit 2\n')
+        self.command("stat", 'for g in $FAKE_DEVICE_GROUPS; do echo "$g"; done; '
+                             '[ -n "$FAKE_DEVICE_GROUPS" ]\n')
+        result = self.run_block("power groups", FAKE_GROUPS=existing,
+                                FAKE_DEVICE_GROUPS=device_groups)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        return re.search(r"^POWER_GROUPS=(.*)$", result.stdout, re.M).group(1)
+
+    def test_power_service_gets_the_group_that_owns_the_i2c_devices(self):
+        self.assertEqual(self.power_groups("i2c dialout", "i2c i2c"), "i2c")
+        self.assertEqual(self.power_groups("dialout", "dialout"), "dialout")      # Ubuntu
+        self.assertEqual(self.power_groups("i2c dialout", "root"), "i2c")         # not readable by group
+        self.assertEqual(self.power_groups("i2c dialout", ""), "i2c")             # no bus yet
+        self.assertEqual(self.power_groups("dialout", ""), "dialout")
+        self.assertEqual(self.power_groups("audio", ""), "")
 
 
 @unittest.skipUnless(BASH, "bash is required for installer shell tests")
@@ -122,6 +228,45 @@ esac
         self.assertIn("venv support is still unavailable", result.stdout)
         self.assertFalse((self.tmp / "installed").exists())
 
+    def test_a_pillow_older_than_9_stops_before_anything_is_copied(self):
+        # Debian 11 / Raspberry Pi OS Bullseye ship Pillow 8.1.2, which lacks
+        # the rounded rectangles every screen is drawn with.
+        real = sys.executable
+        self.command("python3", f'''if [ "$1" = - ]; then exec {real} "$@"; fi
+if [ "$1" = --version ]; then echo Python 3.9.2; exit 0; fi
+case "$*" in
+  *ensurepip*) exit 0 ;;
+  *__version__*) echo 8.1.2; exit 0 ;;
+  *PIL*) exit 0 ;;
+  *) echo "unexpected python call: $*" >&2; exit 99 ;;
+esac
+''')
+        result = self.run_script("install.sh", "--no-service")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("Pillow 9.0 or newer is required; this system has 8.1.2", result.stdout)
+        self.assertFalse((self.tmp / "installed").exists())
+
+    def test_a_failed_first_install_activates_nothing_and_claims_no_restore(self):
+        real = sys.executable
+        self.command("python3", f'''if [ "$1" = - ]; then exec {real} "$@"; fi
+if [ "$1" = --version ]; then echo Python 3.11.2; exit 0; fi
+case "$*" in
+  *--self-test*) echo "self-test FAILED" >&2; exit 1 ;;
+  *ensurepip*) exit 0 ;;
+  *__version__*) echo 9.4.0; exit 0 ;;
+  *PIL*) exit 0 ;;
+  *) echo "unexpected python call: $*" >&2; exit 99 ;;
+esac
+''')
+        result = self.run_script("install.sh", "--no-service")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("self-test failed; nothing was activated", result.stdout)
+        self.assertNotIn("previous version restored", result.stdout)
+        current = self.tmp / "installed" / "system" / "current"
+        if os.path.islink(current):
+            self.assertNotEqual(os.readlink(current), current.as_posix(), "a link to itself")
+        self.assertIn(f"rm -f {current.as_posix()}", self.log.read_text())
+
     def test_uninstall_removes_the_persistent_wifi_permission(self):
         self.command("python3", "cat >/dev/null\nexit 0\n")
         result = self.run_script("uninstall.sh")
@@ -129,6 +274,24 @@ esac
         removal = next(line for line in self.log.read_text().splitlines()
                        if line.startswith("sudo rm -f /etc/sudoers.d/whisplay-os "))
         self.assertIn("/etc/polkit-1/rules.d/49-mfruit-wifi.rules", removal.split())
+
+    def test_uninstall_deletes_code_only_where_mfruit_os_code_is(self):
+        self.command("python3", "cat >/dev/null\nexit 0\n")
+        # A WHISPLAY_OS_HOME set to the home folder by mistake: its bin stays.
+        self.env["WHISPLAY_OS_HOME"] = self.tmp.as_posix()
+        result = self.run_script("uninstall.sh")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        removals = [l for l in self.log.read_text().splitlines() if l.startswith("rm ")]
+        self.assertFalse([l for l in removals if f"{self.tmp.as_posix()}/bin" in l.split()], removals)
+        self.assertIn("nothing deleted there", result.stderr)
+        # A real installation: its code goes, apps and settings stay.
+        installed = self.tmp / "installed"
+        (installed / "system" / "versions").mkdir(parents=True)
+        self.env["WHISPLAY_OS_HOME"] = installed.as_posix()
+        result = self.run_script("uninstall.sh")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn(f"rm -rf -- {installed.as_posix()}/system {installed.as_posix()}/bin",
+                      self.log.read_text())
 
     def test_uninstall_removes_the_power_service_and_enables_pisugar_again(self):
         self.command("python3", "cat >/dev/null\nexit 0\n")
@@ -168,7 +331,8 @@ class PowerServiceInstallTests(unittest.TestCase):
         self.assertNotIn("NoNewPrivileges", self.unit)
         self.assertIn("Before=$DAEMON_SERVICE $SERVICE", self.unit)
         self.assertIn("ExecStart=$PYTHON -m mfruitos.power serve", self.unit)
-        self.assertIn('POWER_GROUPS="i2c"', self.source)
+        # Which group: InstallerBlockTests.test_power_service_gets_the_group_that_owns_the_i2c_devices
+        self.assertIn("# >>> power groups", self.source)
 
     def test_shutdown_hook_is_a_root_owned_copy(self):
         self.assertIn('sed "s|@POWER_CONFIG@|$OS_HOME/config/power.json|" "$SRC/scripts/mfruit-power-off"',

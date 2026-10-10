@@ -120,6 +120,119 @@ class OrangePiBootConfig(unittest.TestCase):
         self.assertEqual(root.file("/boot/orangepiEnv.txt"), "overlays=uart2 i2c0 spi3-cs0-cs1-spidev\n")
 
 
+class RaspberryPiBootConfig(unittest.TestCase):
+    """Lines added to config.txt land in its [all] section, on their own line."""
+
+    # Ubuntu 24.04 for Raspberry Pi as shipped (canonical/pi-gadget, branch 24):
+    # SPI, I2C and the UART are on already, and it ends in [all].
+    UBUNTU_2404 = ("[all]\nkernel=vmlinuz\ncmdline=cmdline.txt\n\n[all]\ndtparam=audio=on\n"
+                   "dtparam=i2c_arm=on\ndtparam=spi=on\nenable_uart=1\n\n[cm4]\n"
+                   "dtoverlay=dwc2,dr_mode=host\n\n[all]\narm_64bit=1\ndtoverlay=dwc2\n")
+
+    # Only the tools this step uses, so a host's own raspi-config (Raspberry Pi
+    # OS has one) is never found, let alone run against its real config.txt.
+    TOOLS = ("dirname", "grep", "tail", "tr", "cat", "sed", "awk", "head", "cksum", "sort", "cut")
+
+    def enable(self, text):
+        root = FakeRoot(self, model="Raspberry Pi Zero 2 W Rev 1.0",
+                        files={"/boot/firmware/config.txt": text})
+        tools = os.path.join(root.path, "tools")
+        os.makedirs(tools)
+        for name in self.TOOLS:
+            os.symlink(shutil.which(name), os.path.join(tools, name))
+        result = subprocess.run([shutil.which("bash"), "-c", f'source "{SCRIPT}"; enable_buses raspberry_pi >/dev/null'],
+                                env=dict(os.environ, SYSROOT=root.path, REBOOT="0", PATH=tools),
+                                capture_output=True, text=True, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("raspi-config", result.stderr)
+        return root.file("/boot/firmware/config.txt")
+
+    def test_a_file_ending_in_a_model_filter_gets_an_all_section_first(self):
+        text = self.enable("[all]\narm_64bit=1\n\n[cm4]\notg_mode=1\n")
+        self.assertTrue(text.endswith("[cm4]\notg_mode=1\n\n[all]\ndtparam=spi=on\n"), text)
+
+    def test_a_missing_final_newline_does_not_join_lines(self):
+        text = self.enable("[all]\narm_64bit=1")
+        self.assertEqual(text, "[all]\narm_64bit=1\ndtparam=spi=on\n")
+
+    def test_the_stock_ubuntu_file_is_left_as_it_is(self):
+        self.assertEqual(self.enable(self.UBUNTU_2404), self.UBUNTU_2404)
+
+
+class SoundCardBuildFlags(unittest.TestCase):
+    """The bundled source calls asoc_substream_to_rtd() before Linux 6.12, a name
+    removed in 6.8: kernels 6.8 to 6.11 map it to snd_soc_substream_to_rtd()
+    (built against Ubuntu 24.04's 6.8.0-1065-raspi headers, 2026-10-10)."""
+
+    def flags(self, release):
+        result = bash(f'soundcard_kcflags "{release}"')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout.strip()
+
+    def test_only_kernels_6_8_to_6_11_get_the_mapping(self):
+        mapped = "-Dasoc_substream_to_rtd=snd_soc_substream_to_rtd"
+        for release, expected in (
+                ("5.15.0-1110-raspi", ""),          # Ubuntu 22.04: builds as it is
+                ("6.1.31-sun50iw9", ""),            # Orange Pi OS
+                ("6.6.51+rpt-rpi-v8", ""),          # Raspberry Pi OS Bookworm
+                ("6.7.0-1001-raspi", ""),           # both names exist
+                ("6.8.0-1065-raspi", mapped),       # Ubuntu 24.04
+                ("6.11.0-1004-raspi", mapped),      # Ubuntu 24.10
+                ("6.12.25+rpt-rpi-v8", ""),         # the source's own switch
+                ("6.18.50+rpt-rpi-v8", ""),         # Raspberry Pi OS Trixie
+                ("7.0.0", ""), ("garbage", "")):
+            with self.subTest(release=release):
+                self.assertEqual(self.flags(release), expected)
+
+
+class DaemonServiceGroups(unittest.TestCase):
+    """whisplay-daemon.service lists only groups that exist: systemd refuses to
+    start a unit whose SupplementaryGroups= names a missing group (216/GROUP).
+    Ubuntu for Raspberry Pi has no gpio group; its SPI, GPIO and I2C devices
+    belong to dialout (ubuntu-raspi-settings 99-gpio.rules)."""
+
+    DATABASES = {
+        "raspberry pi os": ("audio video gpio spi i2c input dialout",
+                            "audio video gpio spi i2c input"),
+        "ubuntu for raspberry pi": ("audio video input dialout", "audio video input dialout"),
+        "bare": ("audio video", "audio video"),
+    }
+
+    def unit_for(self, groups):
+        tmp = tempfile.mkdtemp(prefix="mfruit-daemon-unit-")
+        self.addCleanup(shutil.rmtree, tmp, True)
+        fakes = os.path.join(tmp, "bin")
+        os.makedirs(fakes)
+        real_getent = shutil.which("getent")
+        with open(os.path.join(fakes, "getent"), "w") as fp:
+            fp.write('#!/bin/sh\nif [ "$1" = group ]; then\n'
+                     '  for g in $FAKE_GROUPS; do [ "$g" = "$2" ] && { echo "$2:x:1:"; exit 0; }; done\n'
+                     f'  exit 2\nfi\nexec {real_getent} "$@"\n')
+        with open(os.path.join(fakes, "systemctl"), "w") as fp:
+            fp.write("#!/bin/sh\nexit 0\n")
+        for name in ("getent", "systemctl"):
+            os.chmod(os.path.join(fakes, name), 0o755)
+        home = os.path.join(tmp, "home")
+        user = subprocess.run(["id", "-un"], capture_output=True, text=True).stdout.strip()
+        result = bash(f'UNIT_PATH="{tmp}/whisplay-daemon.service"; BACKUP_DIR="{tmp}/backup"; '
+                      f'DRIVER_DIR="{tmp}/driver"; PLATFORM=raspberry_pi; DAEMON_CHANGED=0; '
+                      f'getent() {{ if [ "$1" = passwd ]; then echo "{user}:x:$(id -u):$(id -g)::{home}:/bin/sh"; '
+                      f'else command getent "$@"; fi; }}; '
+                      f'install_daemon_service "{user}" >/dev/null && cat "$UNIT_PATH"',
+                      PATH=f"{fakes}:{os.environ['PATH']}", FAKE_GROUPS=groups)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout
+
+    def test_only_existing_groups_are_listed(self):
+        for system, (groups, expected) in self.DATABASES.items():
+            with self.subTest(system=system):
+                unit = self.unit_for(groups)
+                line = next(l for l in unit.splitlines() if l.startswith("SupplementaryGroups="))
+                self.assertEqual(line, f"SupplementaryGroups={expected}")
+                for listed in line.split("=", 1)[1].split():
+                    self.assertIn(listed, groups.split(), f"{listed} does not exist on {system}")
+
+
 class StagedDriverCopy(unittest.TestCase):
     def setUp(self):
         self.base = tempfile.mkdtemp(prefix="mfruit-driver-")
@@ -183,6 +296,12 @@ class DriverPackages(unittest.TestCase):
 
     def test_bluetooth_support_is_installed_when_available(self):
         for name in ("bluez", "python3-dbus", "python3-gi"):
+            self.assertIn(name, self.packages("OPTIONAL"))
+
+    def test_the_sound_card_build_tools_are_installed(self):
+        # Ubuntu for Raspberry Pi has no compiler; Whisplay's sound card installer
+        # adds make and gcc on Orange Pi only (rehearsal 2026-10-10: "make: command not found").
+        for name in ("make", "gcc"):
             self.assertIn(name, self.packages("OPTIONAL"))
 
     def test_a_missing_font_file_is_reported_as_its_package(self):
