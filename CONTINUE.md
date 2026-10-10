@@ -14,6 +14,7 @@ no charger, and asked for listen before talk on the devices.
 | # | Step | Status |
 |---|---|---|
 | C1 | Battery "charging" on battery. RadioConnect only shows the PiSugar socket's `battery_charging`, which `mfruit-power.service` decided for the Pi Zero's PiSugar 2 (no power sensing) with PiSugar's sample-to-sample voltage rule. Noise and load recovery fired it, and each false "charging" also cancelled the low-battery countdown | FIXED, uncommitted: `mfruitos/power/charging.py` (0.1 V step, or three rising minute averages); `ChargingJudgementTests` 5 tests, negative control 4 of 5 fail on the old rule; check.sh green (655). ADR 0012 amended, KI-13, CHANGELOG, [record](docs/quality/records/2026-10-10-battery-charging-judgement.md). NOT VERIFIED on the PiSugar 2: the Pi Zero was unreachable all session |
+| C3 | RadioConnect status bar: radios in range instead of signal bars | DONE in `~/RadioConnect` (row U4), on the Orange Pi. Found while deploying: KI-16, a just-exited app can stay "running" in the launcher (install refused, backlight held) until `mfruitctl reload`; recorded, not fixed |
 | C2 | Listen before talk in RadioConnect 0.6.0 | DONE in `~/RadioConnect` (uncommitted; its `CONTINUE.md` row L2): 699 tests; Orange Pi runs the 0.6.0 sideload. Its module does not answer the channel-level query, so it listens to heard traffic only. Not yet in the Fruit Store list |
 
 Next (owner): deploy mFruit OS to the Pi Zero and watch Settings → Battery on

@@ -142,6 +142,22 @@ by hand (`sudo rm -rf` of that build). Proposed fix, not made yet: run the root
 Python with bytecode writing off; let the installer remove such a build with
 sudo after its containment check, or warn and go on.
 
+### KI-16 An app that just exited can stay "running" in the launcher
+
+Seen on the Orange Pi, 2026-10-10 16:32, with RadioConnect 0.6.0 and *Keep
+running* on. The app was closed with daemon `app.exit.request`. Its process
+ended and the session went to IDLE, but `mfruitctl apps` kept `"running":
+true` while the daemon's own `app.list` said `false`. Installing it was then
+refused ("RadioConnect is open; close it, then install again"), twice. The
+launcher also logged "Backlight held at 100% for radioconnect" at the session
+end, and the hold stayed. `mfruitctl reload` cleared both. Earlier the same
+day the same steps worked three times. Hypothesis, not proven: the registry
+reads `app.list` once at the session end (`on_session_ended` →
+`refresh_registry`). When the daemon has not yet noted the exit, the stale
+`running` stays, because nothing reads the list again. Next: reproduce with
+the real daemon, then refresh again when the daemon reports the app stopped,
+or trust the ended session; add a regression test.
+
 ## Physical checks outstanding
 
 Button feel and gestures, physical USB/Bluetooth key routing and hotplug,
