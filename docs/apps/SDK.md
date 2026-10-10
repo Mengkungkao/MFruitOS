@@ -7,7 +7,7 @@ It needs Python 3.9+ and Pillow (UI only), imports only itself, the standard
 library and Pillow, and uses relative imports so the copy works under its new
 package name.
 
-Current version: **1.4.0** (`SDK_VERSION` in `mfruitos/sdk/__init__.py`).
+Current version: **1.5.0** (`SDK_VERSION` in `mfruitos/sdk/__init__.py`).
 
 ## Modules
 
@@ -95,7 +95,9 @@ hub -> app   {"type": "keyboards", "devices": ["event3"]}
 `Canvas` wraps a 240×280 Pillow image with the mFruit theme and fonts (Inter
 from mFruit OS, DejaVu elsewhere; `MFRUIT_FONT_DIR` adds a directory).
 `status_bar(canvas, page_name, status)` draws the page name and Wi-Fi/battery;
-`draw_list(canvas, rows, selected)` draws `Row` lists; `footer(canvas,
+`draw_list(canvas, rows, selected)` draws `Row` lists (a `Row` may carry a
+`mark`: a small status light right after its label, a tone name or colour,
+`mark_hollow=True` for a ring; SDK 1.5.0); `footer(canvas,
 menu_hints(...))` draws hints; `to_rgb565(image)` converts a frame for the
 daemon framebuffer without NumPy. Layout rules: [UI guidelines](UI_GUIDELINES.md).
 
@@ -176,6 +178,7 @@ Never edit the copy; change `mfruitos/sdk/`, run `tests/test_sdk.py`, bump
 | 1.2.0 | mFruit OS 1.4.0 | keys through the launcher's key hub; exclusive grab | **requires mFruit OS 1.4.0** for keyboard input while the launcher runs; older direct-input apps receive no keys under 1.4.0. Deploy the OS and keyboard apps together |
 | 1.3.0 | mFruit OS 1.4 (unreleased) | adds `radio` (shared radio store, pairing keys, crypto) | additive: apps on 1.2.0 keep working; `check-app.py` reports their copies as stale until synced. `radio.keyring`/`crypto` need `cryptography` |
 | 1.4.0 | mFruit OS 1.4 (unreleased, 2026-10-04) | adds `background` (an app's own *Keep running* / *Keep screen bright*, control command `app.background`) | additive: apps on 1.3.0 keep working; with an mFruit OS that lacks `app.background`, `get()`/`set()` return None. Affected: RadioConnect 0.5.0 (uses it), the template (synced). Tests: `tests/test_background_screen.py` |
+| 1.5.0 | mFruit OS 1.4 (unreleased, 2026-10-10) | `Row.mark` / `Row.mark_hollow`: a status light after a list row's label | additive, drawing only: rows without a mark draw exactly as before (tested), and nothing at run time depends on the OS version. Affected: RadioConnect 0.6.0 (uses it; synced) and the template (synced). Messenger, WalkieTalkie, ConnectWifi, the AI Chatbot and the dashboard keep 1.4.0 and work unchanged; `check-app.py` reports their copies as stale until synced. Tests: `tests/test_sdk.py` `ChromeTests` |
 
 Every SDK change records: the version, a compatibility statement, the sync and
 check procedure above, the affected apps and the regression tests

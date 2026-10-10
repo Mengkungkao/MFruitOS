@@ -472,6 +472,46 @@ class ChromeTests(unittest.TestCase):
         # The status bar drew something at the top right (battery) and top left (title).
         self.assertNotEqual(c.image.getpixel((22, 17)), c.theme.bg)
 
+    def test_a_row_mark_sits_right_after_its_label(self):
+        """SDK 1.5.0: a status light after the name ("in range")."""
+        from mfruitos.sdk.ui import Canvas, Row, draw_list
+        from mfruitos.sdk.ui.chrome import MARK_GAP, MARGIN
+        for subtitle in (None, "in range"):
+            c = Canvas()
+            draw_list(c, [Row("Base", subtitle=subtitle, mark="success"), Row("Back", kind="back")],
+                      1, top=40)
+            green = [(x, y) for x in range(240) for y in range(40, 100)
+                     if c.image.getpixel((x, y)) == c.theme.success]
+            self.assertTrue(green, "the mark is drawn in its tone")
+            label_end = MARGIN - 4 + 10 + c.text_width("Base", 15, "medium")
+            self.assertGreaterEqual(min(x for x, _ in green), label_end + MARK_GAP - 1)
+            self.assertLess(max(x for x, _ in green), label_end + MARK_GAP + 10)
+
+    def test_a_long_label_makes_room_for_its_mark(self):
+        from mfruitos.sdk.ui import Canvas, Row, draw_list
+        c = Canvas()
+        draw_list(c, [Row("a radio with a remarkably long name indeed", mark=(255, 0, 255)),
+                      Row("Back", kind="back")], 1, top=40)
+        magenta = [x for x in range(240) for y in range(40, 80)
+                   if c.image.getpixel((x, y)) == (255, 0, 255)]
+        self.assertTrue(magenta)
+        self.assertLess(max(magenta), 240 - 14)
+
+    def test_a_hollow_mark_is_a_ring_and_no_mark_draws_nothing(self):
+        from mfruitos.sdk.ui import Canvas, Row, draw_list
+        ring, plain = Canvas(), Canvas()
+        draw_list(ring, [Row("Base", mark=(255, 0, 255), mark_hollow=True),
+                         Row("Back", kind="back")], 1, top=40)
+        draw_list(plain, [Row("Base"), Row("Back", kind="back")], 1, top=40)
+        dots = [(x, y) for x in range(240) for y in range(40, 80)
+                if ring.image.getpixel((x, y)) == (255, 0, 255)]
+        cx = sum(x for x, _ in dots) // len(dots)
+        cy = sum(y for _, y in dots) // len(dots)
+        self.assertNotEqual(ring.image.getpixel((cx, cy)), (255, 0, 255), "hollow in the middle")
+        unmarked = Canvas()
+        draw_list(unmarked, [Row("Base", mark=None), Row("Back", kind="back")], 1, top=40)
+        self.assertEqual(list(unmarked.image.getdata()), list(plain.image.getdata()))
+
     def test_canvas_over_an_existing_draw(self):
         from PIL import Image, ImageDraw
         from mfruitos.sdk.ui import Canvas

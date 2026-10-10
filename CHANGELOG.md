@@ -6,6 +6,11 @@ the OS version.
 
 ## Unreleased
 
+### Added (2026-10-10, SDK 1.5.0)
+- **SDK 1.5.0:** a list row can show a small status light right after its
+  name (`Row(mark=..., mark_hollow=...)`), such as RadioConnect's "this radio
+  is in range". Rows without one draw as before.
+
 ### Fixed (2026-10-10, battery shown as charging)
 - **A PiSugar 2 that cannot sense external power (four LEDs) no longer
   shows "charging" on battery.** Charging was guessed from one-second
