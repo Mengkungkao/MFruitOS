@@ -27,6 +27,8 @@ install it to mFruit OS. Baseline before any change: check.sh green, 521 tests.
 
 | U1 | Owner: merge `~/MFruitOS-candidate` into one synced folder; move Wi-Fi from phone into Settings > Wi-Fi as **Phone Setup** | DONE: Settings > Wi-Fi opens the Wi-Fi page (Choose a network…, Phone Setup); Orange Pi `~/MFruitOS` fast-forwarded to `30d9ec4` and mirrored from this tree (same `git status`/diff/untracked hashes), candidate folder removed; `scripts/deploy.sh <host> [--sync-only]` keeps it that way. The owner's own full install (12:36) put `mfruit-power.service` on the Orange Pi; its update watch was broken under systemd, fixed and verified there. KI-15 recorded (root-owned bytecode stops install.sh; not fixed) |
 
+| U2 | Pi Zero 2 W: Wi-Fi range short (owner's report); no `/dev/i2c-1` | Wi-Fi: ASSESSED only. The signal fell from −69 to −92 dBm during the check, with no undervoltage, driver errors or disconnects. The Pi is 2.4 GHz only. Owner to A/B test the HAT, battery and enclosure near the antenna, and optionally switch Wi-Fi power save off. I2C: FIXED in source and AUTOMATED. The installer loads `i2c-dev` now and at boot, and the error message names it (record). DEVICE VERIFIED after the owner's install (`1.4.0-local20261010143048`): `/dev/i2c-1` present, and the service found a **PiSugar 2** (38 %, 3.85 V, charging) and set its clock. KI-13 narrowed. Next: P2–P8 on that PiSugar 2. The current reads −0.39 A while charging, so its sign needs checking on battery. The PiSugar 2 under the board is also a Wi-Fi suspect |
+
 Next for this work (needs the owner):
 1. On a board with a PiSugar (and sudo): `bash scripts/install.sh` installs
    `mfruit-power.service`, the shutdown hook and the sudoers line; then the
@@ -179,8 +181,8 @@ games (user to decide whether they belong in the Fruit Store).
 
 - Deploy with `bash scripts/deploy.sh <user@host> [--no-service|--sync-only]`:
   the device keeps one folder, `~/MFruitOS`, an exact copy of this checkout
-  (the owner's choice, 2026-10-10; `~/MFruitOS-candidate` is gone). On the Pi,
-  `~/MFruitOS` was overwritten by earlier deploys this session (no `.git` there).
+  (the owner's choice, 2026-10-10; `~/MFruitOS-candidate` is gone). The Pi Zero's
+  `~/MFruitOS` is a git clone too (at `8b7fc49` on 2026-10-10).
 
 - Raspberry Pi Zero 2 W: `ssh jarvis@192.168.0.33` (key-based; unreachable
   2026-10-03 afternoon); Whisplay at upstream `1066486`; sudoers allows `systemctl restart whisplay-os.service`

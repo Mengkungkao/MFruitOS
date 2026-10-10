@@ -96,19 +96,20 @@ daemon launched it under `mfruit-run <id>`) so `request_stop`/`force_stop`
 work, or refuse Uninstall while an app is running; regression test with an
 adopted session.
 
-### KI-13 Power management not verified on a PiSugar
+### KI-13 Power management only partly verified on a PiSugar
 
 The power service, its PiSugar drivers and the power-off shutdown hook
-([ADR 0012](../platform/ADR/0012-own-power-management.md)) are tested only
-against register-level fakes modelled on the boards' published interface
-(2026-10-10, [record](records/2026-10-10-power-management.md)). No board with a
-PiSugar was reachable, and `mfruit-power.service` has not been installed on
-a device (needs the owner's sudo). Unknown until then: real readings and
-battery curve fit, PiSugar 3 press timing (long press versus the hardware
-power-off hold), whether the PiSugar 3 output switch-off at the end of a
-power-off behaves as expected, and PiSugar 2 support in general. Next: the
-[power checklist](VALIDATION.md#hardware-checklist--power-management) P1–P8
-on a board with a PiSugar 3.
+([ADR 0012](../platform/ADR/0012-own-power-management.md)) are tested against
+register-level fakes modelled on the boards' published interface
+(2026-10-10, [record](records/2026-10-10-power-management.md)). On the Pi
+Zero 2 W the service found a PiSugar 2 on I2C bus 1, read a plausible
+voltage and level, and set the board's clock (DEVICE VERIFIED, 2026-10-10).
+Still unknown: the current's sign (it read −0.39 A while charging), plug and
+unplug detection, the battery curve fit, the button, the low-battery
+shutdown, the board switching off at the end of a power-off, wake alarms,
+and everything on a PiSugar 3 (press timing, output switch-off). Next: the
+[power checklist](VALIDATION.md#hardware-checklist--power-management) P2–P8
+on the Pi Zero's PiSugar 2, then on a PiSugar 3.
 
 ### KI-14 PiSugar's sugar-wifi-conf v2.3.0 build needs glibc 2.39
 

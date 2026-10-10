@@ -143,6 +143,7 @@ case "$1" in cat|list-unit-files) exit 0 ;; *) exit 0 ;; esac
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         log = self.log.read_text()
         self.assertIn("sudo rm -f /usr/lib/systemd/system-shutdown/mfruit-power-off", log)
+        self.assertIn("sudo rm -f /etc/modules-load.d/mfruit-power.conf", log)
         self.assertIn("sudo systemctl enable pisugar-server.service", log)
         self.assertIn("sudo systemctl start pisugar-server.service", log)
         self.assertIn("sudo systemctl enable sugar-wifi-config.service", log)
@@ -184,6 +185,51 @@ class PowerServiceInstallTests(unittest.TestCase):
                     if l.startswith("printf '%s ALL=(root) NOPASSWD:"))
         self.assertIn("%s poweroff, %s reboot", line)
         self.assertNotIn("ALL\\n", line.split("NOPASSWD:", 1)[1])
+
+    def run_i2c_dev_block(self, modprobe_exit, etc_modules=""):
+        """Run the installer's i2c-dev lines with sudo/modprobe doubles."""
+        block = self.source.split("  # >>> i2c-dev\n", 1)[1].split("  # <<< i2c-dev\n", 1)[0]
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            (tmp / "bin").mkdir()
+            (tmp / "modules-load.d").mkdir()
+            (tmp / "modules").write_text(etc_modules, encoding="utf-8")
+            (tmp / "bin" / "modprobe").write_text(
+                f"#!/bin/sh\necho \"modprobe $*\" >> {tmp}/log\nexit {modprobe_exit}\n")
+            (tmp / "bin" / "sudo").write_text('#!/bin/sh\n"$@"\n')
+            for name in ("modprobe", "sudo"):
+                (tmp / "bin" / name).chmod(0o755)
+            script = (f'PATH="{tmp}/bin:$PATH"\nok() {{ echo "ok $*"; }}\nwarn() {{ echo "warn $*"; }}\n'
+                      f'I2C_DEV_CONF="{tmp}/modules-load.d/mfruit-power.conf"\n'
+                      f'I2C_MODULE_LISTS="{tmp}/modules {tmp}/modules-load.d/*.conf"\n' + block)
+            result = subprocess.run(["bash", "-euo", "pipefail", "-c", script], capture_output=True,
+                                    text=True, timeout=20)
+            conf = tmp / "modules-load.d" / "mfruit-power.conf"
+            return (result, conf.read_text(encoding="utf-8") if conf.exists() else None,
+                    (tmp / "log").read_text(encoding="utf-8") if (tmp / "log").exists() else "")
+
+    @unittest.skipUnless(shutil.which("bash"), "bash is required")
+    def test_i2c_dev_is_loaded_now_and_at_boot(self):
+        # Without it there is no /dev/i2c-N even with the bus on (Pi Zero 2 W, 2026-10-10).
+        result, conf, log = self.run_i2c_dev_block(0)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("modprobe i2c-dev", log)
+        self.assertEqual(conf, "i2c-dev\n")
+        self.assertIn("at every boot", result.stdout)
+
+    @unittest.skipUnless(shutil.which("bash"), "bash is required")
+    def test_i2c_dev_already_listed_is_not_listed_twice(self):
+        result, conf, _ = self.run_i2c_dev_block(0, etc_modules="# comment\ni2c-dev\n")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIsNone(conf)
+        self.assertIn("already loaded at boot", result.stdout)
+
+    @unittest.skipUnless(shutil.which("bash"), "bash is required")
+    def test_a_missing_i2c_dev_module_warns_and_does_not_stop_the_install(self):
+        result, conf, _ = self.run_i2c_dev_block(1)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIsNone(conf)
+        self.assertIn("warn could not load the i2c-dev kernel module", result.stdout)
 
     def test_no_power_option_skips_it(self):
         self.assertIn("--no-power) INSTALL_POWER=0 ;;", self.source)

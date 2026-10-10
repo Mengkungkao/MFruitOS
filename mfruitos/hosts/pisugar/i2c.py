@@ -39,11 +39,16 @@ def bus_path(bus: int, dev_dir: str = "/dev") -> str:
     return os.path.join(dev_dir, f"i2c-{int(bus)}")
 
 
-def explain(exc: OSError, bus: int, addr: int | None = None) -> str:
+def explain(exc: OSError, bus: int, addr: int | None = None,
+            sys_dir: str = "/sys/bus/i2c/devices") -> str:
     """A short, actionable reason for an I2C failure."""
     where = f"I2C bus {bus}" + (f" address 0x{addr:02x}" if addr is not None else "")
     code = getattr(exc, "errno", None)
     if code == errno.ENOENT:
+        if os.path.isdir(os.path.join(sys_dir, f"i2c-{int(bus)}")):
+            # The bus exists; only the i2c-dev interface that makes /dev/i2c-N is missing.
+            return (f"I2C bus {bus} is on, but /dev/i2c-{bus} is missing: the i2c-dev "
+                    "kernel module is not loaded (scripts/install.sh sets it up)")
         return f"I2C bus {bus} is not enabled (/dev/i2c-{bus} is missing)"
     if code in (errno.EACCES, errno.EPERM):
         return (f"no permission for /dev/i2c-{bus}: the power service needs the "

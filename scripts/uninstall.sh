@@ -30,6 +30,8 @@ if [ -f /etc/systemd/system/mfruit-power.service ]; then
   sudo systemctl daemon-reload
 fi
 sudo rm -f /usr/lib/systemd/system-shutdown/mfruit-power-off /lib/systemd/system-shutdown/mfruit-power-off
+# The i2c-dev module stays loaded until the next boot (other I2C tools may use it).
+sudo rm -f /etc/modules-load.d/mfruit-power.conf
 # PiSugar's own services, if the installer had stopped them.
 if [ -f "$OS_HOME/state/pisugar-services-disabled" ]; then
   while read -r unit; do

@@ -48,6 +48,10 @@ the OS version.
   ([ADR 0013](docs/platform/ADR/0013-phone-wifi-setup.md)).
 
 ### Changed (2026-10-10)
+- The installer loads the `i2c-dev` kernel module for the power service, now
+  and at every boot. On Raspberry Pi OS the I2C bus can be on without it, and
+  then there is no `/dev/i2c-1` (seen on a Pi Zero 2 W). The power service's
+  message now says the module is missing instead of "I2C bus 1 is not enabled".
 - `scripts/deploy.sh` keeps one folder per device: the device's `~/MFruitOS`
   becomes an exact copy of the checkout (same commit when it is a git clone,
   removed files removed, its `.git` and offline packs kept); `--sync-only`

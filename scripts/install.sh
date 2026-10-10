@@ -400,6 +400,26 @@ if [ "$INSTALL_POWER" = 1 ]; then
   POWER_GROUPS=""
   getent group i2c >/dev/null && POWER_GROUPS="i2c"
   [ -n "$POWER_GROUPS" ] || warn "no i2c group: the power service may not reach /dev/i2c-*"
+  # /dev/i2c-N comes from the kernel's i2c-dev module. Turning the bus on in the
+  # boot config (dtparam=i2c_arm=on, as the Whisplay driver does) does not load
+  # it on Raspberry Pi OS; only raspi-config's I2C switch lists it in
+  # /etc/modules. So it is loaded now and listed for every boot; uninstall.sh
+  # removes the list file and leaves the module loaded.
+  I2C_DEV_CONF=/etc/modules-load.d/mfruit-power.conf
+  I2C_MODULE_LISTS="/etc/modules /etc/modules-load.d/*.conf"
+  # >>> i2c-dev
+  if sudo modprobe i2c-dev 2>/dev/null; then
+    # shellcheck disable=SC2086  # the second list is a glob
+    if grep -qsE '^[[:space:]]*i2c[-_]dev([[:space:]]|$)' $I2C_MODULE_LISTS; then
+      ok "i2c-dev kernel module loaded (already loaded at boot)"
+    else
+      echo i2c-dev | sudo tee "$I2C_DEV_CONF" >/dev/null
+      ok "i2c-dev kernel module loaded, and at every boot ($I2C_DEV_CONF), for /dev/i2c-*"
+    fi
+  else
+    warn "could not load the i2c-dev kernel module: the power service cannot open /dev/i2c-*"
+  fi
+  # <<< i2c-dev
   PISUGAR_DISABLED="$OS_HOME/state/pisugar-services-disabled"
   for unit in pisugar-server.service pisugar-poweroff.service; do
     if systemctl is-enabled --quiet "$unit" 2>/dev/null || systemctl is-active --quiet "$unit" 2>/dev/null; then

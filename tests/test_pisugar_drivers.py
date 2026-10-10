@@ -23,8 +23,16 @@ class SMBusTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(OSError) as ctx:
                 i2c.SMBus(7, dev_dir=tmp)
-        self.assertEqual(ctx.exception.errno, errno.ENOENT)
-        self.assertIn("not enabled", i2c.explain(ctx.exception, 7))
+            self.assertEqual(ctx.exception.errno, errno.ENOENT)
+            self.assertIn("not enabled", i2c.explain(ctx.exception, 7, sys_dir=tmp))
+
+    def test_a_bus_without_its_device_file_names_the_i2c_dev_module(self):
+        # Seen on a Pi Zero 2 W: the bus on in config.txt, i2c-dev not loaded.
+        with tempfile.TemporaryDirectory() as tmp:
+            os.makedirs(os.path.join(tmp, "i2c-1"))
+            reason = i2c.explain(OSError(errno.ENOENT, "missing"), 1, sys_dir=tmp)
+        self.assertIn("i2c-dev kernel module is not loaded", reason)
+        self.assertNotIn("not enabled", reason)
 
     def test_explain_names_the_i2c_group_and_kernel_driver_conflicts(self):
         self.assertIn("i2c group", i2c.explain(OSError(errno.EACCES, "denied"), 1))

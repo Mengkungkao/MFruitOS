@@ -56,6 +56,59 @@ regression test whose old-code run fails. On the device after the fix: an
 install at 12:52:25, "mFruit OS was updated; restarting the power service" at
 12:52:56, systemd started the new code at 12:53:00 — DEVICE VERIFIED.
 
+### Bug: no /dev/i2c-1 on the Pi Zero 2 W
+
+- **Problem:** after the owner's install (build `1.4.0-local20261010133846`)
+  the power service logged "I2C bus 1 is not enabled (/dev/i2c-1 is missing)"
+  and stopped looking for a board.
+- **Expected:** the service opens `/dev/i2c-1`, or names the real cause.
+- **Evidence (read on the Pi, Raspberry Pi OS trixie, kernel 6.18.50):**
+  `dtparam=i2c_arm=on` in `config.txt`; bus `i2c-1` (bcm2835) in
+  `/sys/bus/i2c/devices` with the sound codec on it; no `/dev/i2c-*`;
+  `i2c_dev` not in `/sys/module`; no list in `/etc/modules` or
+  `/etc/modules-load.d` names it.
+- **Root cause:** `/dev/i2c-N` comes from the `i2c-dev` module. Raspberry Pi OS
+  loads it only through raspi-config's I2C switch. The Whisplay driver turns
+  the bus on in the boot config, and nothing loaded the module.
+- **Fix:** the installer's power section runs `modprobe i2c-dev` and lists it
+  in `/etc/modules-load.d/mfruit-power.conf` unless a list already has it; a
+  failure warns and the install goes on. `uninstall.sh` removes the list file.
+  `explain()` reports a bus that exists without its device file as the missing
+  module (checked in `/sys/bus/i2c/devices`, which both boards have).
+- **Regression tests:** `test_install_setup` (module loaded and listed, not
+  listed twice, a failed modprobe only warns, uninstall removes the file) and
+  `test_pisugar_drivers` (the reason names the module). Each fails with the
+  old code.
+- **Hardware validation:** DEVICE VERIFIED on the Pi Zero 2 W. The owner ran
+  the installer (build `1.4.0-local20261010143048`). Afterwards `/dev/i2c-1`
+  and `/dev/i2c-2` exist (`root:i2c`), `i2c_dev` is loaded, and
+  `/etc/modules-load.d/mfruit-power.conf` lists it. Not yet checked across a
+  reboot.
+- **Compatibility:** boards that already have `/dev/i2c-*` (the Orange Pi)
+  only get the list file or the "already loaded" line.
+
+### First run on a PiSugar 2 (Pi Zero 2 W)
+
+With the device file in place the service found the owner's PiSugar 2 at
+14:31:23 ("Battery board: PiSugar 2 on I2C bus 1") and set the board's clock
+from the system clock. `mfruitctl power status` read the following:
+
+| Field | Value |
+|---|---|
+| model | PiSugar 2 |
+| level | 38.2 %, rising to 38.7 % over about a minute |
+| voltage | 3.851 to 3.854 V |
+| charging | true (decided from the rising voltage; this board cannot sense external power) |
+| current | −0.39 A |
+
+Detection, reading and the clock write are DEVICE VERIFIED (checklist P1,
+except the status bar, which was not looked at). The current's sign is NOT
+VERIFIED. The ADR calls it output current, but it read negative while the
+battery was charging, so a reading on battery power is needed before trusting
+it. The update restart before this run exited with status 75 as designed, and
+systemd restarted it. systemd logs that as "Failed with result 'exit-code'",
+which is only noise in the journal.
+
 ## Skipped and not verified
 - Physical checks not performed: every item of the
   [power hardware checklist](../VALIDATION.md#hardware-checklist--power-management)
