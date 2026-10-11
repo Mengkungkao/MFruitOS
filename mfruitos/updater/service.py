@@ -94,6 +94,14 @@ class UpdateService:
                 infos[app_id] = UpdateInfo(**raw)
             except TypeError:
                 continue
+        system = infos.get(OS_APP_ID)
+        if system is not None and system.installed != self.os_version:
+            # The OS changed since this was saved (a system update restarts the
+            # launcher; so do a roll back, the boot guard and install.sh): the
+            # cached answer describes a version that is no longer running.
+            system.installed = self.os_version
+            system.update_available = bool(system.latest) and is_newer(system.latest,
+                                                                       self.os_version)
         with self._lock:
             self._infos = infos
             self.last_check = float(data.get("checked_at") or 0)

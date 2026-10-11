@@ -6,6 +6,16 @@ the OS version.
 
 ## Unreleased
 
+## [1.5.3] - 2026-10-12
+
+### Fixed
+- **System update offered the version already running:** after updating
+  1.4.0 to 1.5.1 from Settings, the screen showed Current 1.5.1, Latest 1.5.1
+  and still "Update now" (the cached check was made on 1.4.0). The update
+  service now matches its cached answer to the running version at start (also
+  after a roll back or `install.sh`), and the System update screen and an
+  app's Store page offer only a version newer than the one installed.
+
 ## [1.5.2] - 2026-10-12
 
 ### Fixed

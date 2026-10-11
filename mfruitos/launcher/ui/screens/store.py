@@ -116,7 +116,9 @@ class StoreAppScreen(ListScreen):
         if app.kind == "os":
             from mfruitos.updater import catalog
             newer = catalog.newer_version(self.catalog_item, app.version)
-            if info and info.update_available and info.latest:
+            from mfruitos.updater.version import is_newer
+            if info and isinstance(info.latest, str) and info.latest and \
+                    is_newer(info.latest, app.version or "0"):
                 rows.append(Item(f"Update to {info.latest}",
                                  lambda: os.install_app_version(app.id, info.latest),
                                  icon="download", tone="accent"))

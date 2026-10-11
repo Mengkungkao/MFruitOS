@@ -373,6 +373,7 @@ class ScreenServices:
 
     def update_system(self, version: str) -> None:
         def on_success(result):
+            self.updater.mark_installed(OS_APP_ID, result.version)
             self.toast("Restarting…")
             self.loop.call_later(2.5, self.restart_launcher)
         self.start_job(f"{OS_NAME} {version}",

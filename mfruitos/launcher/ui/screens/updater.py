@@ -11,7 +11,7 @@ from mfruitos.apps.registry import SETTINGS_APPS
 from mfruitos.launcher.ui.components import Item, back_item
 from mfruitos.launcher.ui.screens.base import ListScreen
 from mfruitos.launcher.ui.screens.dialogs import confirm
-from mfruitos.updater.version import parse_version
+from mfruitos.updater.version import is_newer, parse_version
 
 log = logging.getLogger(__name__)
 
@@ -324,7 +324,7 @@ class InstallAppScreen(ListScreen):
             added = app_id in installed and not broken
             newer = catalog.newer_version(item, saved.version) if present else None
             if added:
-                newer = self._newest(newer, os.updater.info(app_id))
+                newer = self._newest(newer, os.updater.info(app_id), saved.version)
             rows.append(Item(item['name'],
                 lambda i=item, p=present, a=added, b=broken: self._pick(i, p, a, b),
                 icon="package",
@@ -349,17 +349,18 @@ class InstallAppScreen(ListScreen):
         return rows
 
     @staticmethod
-    def _newest(pinned: str | None, info) -> str | None:
+    def _newest(pinned: str | None, info, installed: str) -> str | None:
         """The newer of the list's pin and the app's own newest release.
 
         The list's pin follows a release up to an hour later (the hourly
         catalogue sync), while the app's update check sees the release at
         once: the row must not say "Installed" when "Update apps" counts it.
+        The release is compared with the installed version, not with the
+        check's cached answer, which may predate the last install.
         """
-        from mfruitos.updater.version import is_newer
         latest = getattr(info, "latest", None)
-        released = latest if getattr(info, "update_available", False) is True \
-            and isinstance(latest, str) and latest else None
+        released = latest if isinstance(latest, str) and latest and \
+            is_newer(latest, installed or "0") else None
         if released and (pinned is None or is_newer(released, pinned)):
             return released
         return pinned
@@ -519,10 +520,14 @@ class SystemUpdateScreen(ListScreen):
     def items(self) -> list[Item]:
         os = self.os
         info = os.updater.info(OS_APP_ID)
+        # Against the running version, not the cached flag: after an update
+        # the cache may still say "available" for the version now running.
+        newer = bool(info and isinstance(info.latest, str) and info.latest
+                     and is_newer(info.latest, __version__))
         rows = [Item("Current", kind="info", value=__version__)]
         if info and info.latest:
             rows.append(Item("Latest", kind="info", value=info.latest,
-                             tone="accent" if info.update_available else "success"))
+                             tone="accent" if newer else "success"))
         if info and info.error:
             rows.append(Item("Problem", kind="info", icon="warning", tone="warning",
                              subtitle=info.error.replace("offline:", "Offline: ")[:60]))
@@ -530,7 +535,7 @@ class SystemUpdateScreen(ListScreen):
             rows.append(Item("Changes", lambda: os.show_message(f"{OS_NAME} {info.latest}",
                                                                 info.notes), kind="nav",
                              icon="list"))
-        if info and info.update_available:
+        if newer:
             rows.append(Item("Update now", lambda: os.push(confirm(
                 os, f"Update to {info.latest}?",
                 "mFruit OS restarts after the update. If the new version fails to start it is "
