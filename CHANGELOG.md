@@ -6,6 +6,15 @@ the OS version.
 
 ## Unreleased
 
+## [1.5.2] - 2026-10-12
+
+### Fixed
+- **An update check refused by GitHub's rate limit waited 12 hours:** GitHub
+  allows 60 unauthenticated API calls an hour per internet address, shared by
+  every device and computer at home, and a refused check counted as done. The
+  next check now runs a minute after the limit resets (remembered across a
+  restart), so a waiting update is not hidden for half a day.
+
 ## [1.5.1] - 2026-10-12
 
 ### Fixed

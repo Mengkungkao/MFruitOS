@@ -1,6 +1,6 @@
 # mFruit OS architecture
 
-This document describes the **current implementation** (mFruit OS 1.5.1) and
+This document describes the **current implementation** (mFruit OS 1.5.2) and
 how it maps onto the **target architecture**. Rules live in
 [Development rules](DEVELOPMENT_RULES.md); the migration plan lives in the
 [Roadmap](ROADMAP.md). Status words follow

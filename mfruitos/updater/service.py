@@ -38,6 +38,10 @@ log = logging.getLogger("mfruitos.updater")
 MAX_COMPAT_PROBES = 5
 OFFLINE_RETRY_SEC = 600
 RELEASES_MAX_AGE_SEC = 300
+# After a check cut short by GitHub's hourly limit (shared by every device and
+# computer behind the same internet address), the next check runs this long
+# after the limit resets, not a whole check interval later.
+RATE_LIMIT_MARGIN_SEC = 60
 
 
 @dataclass
@@ -69,6 +73,8 @@ class UpdateService:
         self.last_check = 0.0
         self.last_error = ""
         self.online: bool | None = None
+        self.retry_at = 0.0           # when a rate-limited check is due again
+        self._limited_until = 0.0
         self.busy = False
         self.load_cache()
 
@@ -93,10 +99,15 @@ class UpdateService:
             self.last_check = float(data.get("checked_at") or 0)
             self.last_error = str(data.get("error") or "")
             self.online = data.get("online")
+            try:
+                self.retry_at = float(data.get("retry_at") or 0)
+            except (TypeError, ValueError):
+                self.retry_at = 0.0
 
     def _save_cache(self) -> None:
         with self._lock:
             data = {"checked_at": self.last_check, "error": self.last_error, "online": self.online,
+                    "retry_at": self.retry_at,
                     "apps": {k: asdict(v) for k, v in self._infos.items()}}
         try:
             atomic_write_json(self.cache_file, data)
@@ -122,6 +133,10 @@ class UpdateService:
             return sum(1 for v in self._infos.values() if v.update_available)
 
     def check_due(self) -> bool:
+        if self.retry_at and time.time() >= self.retry_at:
+            # The last check was cut short by GitHub's rate limit, which has
+            # reset since: an update may be waiting that was never seen.
+            return True
         interval = self.settings.get("updater.check_interval_hours") * 3600
         if self.online is False:
             # The last check could not reach GitHub (often: network not up yet
@@ -140,6 +155,7 @@ class UpdateService:
 
     def _check(self, entries: list[AppEntry]) -> dict[str, UpdateInfo]:
         log.info("Checking for updates (%d apps)", len(entries))
+        self._limited_until = 0.0
         results: dict[str, UpdateInfo] = {}
         offline_error = ""
         system = self._check_system()
@@ -167,6 +183,11 @@ class UpdateService:
             self.last_check = time.time()
             self.online = not offline_error
             self.last_error = offline_error
+            self.retry_at = (self._limited_until + RATE_LIMIT_MARGIN_SEC
+                             if self._limited_until else 0.0)
+        if self.retry_at:
+            log.warning("Update check cut short by GitHub's rate limit; checking again at %s",
+                        time.strftime("%H:%M", time.localtime(self.retry_at)))
         self._save_cache()
         log.info("Update check done: %d update(s)%s", self.update_count(),
                  f", offline ({offline_error})" if offline_error else "")
@@ -191,6 +212,8 @@ class UpdateService:
             return
         except RateLimitError as exc:
             info.error = str(exc)
+            self._limited_until = max(self._limited_until,
+                                      exc.reset_at or time.time() + OFFLINE_RETRY_SEC)
             return
         except NotFoundError:
             info.error = "Repository not found"
