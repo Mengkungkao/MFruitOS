@@ -6,6 +6,15 @@ the OS version.
 
 ## Unreleased
 
+## [1.5.1] - 2026-10-12
+
+### Fixed
+- **Fruit Store row said "Installed" for an app with a newer release** while
+  the Store list still pinned the older version (the list follows releases up
+  to an hour later): the row now shows **Update** and "Version … available",
+  agreeing with *Update apps*. Found updating AI Chatbot 1.0.2 → 1.1.0 on the
+  Orange Pi; the app's page already offered the update.
+
 ## [1.5.0] - 2026-10-12
 
 The first mFruit OS release published on GitHub: devices update to it from

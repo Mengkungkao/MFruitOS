@@ -323,6 +323,8 @@ class InstallAppScreen(ListScreen):
             present = saved is not None and not broken
             added = app_id in installed and not broken
             newer = catalog.newer_version(item, saved.version) if present else None
+            if added:
+                newer = self._newest(newer, os.updater.info(app_id))
             rows.append(Item(item['name'],
                 lambda i=item, p=present, a=added, b=broken: self._pick(i, p, a, b),
                 icon="package",
@@ -345,6 +347,22 @@ class InstallAppScreen(ListScreen):
             back_item(),
         ]
         return rows
+
+    @staticmethod
+    def _newest(pinned: str | None, info) -> str | None:
+        """The newer of the list's pin and the app's own newest release.
+
+        The list's pin follows a release up to an hour later (the hourly
+        catalogue sync), while the app's update check sees the release at
+        once: the row must not say "Installed" when "Update apps" counts it.
+        """
+        from mfruitos.updater.version import is_newer
+        latest = getattr(info, "latest", None)
+        released = latest if getattr(info, "update_available", False) is True \
+            and isinstance(latest, str) and latest else None
+        if released and (pinned is None or is_newer(released, pinned)):
+            return released
+        return pinned
 
     def _packages_missing(self, app_id: str) -> bool:
         from mfruitos.updater import catalog

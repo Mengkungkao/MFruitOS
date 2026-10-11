@@ -2,7 +2,7 @@
   "id": "mfruit-os",
   "type": "system",
   "name": "mFruit OS",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "App launcher and manager for small Linux devices",
   "entrypoint": "mfruitos/__main__.py",
   "repository": "https://github.com/Mengkungkao/MFruitOS"

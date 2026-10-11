@@ -153,6 +153,29 @@ class AppInstallerScreenTests(TempHomeTestCase):
         dialog.items()[1].action()
         self.assertEqual(self.os.start_job.call_args.args[0], "Install app")
 
+    def test_a_newer_release_shows_as_an_update_before_the_list_moves(self):
+        """AI Chatbot 1.1.0 was released while the Store list still pinned
+        1.0.2: the row said "Installed" next to "Update apps · 1 available"
+        (Orange Pi, 2026-10-12). The app's page offers the release."""
+        self.item.update(native=True, version="1.0.2")
+        self.saved(version="1.0.2")
+        self.os.registry._entries["demo"].kind = "os"
+        self.os.settings.set("apps.installed_ids", ["demo"])
+        self.os.updater.info.return_value = SimpleNamespace(update_available=True, latest="1.1.0")
+        row = self.rows()[0]
+        self.assertEqual((row.value, row.subtitle), ("Update", "Version 1.1.0 available"))
+        row.action()
+        page = self.os.push.call_args.args[0]
+        self.assertTrue(any(i.label == "Update to 1.1.0" for i in page.items()))
+        # an older release than the list's pin does not hide the pin
+        self.item.update(version="1.2.0")
+        row = self.rows()[0]
+        self.assertEqual(row.subtitle, "Version 1.2.0 available")
+        # and nothing newer anywhere is no update
+        self.item.update(version="1.0.2")
+        self.os.updater.info.return_value = SimpleNamespace(update_available=False, latest="1.0.2")
+        self.assertEqual(self.rows()[0].value, "Installed")
+
     def test_same_or_older_store_version_is_no_update(self):
         self.os.settings.set("apps.installed_ids", ["demo"])
         self.os.updater.info.return_value = None
