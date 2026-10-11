@@ -1,0 +1,60 @@
+# Keeps the Fruit Store list (config/catalog.json) on the apps' newest
+# releases: scripts/catalog-sync.py moves a native entry of this owner's
+# repositories to its newest release once the package was downloaded and
+# matched its SHA-256 and manifest, then this commits the list to main.
+# Devices with the online list (updater.online_catalog) see it the next time
+# the Fruit Store opens. Runs every hour, when its own files change, and by
+# hand (Actions -> Catalogue sync -> Run workflow).
+name: Catalogue sync
+
+on:
+  schedule:
+    - cron: "23 * * * *"
+  push:
+    branches: [main]
+    paths:
+      - scripts/catalog-sync.py
+      - .github/workflows/catalog-sync.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: catalog-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Move pins to verified releases
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 scripts/catalog-sync.py
+      - name: Commit the list
+        run: |
+          if git diff --quiet -- config/catalog.json; then
+            echo "Fruit Store list unchanged"; exit 0
+          fi
+          git config user.name "mfruit-catalog-sync"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add config/catalog.json
+          summary=$(python3 - <<'PY'
+          import json, subprocess
+          old = {e["id"]: e for e in json.loads(subprocess.run(["git", "show", "HEAD:config/catalog.json"],
+                                                               capture_output=True, text=True, check=True).stdout)}
+          new = json.load(open("config/catalog.json"))
+          print(", ".join(f"{e['id']} {e['version']}" for e in new
+                          if e.get("version") and old.get(e["id"], {}).get("version") != e["version"]))
+          PY
+          )
+          git commit -m "chore: Fruit Store pins $summary" \
+            -m "Moved by scripts/catalog-sync.py after downloading each package and checking its SHA-256 and manifest."
+          for attempt in 1 2 3; do
+            git pull --rebase --quiet origin main && git push origin HEAD:main && exit 0
+            sleep 5
+          done
+          exit 1

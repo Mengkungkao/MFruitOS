@@ -6,6 +6,24 @@ the OS version.
 
 ## Unreleased
 
+## [1.5.0] - 2026-10-12
+
+The first mFruit OS release published on GitHub: devices update to it from
+Settings > System > System update.
+
+### Added (2026-10-12, new software without a computer)
+- **Releases publish themselves** (mFruit OS, AI Chatbot, RadioConnect): a new
+  `manifest.json` version pushed to main is tested, packaged with its
+  SHA-256 and published as `v<version>`. mFruit OS's package is
+  `mfruit-os-<version>.tar.gz` (`scripts/build-release.sh`), the files
+  `install.sh` installs.
+- **The Fruit Store list follows them:** `scripts/catalog-sync.py`, hourly,
+  moves the pins of the owner's apps to their newest release after checking
+  the download's SHA-256, its manifest and the mFruit OS version it needs
+  (ADR 0014).
+- Before this, AI Chatbot 1.1.0 was never released, and RadioConnect and
+  mFruit OS had no releases, so devices could not be offered them.
+
 ### Fixed (2026-10-12, PiSugar on an Orange Pi Zero 2W)
 - **No battery shown with a PiSugar on an Orange Pi Zero 2W:** the power
   service only looked on I2C bus 1, the Raspberry Pi's header bus, which on

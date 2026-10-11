@@ -1,0 +1,78 @@
+# Publishes mFruit OS as a GitHub release whenever manifest.json carries a
+# version that has no release yet: bump "version" (and mfruitos/__init__.py),
+# push to main, and release v<version> appears with mfruit-os-<version>.tar.gz
+# and its .sha256 (scripts/build-release.sh). Devices offer it in
+# Settings > System > System update; it replaces the code only (the parts
+# scripts/install.sh sets up as root are not touched).
+#
+# A pushed v* tag still works (it must match the manifest), and the workflow
+# can be run by hand to retry. Nothing is published unless scripts/check.sh
+# passes.
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - manifest.json
+      - scripts/build-release.sh
+      - .github/workflows/release.yml
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version, and whether it is already released
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(python3 -c 'import json; print(json.load(open("manifest.json"))["version"])')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "tag $GITHUB_REF_NAME, manifest $version"; exit 1
+          fi
+          if gh release view "v$version" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "v$version is already released; nothing to do"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: scripts/check.sh (what CI runs)
+        if: steps.version.outputs.publish == 'true'
+        env:
+          PYTHON: /usr/bin/python3
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends python3-pil python3-numpy python3-dbus python3-gi python3-cryptography
+          bash scripts/check.sh
+      - name: Build the system package
+        if: steps.version.outputs.publish == 'true'
+        run: bash scripts/build-release.sh "$RUNNER_TEMP/out"
+      - name: Publish the release
+        if: steps.version.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          notes="$RUNNER_TEMP/notes.md"
+          python3 - "$VERSION" > "$notes" <<'PY'
+          import re, sys
+          text = open("CHANGELOG.md", encoding="utf-8").read()
+          found = re.search(r"^## \[" + re.escape(sys.argv[1]) + r"\].*?\n(.*?)(?=^## |\Z)", text, re.S | re.M)
+          print((found.group(1).strip() if found else "") or f"mFruit OS {sys.argv[1]}")
+          PY
+          gh release create "v$VERSION" "$RUNNER_TEMP"/out/* \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "mFruit OS $VERSION" --notes-file "$notes"

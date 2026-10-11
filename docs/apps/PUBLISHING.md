@@ -21,6 +21,16 @@ How to release an app so mFruit OS can discover, install and update it.
 
 Pre-releases are offered only to devices with `updater.include_prereleases`.
 
+### Releases that publish themselves
+
+AI Chatbot, RadioConnect and mFruit OS publish a release whenever
+`manifest.json` carries a version that has no release yet: bump the version,
+push to the default branch, and their `.github/workflows/release.yml` runs the
+tests, builds the package with its checksum and publishes `v<version>` from
+that commit ([ADR 0014](../platform/ADR/0014-releases-and-catalogue-follow.md)).
+Copy one of them for a new app. Devices with the app installed are offered
+the version at their next update check (every 12 hours, or *Check now*).
+
 ## Before you publish
 
 - `check-app.py` passes on the exact release contents.
@@ -36,8 +46,12 @@ automated suite passes ([Part I §30](../platform/DEVELOPMENT_RULES.md#30-releas
 ## The curated catalogue
 
 The Fruit Store's curated list (`config/catalog.json` in mFruit OS) pins a
-reviewed commit and its archive SHA-256. Adding or updating an entry is an
-mFruit OS change: open a pull request with the new `ref`, `url`, `sha256`,
+reviewed commit and its archive SHA-256. A native entry from the same GitHub
+owner as mFruit OS follows its app's releases by itself:
+`scripts/catalog-sync.py` (every hour, `.github/workflows/catalog-sync.yml`)
+moves the pin once the new package was downloaded and its SHA-256, manifest
+and required mFruit OS version checked, and commits the list. Adding an entry,
+and updating one from another owner or an adopted one, is an mFruit OS change: open a pull request with the new `ref`, `url`, `sha256`,
 `entry` and `dependencies`, after the archive was downloaded and its checksum
 and entry verified. Devices running mFruit OS with the online list see the
 entry once it is on the default branch, the next time the Fruit Store opens,

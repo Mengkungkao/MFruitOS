@@ -49,8 +49,9 @@ Its own hooks run, and it updates from its GitHub releases like any native
 app. When the Fruit Store list names a newer `version` than the installed one,
 the Store row shows **Update** and the app's page offers **Update to
 <version>** (the same pinned install; data kept, previous version restored on
-failure), so an app without GitHub releases, such as RadioConnect, still gets
-new versions. `mfruitctl catalog` reports it as `update`.
+failure), so an app without GitHub releases still gets new versions. For the
+owner's apps the list's pins follow their releases by themselves
+([Publishing](PUBLISHING.md#the-curated-catalogue)). `mfruitctl catalog` reports it as `update`.
 
 A catalogue app that is registered but whose files are missing shows
 **Repair**; it runs the same installation. From a shell, `mfruitctl catalog`

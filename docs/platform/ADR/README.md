@@ -22,4 +22,5 @@ rewritten to change its decision; a later record supersedes it.
 | [0011](0011-catalogue-system-packages.md) | Fruit Store entries declare system packages; setup-app.sh installs them | Accepted 2026-10-05 |
 | [0012](0012-own-power-management.md) | mFruit OS has its own power management | Accepted 2026-10-10 |
 | [0013](0013-phone-wifi-setup.md) | Wi-Fi from a phone with PiSugar's sugar-wifi-conf, run by mFruit OS | Accepted 2026-10-10 |
+| [0014](0014-releases-and-catalogue-follow.md) | Releases publish themselves; the Fruit Store follows verified releases | Accepted 2026-10-12 |
 | [0006](0006-settings-provider-apps.md) | Settings provider apps instead of a hard-coded Wi-Fi app | **Proposed** — awaiting the owner's decision |

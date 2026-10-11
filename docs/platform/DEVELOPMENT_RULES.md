@@ -1118,7 +1118,7 @@ Every change should leave mFruit OS easier for the next user, application develo
 
 # Part II — Applying the rules in this repository
 
-These rules make Part I concrete for the current source tree (mFruit OS 1.4
+These rules make Part I concrete for the current source tree (mFruit OS 1.5
 on whisplay-daemon). Current module ownership is mapped in
 [Architecture](ARCHITECTURE.md#layer-map-current-modules-and-target-layers).
 

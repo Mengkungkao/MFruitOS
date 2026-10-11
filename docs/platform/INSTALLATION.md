@@ -225,8 +225,12 @@ previous version, and arms the boot guard: if the new version fails to start
 three times, `boot-guard.sh` (plain `sh`) switches `system/current` back and
 the launcher reports the rollback. A healthy start is confirmed after 15 s.
 Update the OS and all keyboard apps together so their SDK and key-hub
-contract match ([SDK](../apps/SDK.md)). mFruit OS has no published releases at
-the time of writing, so on-device version selection has nothing to offer yet.
+contract match ([SDK](../apps/SDK.md)). Releases are published by
+`.github/workflows/release.yml` whenever `manifest.json` has a new version (the
+first was 1.5.0, 2026-10-12; [ADR 0014](ADR/0014-releases-and-catalogue-follow.md)).
+A system update replaces the code only: what this installer sets up as root
+(services, sudoers, polkit, the shutdown hook) changes only with `sudo bash
+scripts/install.sh`, and a release's notes say when that is needed.
 
 ### Manual rollback of a checkout installation
 
