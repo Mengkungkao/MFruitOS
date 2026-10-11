@@ -342,6 +342,20 @@ class DetectTests(unittest.TestCase):
         self.assertIsInstance(detect.build(bus, 1), pisugar2.UnknownPiSugar2)
         self.assertEqual([op for op in bus.log if op[0] != "r"], [])   # detection only reads
 
+    def test_a_pisugar2_with_a_silent_battery_chip_is_told_apart(self):
+        # Seen on an Orange Pi Zero 2W (2026-10-12): the PiSugar 2's clock
+        # answers at 0x32, its battery chip at 0x75 does not.
+        bus = FakeBus({0x32: FakeSD3078()})
+        with self.assertRaises(detect.BatteryChipSilent) as caught:
+            detect.build(bus, 2)
+        self.assertIn("clock answers", str(caught.exception))
+        self.assertIn("bus 2", str(caught.exception))
+        self.assertEqual(caught.exception.board, "PiSugar 2")
+        self.assertEqual([op for op in bus.log if op[0] != "r"], [])   # still only reads
+        with self.assertRaises(detect.NotFound) as empty:
+            detect.build(FakeBus({}), 2)
+        self.assertNotIsInstance(empty.exception, detect.BatteryChipSilent)
+
     def test_configured_model_skips_detection(self):
         chip = detect.build(FakeBus({0x75: FakeIP5209(leds=2)}), 1, "pisugar2-2led")
         self.assertEqual(chip.model, "PiSugar 2 (2-LEDs)")
@@ -384,6 +398,41 @@ class AlarmTimeTests(unittest.TestCase):
         now = dt.datetime(2026, 10, 10, 12, 0, tzinfo=tz)
         self.assertEqual(local_to_utc_alarm(22, 0, 0b0000010, now), (3, 0, 0b0000100))
 
+
+
+class HeaderBusTests(unittest.TestCase):
+    """The 40-pin header's bus comes from the device tree's ``i2c1`` label."""
+
+    def board(self, adapters: dict, symbol: str | None):
+        root = tempfile.mkdtemp(prefix="mfi2c-")
+        base_dir = os.path.join(root, "base")
+        devices = os.path.join(root, "devices")
+        symbols = os.path.join(root, "symbols")
+        os.makedirs(devices)
+        os.makedirs(symbols)
+        for number, node in adapters.items():
+            target = os.path.join(base_dir, node.lstrip("/"))
+            os.makedirs(target, exist_ok=True)
+            os.makedirs(os.path.join(devices, f"i2c-{number}"))
+            os.symlink(target, os.path.join(devices, f"i2c-{number}", "of_node"))
+        if symbol is not None:
+            with open(os.path.join(symbols, "i2c1"), "wb") as fh:
+                fh.write(symbol.encode() + b"\0")
+        return dict(devices_dir=devices, symbols_dir=symbols, dt_base=base_dir)
+
+    def test_raspberry_pi(self):
+        paths = self.board({1: "/soc/i2c@7e804000", 2: "/soc/i2c@7e805000"}, "/soc/i2c@7e804000")
+        self.assertEqual(i2c.header_bus(**paths), 1)
+
+    def test_orange_pi_zero_2w_where_bus_1_is_hdmi(self):
+        paths = self.board({0: "/soc/i2c@7081400", 1: "/soc/hdmi@6000000/i2c",
+                            2: "/soc/i2c@5002400", 3: "/soc/i2c@5002c00"}, "/soc/i2c@5002400")
+        self.assertEqual(i2c.header_bus(**paths), 2)
+
+    def test_unknown_when_the_tree_says_nothing(self):
+        self.assertIsNone(i2c.header_bus(**self.board({1: "/soc/i2c@1"}, None)))
+        self.assertIsNone(i2c.header_bus(**self.board({1: "/soc/i2c@1"}, "/soc/i2c@9")))
+        self.assertIsNone(i2c.header_bus(devices_dir="/nonexistent", symbols_dir="/nonexistent"))
 
 if __name__ == "__main__":
     unittest.main()

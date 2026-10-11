@@ -114,8 +114,11 @@ class BatteryScreen(ListScreen):
         status = self.status
         if not status.get("present"):
             reason = status.get("error") or "No PiSugar found"
-            return [Item("No battery board", lambda: self.os.show_message(
-                         "No battery board", reason, icon="battery"),
+            # A board whose battery chip is silent is there: say so, not "no board".
+            silent = status.get("board_silent")
+            title = f"{silent}: no reading" if silent else "No battery board"
+            return [Item(title, lambda: self.os.show_message(
+                         title, reason, icon="battery"),
                          kind="nav", icon="battery", subtitle=reason),
                     Item("Look again", self._probe, icon="search"), back_item()]
         config = status.get("config", {})

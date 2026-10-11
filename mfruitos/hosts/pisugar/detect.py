@@ -32,6 +32,16 @@ class NotFound(Exception):
     """No usable board; the message says why, for the user."""
 
 
+class BatteryChipSilent(NotFound):
+    """A PiSugar 2 is on the bus (its clock answers) but its battery chip gives
+    no reading. Nothing can be read until it does, which may start at any time
+    (battery plugged back in, board switched on or reseated)."""
+
+    def __init__(self, message: str, board: str = "PiSugar 2"):
+        super().__init__(message)
+        self.board = board
+
+
 def _rtc(bus):
     """The PiSugar 2 clock, if it answers."""
     try:
@@ -81,6 +91,11 @@ def build(bus, bus_number: int, model: str = AUTO, p3_addr: int | None = None):
     except OSError as exc:
         if exc.errno in (errno.EACCES, errno.EPERM, errno.EBUSY):
             raise NotFound(explain(exc, bus_number, pisugar2.ADDRESS)) from exc
+    if _rtc(bus) is not None:
+        raise BatteryChipSilent(
+            f"a PiSugar 2 is on I2C bus {bus_number} (its clock answers) but its battery "
+            "chip gives no reading. Check that the battery is plugged into the PiSugar "
+            "and that it is switched on; if it stays silent, reseat the PiSugar")
     raise NotFound(f"no PiSugar battery board found on I2C bus {bus_number}")
 
 

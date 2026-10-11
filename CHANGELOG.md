@@ -6,6 +6,17 @@ the OS version.
 
 ## Unreleased
 
+### Fixed (2026-10-12, PiSugar on an Orange Pi Zero 2W)
+- **No battery shown with a PiSugar on an Orange Pi Zero 2W:** the power
+  service only looked on I2C bus 1, the Raspberry Pi's header bus, which on
+  the Orange Pi is the HDMI port's. It now also tries the 40-pin header's bus
+  (the device tree's `i2c1`; bus 2 there) and keeps the bus it finds the
+  board on, so the shutdown hook uses it too.
+- **A PiSugar 2 that is attached but gives no battery reading** (its clock
+  answers, its battery chip does not) showed "No battery board". Settings
+  now say "PiSugar 2: no battery reading" with what to check, and the
+  service looks again every 30 s, so the battery appears once it answers.
+
 ### Fixed (2026-10-10, other distributions; found with tests/distro on Ubuntu 22.04/24.04, Debian 11/12/13)
 - **Ubuntu for Raspberry Pi:** `whisplay-daemon.service` named the `gpio`
   group, which Ubuntu does not have, and systemd refuses such a unit (no

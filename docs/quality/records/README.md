@@ -10,6 +10,8 @@ Name new records `YYYY-MM-DD-topic.md` and add them to the top of this list.
 
 | Date | Record | Scope |
 |---|---|---|
+| 2026-10-12 | [PiSugar 2 on the Orange Pi](2026-10-12-pisugar-orange-pi.md) | no battery shown: header I2C is bus 2 there (bus 1 is HDMI); silent battery chip told apart; device fix verified |
+| 2026-10-11 | [AI Chatbot 1.1.0 face](2026-10-11-ai-chatbot-face.md) | lip sync from the voice actually playing, listening/thinking poses; Pi Zero measurements of mouth vs microphone (app framebuffer, not the LCD) |
 | 2026-10-10 | [Other distributions](2026-10-10-distro-matrix.md) | Ubuntu 22.04/24.04 and Debian 11/12/13 suites without root; a simulated Raspberry Pi on Ubuntu 24.04; ten bugs fixed (groups, sound card build, polkit 0.105, Python 3.9, Pillow floor, ...) |
 | 2026-10-10 | [Battery shown as charging](2026-10-10-battery-charging-judgement.md) | PiSugar 2 (four LEDs) judged charging from voltage noise; new judgement, regression tests with negative control (automated only) |
 | 2026-10-10 | [Wi-Fi from a phone](2026-10-10-phone-wifi-setup.md) | PiSugar's sugar-wifi-conf installed and run by mFruit OS; BLE checks from the dev machine against the Orange Pi |

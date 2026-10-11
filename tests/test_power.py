@@ -20,13 +20,14 @@ from unittest import mock
 
 from mfruitos import power
 from mfruitos.hosts.pisugar import detect, pisugar3
-from mfruitos.hosts.pisugar.fake import FakeBus, FakeIP5209, FakePiSugar3, FakeSD3078
+from mfruitos.hosts.pisugar.fake import (FakeBus, FakeIP5209, FakeIP5312, FakePiSugar3,
+                                         FakeSD3078)
 from mfruitos.power import config as pconfig
 from mfruitos.power.client import PowerClient, PowerError, PowerEvents
 from mfruitos.power.compat import Compat
 from mfruitos.power.server import PowerServer
 from mfruitos.power.service import (ERRORS_BEFORE_REPORT, PROBE_RETRY_SEC, SHUTDOWN_RETRY_SEC,
-                                    DryRunner, PowerService)
+                                    SILENT_RETRY_SEC, DryRunner, PowerService)
 from mfruitos.system.settings import Invalid
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -63,7 +64,8 @@ def make_service(board=None, devices=None, config_path=None, ntp=False, wall=Non
     def open_board(bus_number, model_name, addr):
         return bus, detect.build(bus, bus_number, model_name, addr)
     service = PowerService(cfg, open_board=open_board, monotonic=clock, wallclock=wall,
-                           runner=runner, set_clock=clock_sets.append, ntp_synced=lambda: ntp)
+                           runner=runner, set_clock=clock_sets.append, ntp_synced=lambda: ntp,
+                           find_header_bus=lambda: None)
     service.on_event = events.append
     service.start()
     return service, board, clock, events, runner, clock_sets
@@ -325,7 +327,8 @@ class ProbeTests(unittest.TestCase):
         def open_board(*args):
             calls.append(args)
             raise detect.NotFound("no PiSugar battery board found on I2C bus 1")
-        service = PowerService(cfg, open_board=open_board, monotonic=clock, runner=DryRunner())
+        service = PowerService(cfg, open_board=open_board, monotonic=clock, runner=DryRunner(),
+                               find_header_bus=lambda: None)
         service.start()
         self.assertIn("no PiSugar", service.view()["error"])
         for delay in PROBE_RETRY_SEC:
@@ -337,10 +340,77 @@ class ProbeTests(unittest.TestCase):
         service.tick()
         self.assertEqual(len(calls), 1 + len(PROBE_RETRY_SEC))
 
+    def buses(self, boards: dict, header, config_path=None):
+        """A service whose I2C buses hold ``boards`` ({bus: {addr: device}})."""
+        cfg = pconfig.PowerConfig(config_path)
+        clock = Clock()
+        opened = []
+        fakes = {number: FakeBus(devices, bus=number) for number, devices in boards.items()}
+
+        def open_board(bus_number, model_name, addr):
+            opened.append(bus_number)
+            bus = fakes.get(bus_number)
+            if bus is None:
+                raise detect.NotFound(f"I2C bus {bus_number} is not enabled")
+            return bus, detect.build(bus, bus_number, model_name, addr)
+        events = []
+        service = PowerService(cfg, open_board=open_board, monotonic=clock, runner=DryRunner(),
+                               find_header_bus=lambda: header)
+        service.on_event = events.append
+        service.start()
+        return service, cfg, clock, opened, fakes, events
+
+    def test_board_on_the_header_bus_is_found_and_kept(self):
+        # An Orange Pi Zero 2W: bus 1 is HDMI, the header (and the PiSugar) is bus 2.
+        path = os.path.join(tempfile.mkdtemp(prefix="mfp-"), "power.json")
+        service, cfg, _, opened, _, events = self.buses(
+            {1: {}, 2: {0x75: FakeIP5312(), 0x32: FakeSD3078()}}, header=2, config_path=path)
+        self.assertTrue(service.view()["present"])
+        self.assertEqual(service.status()["bus"], 2)
+        self.assertEqual(opened, [1, 2])
+        saved = pconfig.PowerConfig(path)
+        saved.load()
+        self.assertEqual(saved.get("i2c_bus"), 2)             # saved: the shutdown hook reads it
+        self.assertIn(power.CONFIG, names(events))
+        service.probe()
+        self.assertEqual(opened, [1, 2, 2])                   # straight to bus 2 from now on
+
+    def test_without_the_header_bus_the_board_is_not_found(self):
+        # The negative control for the test above: only the configured bus.
+        service, cfg, *_ = self.buses({1: {}, 2: {0x75: FakeIP5312()}}, header=None)
+        self.assertFalse(service.view()["present"])
+        self.assertEqual(cfg.get("i2c_bus"), 1)
+
+    def test_both_buses_empty_says_where_it_looked(self):
+        service, *_ = self.buses({1: {}, 2: {}}, header=2)
+        self.assertIn("I2C bus 1 or 2", service.view()["error"])
+        self.assertEqual(service.view()["board_silent"], "")
+
+    def test_silent_battery_chip_is_explained_and_watched_until_it_answers(self):
+        service, cfg, clock, opened, fakes, _ = self.buses({1: {}, 2: {0x32: FakeSD3078()}},
+                                                           header=2)
+        view = service.view()
+        self.assertFalse(view["present"])
+        self.assertEqual(view["board_silent"], "PiSugar 2")
+        self.assertIn("clock answers", view["error"])
+        self.assertEqual(cfg.get("i2c_bus"), 2)
+        # Looked for again every 30 s, for longer than a missing board is.
+        for _ in range(len(PROBE_RETRY_SEC) + 5):
+            self.assertAlmostEqual(service.due(), clock.now + SILENT_RETRY_SEC)
+            clock.advance(SILENT_RETRY_SEC)
+            service.tick()
+        self.assertFalse(service.view()["present"])
+        fakes[2].devices[0x75] = FakeIP5312()                 # the battery chip wakes up
+        clock.advance(SILENT_RETRY_SEC)
+        service.tick()
+        self.assertTrue(service.view()["present"])
+        self.assertEqual(service.view()["board_silent"], "")
+
     def test_model_none_does_not_touch_the_bus(self):
         cfg = pconfig.PowerConfig(None)
         cfg.set("model", "none", save=False)
-        service = PowerService(cfg, open_board=detect.open_board, runner=DryRunner())
+        service = PowerService(cfg, open_board=detect.open_board, runner=DryRunner(),
+                               find_header_bus=lambda: None)
         with mock.patch.object(detect, "SMBus") as smbus:
             service.start()
         self.assertIn("turned off", service.error)

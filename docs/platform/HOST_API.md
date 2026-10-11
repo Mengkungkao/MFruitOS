@@ -50,7 +50,10 @@ Implementations: `pisugar3.PiSugar3`, `pisugar2.IP5209Board` (4/2 LEDs),
 `pisugar2.IP5312Board`, `pisugar2.UnknownPiSugar2` (read only),
 `sd3078.SD3078`. Test doubles: `fake.py` (registers, write protection,
 press latch, soft-shutdown handshake). Detection and the bus live in
-`detect.py` and `i2c.py`. The power-off at the end of a shutdown is
+`detect.py` and `i2c.py`: `i2c.header_bus()` finds the 40-pin header's bus
+from the device tree, and `detect.BatteryChipSilent` is a PiSugar 2 whose
+clock answers while its battery chip gives no reading (the service then
+reports `board_silent` and looks again every 30 s). The power-off at the end of a shutdown is
 `scripts/mfruit-power-off`, which is standalone because `/home` may already
 be unmounted by then.
 

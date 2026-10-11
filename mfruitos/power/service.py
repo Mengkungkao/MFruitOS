@@ -39,6 +39,7 @@ from typing import Callable
 
 from mfruitos import power
 from mfruitos.hosts.pisugar import base, detect
+from mfruitos.hosts.pisugar.i2c import header_bus
 from mfruitos.hosts.pisugar.base import Unsupported
 from mfruitos.hosts.pisugar.rtc import local_to_utc_alarm
 from mfruitos.power.charging import ChargeJudge
@@ -51,6 +52,10 @@ WINDOW = 30                        # samples averaged for the level
 ERROR_RETRY_SEC = 5.0
 ERRORS_BEFORE_REPORT = 3
 PROBE_RETRY_SEC = (5.0, 15.0, 60.0)   # I2C can appear late at boot; then give up
+# A PiSugar 2 whose clock answers but whose battery chip gives no reading is
+# there, and may start answering at any moment (battery plugged back in,
+# switched on, reseated): keep looking, at a pace that costs a few I2C reads.
+SILENT_RETRY_SEC = 30.0
 HOUSEKEEPING_SEC = 60.0
 RTC_CHECK_SEC = 6 * 3600.0
 RTC_SET_MARGIN_SEC = 60.0
@@ -124,9 +129,11 @@ class PowerService:
                  wallclock: Callable[[], _dt.datetime] | None = None,
                  runner=None, set_clock: Callable[[_dt.datetime], None] = set_system_clock,
                  ntp_synced: Callable[[], bool] = ntp_synchronized,
-                 post: Callable[[Callable], None] | None = None):
+                 post: Callable[[Callable], None] | None = None,
+                 find_header_bus: Callable[[], int | None] = header_bus):
         self.config = config
         self.open_board = open_board
+        self.find_header_bus = find_header_bus
         self.monotonic = monotonic
         self.wallclock = wallclock or (lambda: _dt.datetime.now().astimezone())
         self.post = post or (lambda fn: fn())
@@ -139,6 +146,7 @@ class PowerService:
         self.bus = None
         self.chip = None
         self.error = ""
+        self.board_silent = ""            # board name while its battery chip is silent
         self._probe_attempt = 0
         self._next_probe: float | None = None
         self._next_sample = 0.0
@@ -164,6 +172,53 @@ class PowerService:
     def start(self) -> None:
         self.probe()
 
+    def _buses(self) -> list:
+        """The configured bus, then the 40-pin header's if that is another one."""
+        buses = [self.config.get("i2c_bus")]
+        try:
+            header = self.find_header_bus()
+        except Exception:                 # sysfs oddities must not stop the service
+            log.exception("Could not work out the header's I2C bus")
+            header = None
+        if header is not None and header not in buses:
+            buses.append(header)
+        return buses
+
+    def _open_any(self, model: str):
+        """Open the board on the first bus that has it; NotFound if none does.
+
+        A board found on another bus than the configured one is the board's
+        real bus (an Orange Pi's header is bus 2, a Raspberry Pi's bus 1):
+        it is saved, so later starts and the shutdown hook use it directly.
+        """
+        configured = self.config.get("i2c_bus")
+        failures = []
+        for bus_number in self._buses():
+            try:
+                found = self.open_board(bus_number, model, self.config.get("i2c_address"))
+            except detect.BatteryChipSilent:
+                self._adopt_bus(bus_number, configured)
+                raise
+            except detect.NotFound as exc:
+                failures.append(exc)
+                continue
+            self._adopt_bus(bus_number, configured)
+            return found
+        plain = [str(e) for e in failures if not str(e).startswith("no PiSugar battery board")]
+        if plain:
+            raise detect.NotFound(plain[0])
+        names = " or ".join(str(b) for b in self._buses())
+        raise detect.NotFound(f"no PiSugar battery board found on I2C bus {names}")
+
+    def _adopt_bus(self, bus_number: int, configured: int) -> None:
+        if bus_number == configured:
+            return
+        log.info("Battery board found on I2C bus %s, not bus %s; using bus %s from now on",
+                 bus_number, configured, bus_number)
+        self.config.set("i2c_bus", bus_number, save=False)
+        self.config.save()
+        self.on_event({"event": power.CONFIG, "config": self.public_config()})
+
     def probe(self) -> bool:
         """(Re)detect the board and apply its settings. True if one is in use."""
         self.close_board()
@@ -172,9 +227,11 @@ class PowerService:
             self._board_missing("power management is turned off (model: none)", retry=False)
             return False
         try:
-            self.bus, self.chip = self.open_board(self.config.get("i2c_bus"), model,
-                                                  self.config.get("i2c_address"))
+            self.bus, self.chip = self._open_any(model)
             self.chip.init({key: self.config.get(key) for key in CHIP_KEYS})
+        except detect.BatteryChipSilent as exc:
+            self._board_missing(str(exc), retry=True, every=SILENT_RETRY_SEC, silent=exc.board)
+            return False
         except detect.NotFound as exc:
             self._board_missing(str(exc), retry=model != detect.NONE)
             return False
@@ -183,6 +240,7 @@ class PowerService:
             self._board_missing(explain(exc, self.config.get("i2c_bus")), retry=True)
             return False
         self.error = ""
+        self.board_silent = ""
         self._probe_attempt = 0
         self._next_probe = None
         log.info("Battery board: %s on I2C bus %s%s", self.chip.model, self.chip.bus_number,
@@ -195,10 +253,19 @@ class PowerService:
         self._emit_state(force=True)
         return True
 
-    def _board_missing(self, reason: str, retry: bool) -> None:
+    def _board_missing(self, reason: str, retry: bool, every: float | None = None,
+                       silent: str = "") -> None:
         self.close_board()
+        repeated = reason == self.error and silent == self.board_silent
         self.error = reason
-        if retry and self._probe_attempt < len(PROBE_RETRY_SEC):
+        self.board_silent = silent
+        if retry and every is not None:
+            # Looked for again and again: say so once, not every time.
+            self._next_probe = self.monotonic() + every
+            if not repeated:
+                log.info("Battery board not readable (%s); looking again every %.0f s",
+                         reason, every)
+        elif retry and self._probe_attempt < len(PROBE_RETRY_SEC):
             delay = PROBE_RETRY_SEC[self._probe_attempt]
             self._probe_attempt += 1
             self._next_probe = self.monotonic() + delay
@@ -348,6 +415,7 @@ class PowerService:
                 "level": round(level) if level is not None else None,
                 "plugged": self.plugged(), "charging": self.charging(),
                 "error": self.error, "low_battery": low,
+                "board_silent": self.board_silent,
                 "shutting_down": self.shutting_down or None}
 
     def _emit_state(self, force: bool = False) -> None:

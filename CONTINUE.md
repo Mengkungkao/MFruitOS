@@ -6,6 +6,39 @@ History: [docs/quality/records/](docs/quality/records/README.md) (the previous
 hand-off is preserved verbatim in
 [2026-10-01-handoff.md](docs/quality/records/2026-10-01-handoff.md)).
 
+## Session 2026-10-12 — PiSugar 2 moved to the Orange Pi: no battery shown
+
+The owner moved the PiSugar 2 to the Orange Pi Zero 2W and asked for the
+battery to show there, and for the PiSugar on the pin-map page
+([record](docs/quality/records/2026-10-12-pisugar-orange-pi.md)).
+
+| # | Step | Status |
+|---|---|---|
+| P1 | Cause: the power service only looked on I2C bus 1; on the Orange Pi Zero 2W that is HDMI, the header is bus 2. Fix: header bus from the device tree (`i2c1`), tried when the configured bus has no board, found bus saved (the shutdown hook reads it) | IMPLEMENTED, AUTOMATED (negative controls), DEVICE VERIFIED on the Orange Pi: found on bus 2, 84% in the status bar. Uncommitted |
+| P2 | PiSugar 2 clock answering while its battery chip does not (seen at 00:05 on the Orange Pi, and on the Pi Zero since 2026-10-10): "PiSugar 2: no reading" with what to check, re-checked every 30 s | IMPLEMENTED, AUTOMATED. NOT VERIFIED on a device (the chip answered by the time the code ran); cause of the silence unknown (KI-13) |
+| P3 | Pin-map page: both boards, a PiSugar 2 section | DONE (artifact, private) |
+
+Next: set the PiSugar 2's LED count on the Orange Pi (`mfruitctl power set
+model pisugar2-4led` or `-2led`) once the owner checks the board; commit when
+asked.
+
+## Session 2026-10-11 — AI Chatbot face: lip sync and a livelier cat (ai-chatbot repo)
+
+The owner asked, on the Pi Zero 2 W, for the chatbot's face to be cooler and
+livelier: mouth moving while it talks, not while it listens. Work is in
+`~/ai-chatbot` (uncommitted); details and measurements in the
+[record](docs/quality/records/2026-10-11-ai-chatbot-face.md).
+
+| # | Step | Status |
+|---|---|---|
+| F1 | Mouth driven by the voice actually playing: Node works out each clip's openness envelope (`speech-envelope.ts`), `playAudioData` announces start (with `at`) / envelope / end, the UI's `FaceAnimator` follows it; shut between words and always while listening | IMPLEMENTED, AUTOMATED (14 Python + 16 Node checks, negative controls), DEVICE VERIFIED on the Pi Zero in the app framebuffer: real replies lead the voice 50-60 ms, shut in silence, listening keeps it shut. NOT VERIFIED on the LCD panel itself |
+| F2 | Livelier face: listening tilt + wider eyes, thinking looks up, glances, curious tilts, quick/double/slow blinks, head lift on loud syllables | IMPLEMENTED, AUTOMATED (bounds, caches, whisker clearance); seen in framebuffer captures |
+| F3 | AI Chatbot 1.1.0 sideloaded on the Pi Zero (previous 1.0.1, the owner's earlier rollback target); left open | DONE. Not released: no tag, Fruit Store still pins 1.0.2; Orange Pi not updated |
+
+Next: the owner looks at the panel and holds a conversation; adjust
+`WHISPLAY_FACE_SYNC_MS` (default 80) if the mouth looks early or late; commit,
+tag `v1.1.0` and move the catalogue pin when the owner asks.
+
 ## Session 2026-10-10 (evening) — other distributions: Ubuntu, Orange Pi Ubuntu, Ubuntu for Raspberry Pi
 
 The owner asked to test and debug everything so far and make sure installing

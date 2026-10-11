@@ -168,6 +168,12 @@ class RuntimePowerTests(TempHomeTestCase):
         self.connect(level=82, charging=True)
         battery = next(i for i in SettingsScreen(self.rt).items() if i.label == "Battery")
         self.assertEqual(battery.resolve("subtitle"), "82% · Charging")
+        self.connect(present=False, level=None, board_silent="PiSugar 2")
+        battery = next(i for i in SettingsScreen(self.rt).items() if i.label == "Battery")
+        self.assertEqual(battery.resolve("subtitle"), "PiSugar 2: no battery reading")
+        self.connect(present=False, level=None, board_silent="")
+        battery = next(i for i in SettingsScreen(self.rt).items() if i.label == "Battery")
+        self.assertEqual(battery.resolve("subtitle"), "No battery board")
         power_row = next(i for i in GeneralScreen(self.rt).items() if i.label == "Power")
         power_row.action()
         self.assertIsInstance(self.rt.router.top, PowerMenuScreen)
@@ -217,6 +223,16 @@ class RuntimePowerTests(TempHomeTestCase):
         rows[1].action()                                   # Look again
         self.drain()
         self.rt.power.client.probe.assert_called_once()
+        # A PiSugar 2 that is there but gives no reading is named, not "no board".
+        self.rt.power.client.status.return_value = {
+            "present": False, "board_silent": "PiSugar 2",
+            "error": "a PiSugar 2 is on I2C bus 2 (its clock answers) but its battery chip "
+                     "gives no reading"}
+        screen.refresh()
+        self.drain()
+        rows = screen.items()
+        self.assertEqual(rows[0].label, "PiSugar 2: no reading")
+        self.assertIn("clock answers", rows[0].resolve("subtitle"))
 
     def test_wake_alarm_flow(self):
         screen = BatteryScreen(self.rt)

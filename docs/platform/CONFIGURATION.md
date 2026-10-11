@@ -171,7 +171,7 @@ and the model in `/etc/default/pisugar-server`) are imported once.
 | Key | Default | Meaning |
 |---|---|---|
 | `model` | `auto` | `auto` (detect), `pisugar3`, `pisugar2-4led`, `pisugar2-2led`, `pisugar2-pro`, or `none` (power management off; the bus is not opened) |
-| `i2c_bus` | 1 | I2C bus (`/dev/i2c-N`) |
+| `i2c_bus` | 1 | I2C bus (`/dev/i2c-N`). When no board answers there, the 40-pin header's bus is tried too (the device tree's `i2c1`: bus 1 on a Raspberry Pi, bus 2 on an Orange Pi Zero 2W, whose bus 1 is HDMI); a board found there is saved here, which the shutdown hook also reads |
 | `i2c_address` | null | PiSugar 3 address when changed from 0x57 |
 | `safe_shutdown_level` | 5 | power off below this charge (%) while unplugged; 0 = off; at most 30 |
 | `safe_shutdown_delay` | 30 | countdown in seconds before that power-off (0–120); external power cancels it |

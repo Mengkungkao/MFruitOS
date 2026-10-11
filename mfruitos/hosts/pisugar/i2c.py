@@ -39,6 +39,38 @@ def bus_path(bus: int, dev_dir: str = "/dev") -> str:
     return os.path.join(dev_dir, f"i2c-{int(bus)}")
 
 
+DT_BASE = "/sys/firmware/devicetree/base"
+
+
+def header_bus(devices_dir: str = "/sys/bus/i2c/devices",
+               symbols_dir: str = "/proc/device-tree/__symbols__",
+               dt_base: str = DT_BASE, label: str = "i2c1") -> int | None:
+    """The I2C bus on the 40-pin header (pins 3 and 5), or None if unknown.
+
+    Boards number ``/dev/i2c-N`` differently: a Raspberry Pi's header bus is
+    1, an Orange Pi Zero 2W's is 2 (its bus 1 is the HDMI port's). Both label
+    the header's controller ``i2c1`` in the device tree, so the bus is the
+    adapter whose device-tree node is the one that label names. Checked on a
+    Raspberry Pi Zero 2 W and an Orange Pi Zero 2W (2026-10-12).
+    """
+    try:
+        with open(os.path.join(symbols_dir, label), "rb") as fh:
+            node = fh.read().rstrip(b"\0").decode("ascii", "replace").strip()
+        names = sorted(os.listdir(devices_dir))
+    except OSError:
+        return None
+    if not node.startswith("/"):
+        return None
+    wanted = os.path.realpath(os.path.join(dt_base, node.lstrip("/")))
+    for name in names:
+        if not name.startswith("i2c-") or not name[4:].isdigit():
+            continue
+        of_node = os.path.join(devices_dir, name, "of_node")
+        if os.path.exists(of_node) and os.path.realpath(of_node) == wanted:
+            return int(name[4:])
+    return None
+
+
 def explain(exc: OSError, bus: int, addr: int | None = None,
             sys_dir: str = "/sys/bus/i2c/devices") -> str:
     """A short, actionable reason for an I2C failure."""

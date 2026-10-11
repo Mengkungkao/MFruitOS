@@ -109,6 +109,13 @@ load changes in the voltage were reported as charging, which also cancelled
 the low-battery countdown ([record](records/2026-10-10-battery-charging-judgement.md)).
 The 14:31 "charging" reading in the first record came from that same rule,
 so the −0.39 A it was read with most likely means discharging.
+2026-10-12, the PiSugar 2 moved to the Orange Pi Zero 2W: it was looked for
+on bus 1, which is the HDMI port there (fixed: the header's bus now comes from
+the device tree, [record](records/2026-10-12-pisugar-orange-pi.md)). On the
+right bus its clock (0x32) answers but its battery chip (0x75) gives no
+reading, as on the Pi Zero after its 2026-10-10 17:04 boot; the screen now
+says so and the service keeps looking. Why the chip is silent is NOT VERIFIED
+(battery, switch or contact: needs the board in hand).
 Still unknown: the current's sign (NOT VERIFIED on battery), the new charging
 judgement's thresholds on a real PiSugar 2, plug and unplug detection, the battery curve fit, the button, the low-battery
 shutdown, the board switching off at the end of a power-off, wake alarms,

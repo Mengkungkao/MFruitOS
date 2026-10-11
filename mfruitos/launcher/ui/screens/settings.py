@@ -43,7 +43,8 @@ def battery_subtitle(os) -> str:
         return "Power service off"
     state = os.power.state
     if not state.get("present"):
-        return "No battery board"
+        silent = state.get("board_silent")
+        return f"{silent}: no battery reading" if silent else "No battery board"
     level = state.get("level")
     return f"{level}% · {status_label(state)}" if level is not None else status_label(state)
 
