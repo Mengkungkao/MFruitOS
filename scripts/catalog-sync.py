@@ -9,7 +9,8 @@ For each native entry of ``config/catalog.json`` whose repository belongs to
 else the system repository in config/default.json), the newest published
 release is pinned when it is newer than the entry, after these checks:
 
-* the release has the package asset ``<id>-<version>...tar.gz`` (or .zip);
+* the release has the package asset ``<id>-<version>...tar.gz`` (or .zip), no
+  larger than devices download by default (``updater.max_download_mb``);
 * the asset's SHA-256, worked out here from the downloaded bytes, matches the
   one GitHub records for it, or its ``<asset>.sha256`` / ``SHA256SUMS`` file;
 * the package's manifest has the entry's id, the release's version and no
@@ -41,11 +42,14 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 from mfruitos import __version__  # noqa: E402
+from mfruitos.system.settings import SCHEMA  # noqa: E402
 from mfruitos.updater import catalog  # noqa: E402
 from mfruitos.updater.version import parse_version  # noqa: E402
 
 API = "https://api.github.com"
-MAX_ASSET_BYTES = 200 * 1024 * 1024
+# Devices refuse to download more than updater.max_download_mb (default 100):
+# a bigger package would be listed and then fail on every device.
+MAX_ASSET_BYTES = SCHEMA["updater.max_download_mb"][0] * 1024 * 1024
 ARCHIVES = (".tar.gz", ".tgz", ".zip")
 
 
@@ -61,7 +65,8 @@ def http_get(url: str, token: str = "", limit: int = MAX_ASSET_BYTES) -> bytes:
     with urllib.request.urlopen(request, timeout=120) as response:
         data = response.read(limit + 1)
     if len(data) > limit:
-        raise SyncError(f"{url} is larger than {limit} bytes")
+        raise SyncError(f"{url} is larger than {limit} bytes, more than devices download "
+                        "(updater.max_download_mb)")
     return data
 
 
@@ -138,6 +143,9 @@ def sync_entry(entry: dict, get, os_version: str = __version__) -> dict | None:
     if asset is None:
         raise SyncError(f"{tag} has no package asset {prefix}*.tar.gz")
     expected = expected_sha256(release, asset, get)
+    if int(asset.get("size") or 0) > MAX_ASSET_BYTES:
+        raise SyncError(f"{asset['name']} is {asset['size']} bytes, more than devices download "
+                        f"({MAX_ASSET_BYTES} bytes, updater.max_download_mb)")
     data = get(asset["browser_download_url"], MAX_ASSET_BYTES)
     actual = hashlib.sha256(data).hexdigest()
     if actual != expected:

@@ -37,6 +37,11 @@ PY
 find "$PKG" -name __pycache__ -prune -exec rm -rf {} +
 
 tar --sort=name --owner=0 --group=0 --numeric-owner -C "$WORK" -czf "$OUT/$NAME.tar.gz" mfruit-os
+LIMIT=$((100 * 1024 * 1024))   # devices' default updater.max_download_mb
+if [ "$(stat -c %s "$OUT/$NAME.tar.gz")" -gt "$LIMIT" ]; then
+  echo "$NAME.tar.gz is larger than devices download (updater.max_download_mb 100)" >&2
+  rm -f "$OUT/$NAME.tar.gz"; exit 1
+fi
 (cd "$OUT" && sha256sum "$NAME.tar.gz" > "$NAME.tar.gz.sha256")
 echo "$OUT/$NAME.tar.gz: $(du -h "$OUT/$NAME.tar.gz" | cut -f1), $(find "$PKG" -type f | wc -l) files"
 cat "$OUT/$NAME.tar.gz.sha256"

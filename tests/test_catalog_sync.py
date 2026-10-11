@@ -136,6 +136,18 @@ class CatalogSyncTests(unittest.TestCase):
         self.assertEqual(changes, [])
         self.assertIn("needs mFruit OS 9.0.0", problems[0])
 
+    def test_a_package_too_big_for_devices_keeps_the_pin(self):
+        gh = FakeGitHub()
+        url = gh.release(version="1.1.0")
+        latest = f"{API}/repos/{OWNER}/demo/releases/latest"
+        release = json.loads(gh.files[latest])
+        release["assets"][0]["size"] = sync_mod.MAX_ASSET_BYTES + 1
+        gh.files[latest] = json.dumps(release).encode()
+        _, changes, problems = run([entry()], gh)
+        self.assertEqual(changes, [])
+        self.assertIn("more than devices download", problems[0])
+        self.assertNotIn(url, gh.calls)                  # not even downloaded
+
     def test_no_newer_release_downloads_nothing(self):
         gh = FakeGitHub()
         url = gh.release(version="1.0.0")
