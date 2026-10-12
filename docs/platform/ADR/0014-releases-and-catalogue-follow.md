@@ -57,6 +57,15 @@ edit of the catalogue pin.
   verifies the checksum and runs the package's test before activation, and
   keeps the previous version for roll back.
 - The catalogue's history gains commits by `mfruit-catalog-sync`.
+- Devices fetch the list from `raw.githubusercontent.com`, whose CDN caches it
+  for up to 5 minutes, so a moved pin reaches them a few minutes after the
+  sync's commit.
+- Every device and computer behind one internet address shares GitHub's 60
+  unauthenticated API calls an hour; a device check refused by that limit is
+  retried a minute after it resets (1.5.2), not a check interval later.
+- A package larger than devices download by default
+  (`updater.max_download_mb`, 100 MB) is neither built (AI Chatbot, mFruit
+  OS) nor pinned.
 - A *System update* from the Store replaces mFruit OS's code only. Changes to
   what `scripts/install.sh` sets up as root (services, sudoers, polkit, the
   shutdown hook) still need `sudo bash scripts/install.sh` on the device; the

@@ -6,6 +6,26 @@ History: [docs/quality/records/](docs/quality/records/README.md) (the previous
 hand-off is preserved verbatim in
 [2026-10-01-handoff.md](docs/quality/records/2026-10-01-handoff.md)).
 
+## Session 2026-10-12 (later) — new software from the Fruit Store, without a computer
+
+The owner: every device must get new software and updates from the Fruit
+Store alone; the Orange Pi had AI Chatbot 1.0.2 and was not offered 1.1.0
+([ADR 0014](docs/platform/ADR/0014-releases-and-catalogue-follow.md),
+[record](docs/quality/records/2026-10-12-store-updates.md)).
+
+| # | Step | Status |
+|---|---|---|
+| U1 | Cause: no release existed (1.1.0 never tagged; RadioConnect and mFruit OS never released); pins edited by hand | FIXED: `release.yml` in ai-chatbot, RadioConnect, MFruitOS publishes each new manifest version after its tests; `scripts/catalog-sync.py` (hourly) moves the owner's pins after checking SHA-256, manifest and OS version |
+| U2 | Releases | DONE: AI Chatbot 1.1.0, RadioConnect 0.6.0, mFruit OS 1.5.0, 1.5.1, 1.5.2, 1.5.3; catalogue pins moved by the sync |
+| U3 | Found while testing on the Orange Pi and fixed (each with a failing-without test): Store row "Installed" beside an available update (1.5.1); rate-limited check waited 12 h (1.5.2); System update offered the running version (1.5.3); packages over the 100 MB download limit are neither built nor pinned | IMPLEMENTED, AUTOMATED (713) |
+| U4 | Orange Pi, from its screens: AI Chatbot 1.0.2 → 1.1.0 (verified, `.env` kept), mFruit OS 1.4.0-local → 1.5.1 → 1.5.3 (verified, boot guard confirmed) | DEVICE VERIFIED |
+| U5 | Pi Zero OS update | NOT VERIFIED: its Wi-Fi dropped every SSH session; offered 1.5.3 on its screen after *Check now* |
+
+Next: update the Pi Zero from its screen (Settings > General > Software
+Update > Check now > Update now); bump `manifest.json` versions to publish
+(no tags by hand); never poll the GitHub API from this network in loops
+(60 calls/hour shared with the boards; use `github.com/<repo>/releases/latest`).
+
 ## Session 2026-10-12 — PiSugar 2 moved to the Orange Pi: no battery shown
 
 The owner moved the PiSugar 2 to the Orange Pi Zero 2W and asked for the
