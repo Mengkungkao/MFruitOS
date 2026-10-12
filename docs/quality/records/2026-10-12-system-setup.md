@@ -61,16 +61,20 @@ installed version; the only path was the installer run by hand with sudo.
 | Board | Result |
 |---|---|
 | Orange Pi Zero 2W | offline the whole session (no ARP answer); NOT VERIFIED |
-| Raspberry Pi Zero 2 W | answers ping; every SSH connection timed out during the banner exchange (retried for over an hour); the read-only `--check-system` could not be run; NOT VERIFIED |
+| Raspberry Pi Zero 2 W, 2026-10-12 evening | every SSH connection timed out during the banner exchange for over an hour |
+| Raspberry Pi Zero 2 W, 2026-10-13 00:59 (mFruit OS `1.4.0-local20261010235737`, no job running, load 0.3, 232 MB free) | `install.sh --check-system` from the v1.6.0 release package, as the user: launcher and power units, daemon drop-in, `i2c-dev` list, shutdown hook, `mfruitctl` link, units enabled, driver (upstream c73051e, sound card loaded) all **match 1.6.0**; NetworkManager lets the launcher scan and join. **Missing:** `/etc/mfruit-os/system.conf`, `/usr/local/lib/mfruit-os/mfruit-system-apply`, `mfruit-system-apply.service`. Not readable without root: the polkit rule and `/etc/sudoers.d/whisplay-os` (the latter lacks the new start rule by construction). Driver: optional `i2c-tools` missing |
+| Pi Zero, owner's attempt | `bash ~/.whisplay-os/system/current/scripts/install.sh --system-only` → `Unknown option: --system-only`: `current` is still 1.4.0, whose installer has no such option |
 
-Which board lacks what therefore rests on the history above (both: the
-system part of 9110008 and later), not on a per-file check.
+So the Pi Zero's earlier system setup was already current apart from what
+1.6.0 adds; the guess from the history (that both boards lacked the system
+part of 9110008) was wrong for it. The Orange Pi is still unchecked.
 
 ## Not verified
 
 - The service against the published v1.6.0 release on a device (needs the
   one-time `--system-only` on a board first, which asks for the owner's
-  password).
+  password). The one-time step needs a 1.6.0 installer: update the board to
+  1.6.0 first, or run the release package's `install.sh --system-only`.
 - The fresh-install rehearsal with the new `verify.sh` checks (Docker on the
   Orange Pi, which is offline).
 - A system setup that changes the driver on a board (sound card rebuild,

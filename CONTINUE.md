@@ -20,7 +20,7 @@ what ([ADR 0015](docs/platform/ADR/0015-system-setup-from-releases.md),
 | S3 | Launcher: once per version after a confirmed System update; Settings → General → Software Update → System setup; `mfruitctl system-setup [check|apply]` | IMPLEMENTED, AUTOMATED |
 | S4 | Driver installer writes `~/.whisplay-daemon` as the user | IMPLEMENTED, AUTOMATED |
 | S5 | Release v1.6.0 | DONE by `release.yml`; the service's download/checksum/unpack checked against it from the dev machine |
-| S6 | Boards | NOT VERIFIED: Orange Pi offline all session; Pi Zero pings but every SSH session timed out |
+| S6 | Boards | Pi Zero (still 1.4.0): `--check-system` from the 1.6.0 package: everything matches except the three new service files (and sudoers/polkit, unreadable without root). Orange Pi: offline, unchecked. One-time `--system-only` NOT yet run on either |
 
 Next: on each board, once (asks for the owner's password; add the options it
 was installed with): `bash ~/.whisplay-os/system/current/scripts/install.sh
