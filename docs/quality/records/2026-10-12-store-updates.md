@@ -38,6 +38,7 @@ roll back); releases depended on manual steps that had been skipped.
 | MFruitOS v1.5.1 (Store row fix) | published by the workflow ~5 min after the version bump was pushed | no tag pushed by hand |
 | MFruitOS v1.5.2 (rate-limit retry) | same | published 10:29 local |
 | MFruitOS v1.5.3 (offers follow the installed version) | same | published 10:39 local |
+| Catalogue sync, hourly schedule | ran by itself at 23:31 UTC | success, no pin to move |
 
 The release monitoring here used up GitHub's 60 unauthenticated API calls an
 hour for the home network's address (shared with the boards); see 1.5.2.
@@ -79,7 +80,6 @@ Software Update after *Check now*.
 - An update on the Pi Zero (above), and over its weak Wi-Fi a 92 MB download.
 - RadioConnect updated through the Store on a device (both boards already had
   0.6.0).
-- The scheduled (cron) catalogue sync; it ran on push only so far.
 - Changes needing root after a Store system update (none in 1.5.x).
 
 
