@@ -1,6 +1,6 @@
 # mFruit OS architecture
 
-This document describes the **current implementation** (mFruit OS 1.5.3) and
+This document describes the **current implementation** (mFruit OS 1.6.0) and
 how it maps onto the **target architecture**. Rules live in
 [Development rules](DEVELOPMENT_RULES.md); the migration plan lives in the
 [Roadmap](ROADMAP.md). Status words follow
@@ -56,6 +56,7 @@ framebuffer and decides which app runs.
 | Exclusive keyboard capture and per-key routing | mFruit OS (`KeyReader` grab + `KeyHub`); the daemon in Daemon desktop mode |
 | Launcher UI, gestures inside the launcher, settings | mFruit OS |
 | App packages, versions, updates, registry | mFruit OS |
+| System setup (what runs as root: units, sudoers, polkit, shutdown hook, driver, packages) | `scripts/install.sh` (defines it; `--check-system`, `--system-only`); applied after System updates by `mfruit-system-apply.service` (root) from the official release, started by the launcher (`system/system_setup.py`, [ADR 0015](ADR/0015-system-setup-from-releases.md)) |
 | App features, app data, app-specific dependencies | each app |
 
 ## Layer map: current modules and target layers
@@ -99,6 +100,14 @@ which runs an `UpdateService`/`Installer` job on the `jobs` worker with a
 progress screen. On success the registry is refreshed and the app is
 registered with the daemon through `mfruit-run`. Details:
 [Update and rollback](../apps/UPDATE_ROLLBACK.md).
+
+**System setup.** Once a System update is confirmed healthy, the launcher
+asks systemd (one sudoers rule) to start `mfruit-system-apply.service`, at
+most once per version and never over an open app. The service, as root,
+downloads that version's release, checks it and runs its
+`install.sh --system-only`, which installs only what differs and restarts
+only what changed; *Settings → General → Software Update* shows the result.
+Details: [ADR 0015](ADR/0015-system-setup-from-releases.md).
 
 **Keys.** `KeyReader` holds every keyboard with `EVIOCGRAB`. Each key goes to
 whoever owned the screen when it went down: mFruit OS's own navigation, the

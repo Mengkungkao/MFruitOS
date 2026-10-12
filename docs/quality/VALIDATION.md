@@ -161,5 +161,6 @@ Before calling a version releasable, evaluate and record
 - [ ] Package lifecycle: install, launch, exit, update, failed update, rollback, uninstall with disposable data
 - [ ] Installer: fresh install and rerun preserve apps and settings; uninstall restores the daemon
 - [ ] System update and boot-guard rollback exercised
+- [ ] System setup after a System update: *System setup* shows *Up to date*, `install.sh --check-system` finds no difference (with sudo)
 - [ ] Hardware checklist above on each target board, with NOT VERIFIED items listed
 - [ ] Release notes state what was not tested

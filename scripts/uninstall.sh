@@ -30,6 +30,18 @@ if [ -f /etc/systemd/system/mfruit-power.service ]; then
   sudo systemctl daemon-reload
 fi
 sudo rm -f /usr/lib/systemd/system-shutdown/mfruit-power-off /lib/systemd/system-shutdown/mfruit-power-off
+say "Removing the system setup service"
+# mfruit-system-apply.service, its root-owned copy, record and status
+# (docs/platform/ADR/0015-system-setup-from-releases.md).
+if [ -f /etc/systemd/system/mfruit-system-apply.service ]; then
+  sudo systemctl stop mfruit-system-apply.service 2>/dev/null || true
+  sudo rm -f /etc/systemd/system/mfruit-system-apply.service
+  sudo systemctl daemon-reload
+fi
+sudo rm -f /usr/local/lib/mfruit-os/mfruit-system-apply /etc/mfruit-os/system.conf \
+  /var/lib/mfruit-os/system-setup.json /var/lib/mfruit-os/system-setup.log \
+  /var/lib/mfruit-os/system-setup.log.1
+sudo rmdir /usr/local/lib/mfruit-os /etc/mfruit-os /var/lib/mfruit-os 2>/dev/null || true
 # The i2c-dev module stays loaded until the next boot (other I2C tools may use it).
 sudo rm -f /etc/modules-load.d/mfruit-power.conf
 # PiSugar's own services, if the installer had stopped them.

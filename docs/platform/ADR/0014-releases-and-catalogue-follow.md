@@ -69,7 +69,8 @@ edit of the catalogue pin.
 - A *System update* from the Store replaces mFruit OS's code only. Changes to
   what `scripts/install.sh` sets up as root (services, sudoers, polkit, the
   shutdown hook) still need `sudo bash scripts/install.sh` on the device; the
-  release notes must say when a version needs it.
+  release notes must say when a version needs it. (From 1.6.0 the system
+  setup follows System updates: [ADR 0015](0015-system-setup-from-releases.md).)
 
 ## Compatibility
 

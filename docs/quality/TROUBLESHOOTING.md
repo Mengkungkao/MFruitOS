@@ -35,6 +35,8 @@ Daemon-managed apps that are not mFruit OS packages may log to
 | Fruit Store shows **Repair** | The app is registered but its folder is missing; Repair reinstalls it from the catalogue and keeps its settings. |
 | Typed keys reach the console | Should not happen while mFruit OS runs (keyboards are grabbed); check Daemon desktop mode, then report. |
 | Updater says "Internet unavailable" | Check the network; the check retries after 10 minutes. |
+| *System setup: Needs a computer* (Settings → General → Software Update) | The device was installed before 1.6.0. Once, over SSH: `bash ~/.whisplay-os/system/current/scripts/install.sh --system-only` (asks for your password); afterwards System updates bring their system setup ([Installation](../platform/INSTALLATION.md#the-system-setup)). |
+| *System setup: Failed* or *Not downloaded* | Its line says why; `/var/lib/mfruit-os/system-setup.log` has the details. *Apply system setup* tries again (it needs internet). `mfruitctl system-setup check` lists what differs on the device without changing anything. |
 | "GitHub rate limit reached" | Anonymous access allows 60 requests/hour per IP; set `updater.github_token` ([Configuration](../platform/CONFIGURATION.md)). |
 | Settings reset to defaults | A corrupt `settings.json` is kept as `settings.json.broken-<date>` and logged; fix or delete it. |
 | Button feels slow | Single clicks wait for the double-click window (300 ms). Lower *Settings → Button → Click speed*, or set double/triple click to *Nothing*. |

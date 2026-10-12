@@ -6,6 +6,38 @@ the OS version.
 
 ## Unreleased
 
+## [1.6.0] - 2026-10-12
+
+### Added
+- **System updates bring their system setup too, without a computer.** What
+  `install.sh` sets up as root (the launcher and power units, the daemon
+  drop-in, sudoers and polkit rules, the shutdown hook, the Whisplay driver,
+  packages) used to change only with `sudo bash scripts/install.sh`, so both
+  test boards ran system setups from before 1.5. Now, once a System update is
+  confirmed healthy, `mfruit-system-apply.service` (root) downloads that
+  version's official release, checks its SHA-256 and runs its
+  `install.sh --system-only`: only what differs is installed and only what
+  changed restarts. Root runs nothing from the user's folder and takes only
+  the version number from it ([ADR 0015](docs/platform/ADR/0015-system-setup-from-releases.md)).
+- *Settings → General → Software Update → System setup*: *Up to date*,
+  *Needed*, *Failed* or *Needs a computer*, with **Apply system setup** and
+  **Restart to finish setup**; `mfruitctl system-setup [check|apply]`.
+- `install.sh --check-system`: read-only, lists every difference between this
+  version's system setup and the device (with `sudo`, also the files only root
+  may read). `install.sh --system-only`: the system setup alone.
+
+### Changed
+- The installers touch the user's home only as the user (the Whisplay driver's
+  `~/.whisplay-daemon`, the list of replaced PiSugar services), since root now
+  runs them unattended.
+- The sudoers rule also allows `systemctl start mfruit-system-apply.service`
+  (no arguments).
+
+### Upgrade
+- Once per device installed before 1.6.0 (the screen says *Needs a
+  computer*): `bash ~/.whisplay-os/system/current/scripts/install.sh --system-only`
+  over SSH; it asks for your password.
+
 ## [1.5.3] - 2026-10-12
 
 ### Fixed

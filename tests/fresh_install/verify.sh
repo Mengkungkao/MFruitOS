@@ -67,6 +67,27 @@ for unit in whisplay-daemon.service whisplay-os.service mfruit-power.service; do
   expect "$unit names only existing groups" bash -c \
     "for g in \$(sed -n 's/^SupplementaryGroups=//p' /etc/systemd/system/$unit); do getent group \"\$g\" >/dev/null || exit 1; done"
 done
+
+# The system setup (docs/platform/ADR/0015-system-setup-from-releases.md).
+INSTALLED_SH="$HOME/.whisplay-os/system/current/scripts/install.sh"
+AS_SERVICE=(sudo env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin HOME=/root
+            LANG=C.UTF-8 SYSROOT="${SYSROOT:-}" bash "$INSTALLED_SH" --system-only --user "$(id -un)")
+expect "system setup service: root-owned applier, unit and record" bash -c \
+  'for f in /usr/local/lib/mfruit-os/mfruit-system-apply /etc/systemd/system/mfruit-system-apply.service /etc/mfruit-os/system.conf; do [ "$(stat -c %U "$f")" = root ] || exit 1; done'
+expect "  the record names this user and repository" bash -c \
+  "grep -qx 'TARGET_USER=$(id -un)' /etc/mfruit-os/system.conf && grep -qx 'REPOSITORY=https://github.com/Mengkungkao/MFruitOS' /etc/mfruit-os/system.conf"
+expect "  sudoers lets the launcher start it" sudo grep -q "start mfruit-system-apply.service" /etc/sudoers.d/whisplay-os
+expect "  status: this version's system setup applied" grep -q '"result": "ok"' /var/lib/mfruit-os/system-setup.json
+expect "--check-system: the device matches" bash "$INSTALLED_SH" --check-system
+sudo sed -i 's/^RestartSec=3$/RestartSec=9/' /etc/systemd/system/whisplay-os.service
+expect "--check-system finds a changed unit" bash -c "! bash '$INSTALLED_SH' --check-system"
+expect "--system-only as root (as the service runs it) puts it back" "${AS_SERVICE[@]}"
+expect "  the unit is back" grep -qx "RestartSec=3" /etc/systemd/system/whisplay-os.service
+expect "  status names what changed" grep -q '/etc/systemd/system/whisplay-os.service' /var/lib/mfruit-os/system-setup.json
+expect "--check-system matches again" bash "$INSTALLED_SH" --check-system
+expect "--system-only again changes nothing" bash -c \
+  "${AS_SERVICE[*]} | grep -q 'nothing needed changing'"
+
 expect "no build files left in the source tree" bash -c \
   '[ -z "$(find drivers/whisplay/audio -name "*.o" -o -name "*.ko" -o -name "*.dtbo" | head -1)" ]'
 

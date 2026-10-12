@@ -55,7 +55,8 @@ def runtime_unions(tree):
 
 # Python scripts without the .py suffix are listed explicitly. The bundled
 # Whisplay driver is upstream's (not edited here).
-for path in sorted(pathlib.Path(".").rglob("*.py")) + [pathlib.Path("scripts/mfruit-power-off")]:
+for path in sorted(pathlib.Path(".").rglob("*.py")) + [pathlib.Path("scripts/mfruit-power-off"),
+                                                     pathlib.Path("scripts/mfruit-system-apply")]:
     if any(part in {".git", "__pycache__", ".venv", "node_modules"} for part in path.parts):
         continue
     try:
@@ -92,7 +93,7 @@ shell_syntax() {
 
 line_endings() {
   local bad
-  bad="$(git ls-files -z -- '*.py' '*.sh' 'scripts/mfruit-run' 'scripts/mfruitctl' \
+  bad="$(git ls-files -z -- '*.py' '*.sh' 'scripts/mfruit-run' 'scripts/mfruitctl' 'scripts/mfruit-system-apply' \
          | xargs -0 grep -lI $'\r' 2>/dev/null || true)"
   [ -z "$bad" ] || { echo "CRLF line endings in:"; echo "$bad"; return 1; }
 }

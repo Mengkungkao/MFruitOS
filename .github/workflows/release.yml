@@ -2,8 +2,9 @@
 # version that has no release yet: bump "version" (and mfruitos/__init__.py),
 # push to main, and release v<version> appears with mfruit-os-<version>.tar.gz
 # and its .sha256 (scripts/build-release.sh). Devices offer it in
-# Settings > System > System update; it replaces the code only (the parts
-# scripts/install.sh sets up as root are not touched).
+# Settings > General > Software Update; it replaces the code, and afterwards
+# mfruit-system-apply.service on the device downloads the same release as root
+# for its system setup (docs/platform/ADR/0015-system-setup-from-releases.md).
 #
 # A pushed v* tag still works (it must match the manifest), and the workflow
 # can be run by hand to retry. Nothing is published unless scripts/check.sh

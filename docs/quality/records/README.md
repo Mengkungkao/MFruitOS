@@ -10,6 +10,8 @@ Name new records `YYYY-MM-DD-topic.md` and add them to the top of this list.
 
 | Date | Record | Scope |
 |---|---|---|
+| 2026-10-12 | [The system setup follows System updates](2026-10-12-system-setup.md) | 1.6.0: `install.sh --check-system`/`--system-only`, `mfruit-system-apply.service` from the official release; which board lacked what |
+| 2026-10-12 | [New software from the Fruit Store](2026-10-12-store-updates.md) | releases publish themselves, the Store list follows them; Orange Pi updated from its screens (AI Chatbot 1.1.0, mFruit OS 1.5.3) |
 | 2026-10-12 | [PiSugar 2 on the Orange Pi](2026-10-12-pisugar-orange-pi.md) | no battery shown: header I2C is bus 2 there (bus 1 is HDMI); silent battery chip told apart; device fix verified |
 | 2026-10-11 | [AI Chatbot 1.1.0 face](2026-10-11-ai-chatbot-face.md) | lip sync from the voice actually playing, listening/thinking poses; Pi Zero measurements of mouth vs microphone (app framebuffer, not the LCD) |
 | 2026-10-10 | [Other distributions](2026-10-10-distro-matrix.md) | Ubuntu 22.04/24.04 and Debian 11/12/13 suites without root; a simulated Raspberry Pi on Ubuntu 24.04; ten bugs fixed (groups, sound card build, polkit 0.105, Python 3.9, Pillow floor, ...) |

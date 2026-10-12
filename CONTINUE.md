@@ -6,6 +6,28 @@ History: [docs/quality/records/](docs/quality/records/README.md) (the previous
 hand-off is preserved verbatim in
 [2026-10-01-handoff.md](docs/quality/records/2026-10-01-handoff.md)).
 
+## Session 2026-10-12 (evening) — the system setup follows System updates (1.6.0)
+
+The owner: what still needed a computer after 1.5.x (the parts `install.sh`
+sets up as root) must update from the device too, and which device lacked
+what ([ADR 0015](docs/platform/ADR/0015-system-setup-from-releases.md),
+[record](docs/quality/records/2026-10-12-system-setup.md)).
+
+| # | Step | Status |
+|---|---|---|
+| S1 | `install.sh --check-system` (read-only diff) and `--system-only` (system setup only, only what differs, only changed services restart; as root with `--user`, never runs the user's Python); one owner of the system setup stays `install.sh` | IMPLEMENTED, AUTOMATED |
+| S2 | `mfruit-system-apply.service` + `scripts/mfruit-system-apply` (root): version from the user's files only, release from root's `/etc/mfruit-os/system.conf` repository, SHA-256, safe unpack, `install.sh --system-only`; sudoers `systemctl start mfruit-system-apply.service` | IMPLEMENTED, AUTOMATED (fake GitHub) |
+| S3 | Launcher: once per version after a confirmed System update; Settings → General → Software Update → System setup; `mfruitctl system-setup [check|apply]` | IMPLEMENTED, AUTOMATED |
+| S4 | Driver installer writes `~/.whisplay-daemon` as the user | IMPLEMENTED, AUTOMATED |
+| S5 | Boards | see the record: Orange Pi offline; Pi Zero reachable only intermittently |
+
+Next: on each board, once (asks for the owner's password; add the options it
+was installed with): `bash ~/.whisplay-os/system/current/scripts/install.sh
+--system-only` after updating to 1.6.0 from the screen; then
+`mfruitctl system-setup` should say applied for 1.6.0, and later System
+updates apply it by themselves. Run the rehearsal on the Orange Pi
+(`tests/fresh_install/rehearse.sh`, new system setup checks in `verify.sh`).
+
 ## Session 2026-10-12 (later) — new software from the Fruit Store, without a computer
 
 The owner: every device must get new software and updates from the Fruit

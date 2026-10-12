@@ -1,8 +1,8 @@
 # Configuration
 
 mFruit OS has one persistent settings file, a small set of environment
-variables and command-line options, and two read-only configuration files
-shipped with the code. The schema in `mfruitos/system/settings.py` (`SCHEMA`)
+variables and command-line options, two read-only configuration files
+shipped with the code, and the root-owned [system setup record](#system-setup-record). The schema in `mfruitos/system/settings.py` (`SCHEMA`)
 is the single source of truth; this document describes it. Do not read or
 write settings outside the `Settings` service
 ([Part I §15](DEVELOPMENT_RULES.md#15-configuration)).
@@ -185,6 +185,27 @@ and the model in `/etc/default/pisugar-server`) are imported once.
 | `compat_socket` | true | serve PiSugar's protocol on `/tmp/pisugar-server.sock` |
 | `power_off_at_shutdown` | true | the shutdown hook switches the board off after a power-off |
 | `tap_hooks` | off | `{single|double|long: {enabled, shell}}`, set by clients through PiSugar's protocol (`set_button_shell`); run as the mFruit user |
+
+## System setup record
+
+`/etc/mfruit-os/system.conf` (root-owned, 0644), written only by
+`scripts/install.sh` and read by `mfruit-system-apply.service`
+([ADR 0015](ADR/0015-system-setup-from-releases.md)) and by
+`install.sh --check-system`/`--system-only` for their defaults. Not a user
+setting: change it by running the installer again with other options.
+
+| Key | Meaning |
+|---|---|
+| `TARGET_USER` | the user mFruit OS runs as (never root) |
+| `OS_HOME` | their mFruit OS folder (`~/.whisplay-os`) |
+| `PYTHON` | the Python the services run (as that user) |
+| `REPOSITORY` | `https://github.com/OWNER/NAME` whose releases the system setup comes from (from the installed manifest) |
+| `INSTALL_POWER`, `WIFI_SETUP`, `BACKGROUND_DAEMON`, `INSTALL_DRIVER` | 1, or 0 when installed with `--no-power`, `--no-wifi-setup`, `--no-background-daemon`, `--no-driver` |
+
+Its status, `/var/lib/mfruit-os/system-setup.json` (written by `install.sh`
+and the service, read by the launcher): `version`, `result` (`ok`, `failed`,
+`offline`, `unsupported`), `message`, `reboot_required`, `changed`,
+`finished_at`; the log is `system-setup.log` next to it.
 
 ## Shipped configuration files
 

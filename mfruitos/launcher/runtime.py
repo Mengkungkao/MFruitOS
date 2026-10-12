@@ -44,7 +44,7 @@ from mfruitos.sdk.keys import DOWN as KEY_DOWN
 from mfruitos.sdk.keys import REPEAT as KEY_REPEAT
 from mfruitos.sdk.keys import UP as KEY_UP
 from mfruitos.sdk.keys import KeyEvent, KeyReader
-from mfruitos.system import hardware, system_info, wifi_setup
+from mfruitos.system import hardware, system_info, system_setup, wifi_setup
 from mfruitos.system.bluetooth import Bluetooth
 from mfruitos.system.settings import GESTURE_KEYS, Settings
 from mfruitos.updater.github import GitHubClient
@@ -62,6 +62,8 @@ FALLBACK_AFTER_SEC = 10.0
 FALLBACK_POLL_SEC = 5.0
 AUTOSTART_DELAY_SEC = 1.0
 UPDATE_TICK_SEC = 600
+# After a start without a System update: past autostart and the first minute.
+SYSTEM_SETUP_DELAY_SEC = 60.0
 SCRIPTS = ("mfruit-run", "mfruitctl", "boot-guard.sh", "whisplay-daemon-mfruit.py")
 # Keyboard keys -> launcher actions, the same map every mFruit app uses
 # (mfruitos/sdk/input.py).
@@ -250,6 +252,7 @@ class Runtime(ScreenServices):
     def _schedule_update_checks(self) -> None:
         # A cheap timestamp comparison; the actual interval lives in check_due().
         def tick():
+            self._maybe_apply_system_setup()
             if self.settings.get("updater.auto_check") and self.updater.check_due():
                 self.check_updates(quiet=True)
             else:
@@ -273,7 +276,34 @@ class Runtime(ScreenServices):
                 _remove(os.path.join(state, "pending_system_update.env"))
                 log.info("System update to %s confirmed healthy", __version__)
                 self.toast(f"Updated to {__version__}", "success")
+                self._maybe_apply_system_setup()
             self.loop.call_later(15.0, confirm_success)
+        else:
+            self.loop.call_later(SYSTEM_SETUP_DELAY_SEC, self._maybe_apply_system_setup)
+
+    def _maybe_apply_system_setup(self) -> None:
+        """The system setup (services, permissions, driver) follows the running
+        version once, after a System update or roll back: mfruit-system-apply
+        (docs/platform/ADR/0015-system-setup-from-releases.md). Not while an
+        app is open or another job runs (the update tick tries again); after
+        a failure only from Settings > Software Update."""
+        marker = os.path.join(self.paths.state_dir, "system_setup_requested")
+        if _read(marker).strip() == __version__:
+            return
+        status = system_setup.read_status()
+        if not status.installed or status.applied(__version__):
+            return
+        if self.apps.session is not None or self.tasks.busy("jobs"):
+            return
+        try:
+            with open(marker, "w", encoding="utf-8") as fp:
+                fp.write(__version__)
+        except OSError as exc:
+            log.warning("Cannot write %s: %s", marker, exc)
+            return
+        log.info("System setup of %s is due (last: %s %s); starting it", __version__,
+                 status.version or "none", status.result or "-")
+        self.apply_system_setup()
 
     def _maybe_autostart(self) -> None:
         marker = os.path.join(self.paths.state_dir, "autostart_boot_id")

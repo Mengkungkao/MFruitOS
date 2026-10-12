@@ -116,6 +116,8 @@ bash scripts/install.sh            # or: bash scripts/setup-device.sh --install
 | `--no-background-daemon` | keep whisplay-daemon's own desktop visible between apps |
 | `--dev` | run directly from the checkout (development; keep the directory in place) |
 | `--yes` | non-interactive; does not bypass sudo authorization |
+| `--check-system` | read-only: compare the [system setup](#the-system-setup) of this version with the device and list what differs (no root needed; with `sudo` it also compares the files only root may read) |
+| `--system-only` | only the system setup, for the version installed: no files copied, no questions, only changed services restarted. Run as root it needs `--user NAME` (`mfruit-system-apply.service` runs it that way) |
 
 What the installer does, in order:
 
@@ -160,6 +162,7 @@ What the installer does, in order:
 | PiSugar's `sugar-wifi-config.service` stopped and disabled, when present (same list; skipped with `--no-wifi-setup`) | it runs the same Bluetooth service as root all the time with the default key; mFruit OS runs it on demand as the user | enabled again |
 | `/etc/polkit-1/rules.d/49-mfruit-wifi.rules`, and `/etc/polkit-1/localauthority/50-local.d/49-mfruit-wifi.pkla` where polkit reads `.pkla` files (before 0.106, such as Ubuntu 22.04, or with Debian's `polkitd-pkla`) | grants the target user the listed NetworkManager scan/control/settings actions, because the service has no interactive polkit session; polkit 0.105 ignores the JavaScript rule | yes |
 | `/usr/local/bin/mfruitctl` symlink | `mfruitctl` on the PATH | yes |
+| `mfruit-system-apply.service`: `/etc/systemd/system/mfruit-system-apply.service`, `/usr/local/lib/mfruit-os/mfruit-system-apply` (root-owned copy of `scripts/mfruit-system-apply`), `/etc/mfruit-os/system.conf` (user, folder, Python, repository, options), status and log in `/var/lib/mfruit-os/` | a System update from the Fruit Store also brings its system setup (this table), from the official release of that version, without a computer ([ADR 0015](ADR/0015-system-setup-from-releases.md)) | yes |
 | Bluetooth rfkill soft block lifted (first install only) | fresh Raspberry Pi OS images can start with Bluetooth blocked; Settings > Bluetooth needs it on. systemd-rfkill keeps the state | no (turn it off in Settings) |
 
 No other system files are changed by mFruit OS itself. Adopted daemon app registrations are
@@ -228,9 +231,40 @@ Update the OS and all keyboard apps together so their SDK and key-hub
 contract match ([SDK](../apps/SDK.md)). Releases are published by
 `.github/workflows/release.yml` whenever `manifest.json` has a new version (the
 first was 1.5.0, 2026-10-12; [ADR 0014](ADR/0014-releases-and-catalogue-follow.md)).
-A system update replaces the code only: what this installer sets up as root
-(services, sudoers, polkit, the shutdown hook) changes only with `sudo bash
-scripts/install.sh`, and a release's notes say when that is needed.
+### The system setup
+
+A system update replaces the code in your folder. What this installer sets
+up as root (the [system changes](#system-changes-and-why-they-are-needed):
+services, sudoers, polkit, the shutdown hook, the driver, packages) is the
+**system setup**. From 1.6.0 it follows: once the update is confirmed
+healthy, the launcher starts `mfruit-system-apply.service`, which downloads
+the official release of the running version, checks its SHA-256 and runs its
+`install.sh --system-only` as root ([ADR 0015](ADR/0015-system-setup-from-releases.md)).
+It changes only what differs and restarts only what changed.
+*Settings → General → Software Update → System setup* shows the state and
+can apply it again; when the driver changed boot settings it offers
+**Restart to finish setup**.
+
+```bash
+mfruitctl system-setup              # applied for this version? last result
+mfruitctl system-setup check        # what differs on this device (read-only)
+sudo bash ~/.whisplay-os/system/current/scripts/install.sh --check-system
+                                    # also compares the files only root may read
+mfruitctl system-setup apply        # apply it now (progress on the screen)
+```
+
+A device installed before 1.6.0 has no service yet; *System setup* says
+*Needs a computer*. Once, over SSH (it asks for your password), run:
+
+```bash
+bash ~/.whisplay-os/system/current/scripts/install.sh --system-only
+```
+
+It sets up the service along with the rest of the system setup, without
+copying files or asking questions. Add the options the device was installed
+with, if any (`--no-power`, `--no-wifi-setup`, `--no-background-daemon`,
+`--no-driver`); from then on they are recorded in `/etc/mfruit-os/system.conf`. Logs: `/var/lib/mfruit-os/system-setup.log`
+and `journalctl -u mfruit-system-apply`.
 
 ### Manual rollback of a checkout installation
 
@@ -379,6 +413,12 @@ unless an install job is running. `mfruitctl catalog` then shows the radio
 apps without missing requirements.
 
 ## Upgrade notes
+
+**1.6.0:** once per device installed before 1.6.0, so System updates also
+bring their [system setup](#the-system-setup):
+`bash ~/.whisplay-os/system/current/scripts/install.sh --system-only` (asks
+for your password). Until then *Settings → General → Software Update* shows
+*System setup: Needs a computer*.
 
 **1.4.0:** update all keyboard apps to SDK 1.2.0 before restarting mFruit OS.
 The launcher grabs keyboards exclusively; older direct-input apps otherwise

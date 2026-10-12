@@ -53,6 +53,28 @@ def installer_block(name):
     return source.split(f"# >>> {name}\n", 1)[1].split(f"# <<< {name}\n", 1)[0]
 
 
+# The installer's own root helpers (put_file, load_module, ...) as a new
+# installation runs them; with fake_install below they work without root.
+HELPERS_PRELUDE = ('ok() { echo "ok $*"; }; warn() { echo "warn $*"; }; '
+                   'as_user() { "$@"; }; TMP_FILES=(); MODE=install\n'
+                   + installer_block("root helpers"))
+
+
+def fake_install(bin_dir):
+    """install(1) without -o/-g, and stat reporting root as the owner: the
+    tests are not root."""
+    real_install, real_stat = shutil.which("install"), shutil.which("stat")
+    for name, body in (
+            ("install", 'a=(); while [ $# -gt 0 ]; do case "$1" in -o|-g) shift 2 ;; '
+                        '*) a+=("$1"); shift ;; esac; done\n'
+                        f'exec {real_install} "${{a[@]}}"\n'),
+            ("stat", f'out="$({real_stat} "$@")" || exit $?\n'
+                     'echo "$out" | sed "s/ $(id -un)$/ root/"\n')):
+        target = Path(bin_dir) / name
+        target.write_text("#!/bin/bash\n" + body, encoding="utf-8")
+        target.chmod(0o755)
+
+
 @unittest.skipUnless(BASH, "bash is required for installer shell tests")
 class InstallerBlockTests(unittest.TestCase):
     """Installer blocks run alone, with command doubles and /etc in a temp dir."""
@@ -64,6 +86,7 @@ class InstallerBlockTests(unittest.TestCase):
         self.bin = self.tmp / "bin"
         self.bin.mkdir()
         self.command("sudo", '"$@"\n')
+        fake_install(self.bin)
 
     def command(self, name, body):
         target = self.bin / name
@@ -72,11 +95,10 @@ class InstallerBlockTests(unittest.TestCase):
 
     def run_block(self, name, prelude="", **env):
         block = installer_block(name).replace("/etc/polkit-1", (self.tmp / "polkit-1").as_posix())
-        script = ('ok() { echo "ok $*"; }; warn() { echo "warn $*"; }; '
-                  'as_user() { "$@"; }; TMP_FILES=()\n' + prelude + "\n" + block +
+        script = (HELPERS_PRELUDE + prelude + "\n" + block +
                   '\necho "GROUPS_LIST=${GROUPS_LIST-}"; echo "POWER_GROUPS=${POWER_GROUPS-}"\n')
         full = dict(os.environ, PATH=f"{self.bin}{os.pathsep}{os.environ['PATH']}",
-                    PYTHON=sys.executable, TARGET_USER="fixture")
+                    PYTHON=sys.executable, HELPER_PYTHON=sys.executable, TARGET_USER="fixture")
         full.update(env)
         return subprocess.run([BASH, "-c", "set -euo pipefail\n" + script], env=full,
                               text=True, capture_output=True, timeout=30)
@@ -319,7 +341,8 @@ class PowerServiceInstallTests(unittest.TestCase):
 
     def setUp(self):
         self.source = (SCRIPTS / "install.sh").read_text(encoding="utf-8")
-        self.unit = self.source.split('cat > "$POWER_TMP" <<EOF\n', 1)[1].split("\nEOF\n", 1)[0]
+        self.unit = self.source.split('put_file 644 "/etc/systemd/system/$POWER_SERVICE" <<EOF\n',
+                                      1)[1].split("\nEOF\n", 1)[0]
 
     def test_unit_runs_as_the_user_with_only_the_clock_capability(self):
         self.assertIn("User=$TARGET_USER", self.unit)
@@ -335,22 +358,30 @@ class PowerServiceInstallTests(unittest.TestCase):
         self.assertIn("# >>> power groups", self.source)
 
     def test_shutdown_hook_is_a_root_owned_copy(self):
-        self.assertIn('sed "s|@POWER_CONFIG@|$OS_HOME/config/power.json|" "$SRC/scripts/mfruit-power-off"',
+        self.assertIn('put_file 755 "$POWER_HOOK_DIR/mfruit-power-off" \\\n'
+                      '    < <(sed "s|@POWER_CONFIG@|$OS_HOME/config/power.json|" "$SRC/scripts/mfruit-power-off")',
                       self.source)
-        self.assertIn('sudo install -D -o root -g root -m 0755 "$HOOK_TMP" '
-                      '"$POWER_HOOK_DIR/mfruit-power-off"', self.source)
+        # put_file installs as root:root (InstallerRootHelperTests checks it).
+        self.assertIn('sudo install -D -o root -g root -m "$mode" "$tmp" "$dest"',
+                      installer_block("root helpers"))
         self.assertNotRegex(self.source, r"ln -s\S* [^\n]*system-shutdown")
         hook = (SCRIPTS / "mfruit-power-off").read_text(encoding="utf-8")
         self.assertIn('CONFIG = "@POWER_CONFIG@"', hook)
         self.assertTrue(hook.startswith("#!/usr/bin/python3 -I"))
 
-    def test_sudoers_allows_only_restart_poweroff_and_reboot(self):
+    def test_sudoers_allows_only_restart_poweroff_reboot_and_the_system_setup(self):
         line = next(l for l in self.source.splitlines()
                     if l.startswith("printf '%s ALL=(root) NOPASSWD:"))
-        self.assertIn("%s poweroff, %s reboot", line)
+        self.assertTrue(line.endswith(
+            "NOPASSWD: %s restart %s, %s restart %s, %s poweroff, %s reboot, %s start %s\\n' \\"), line)
         self.assertNotIn("ALL\\n", line.split("NOPASSWD:", 1)[1])
+        self.assertNotIn("*", line)
+        arguments = self.source.split(line, 1)[1].split("> \"$SUDOERS_TMP\"", 1)[0]
+        self.assertEqual(arguments.split(), [
+            '"$TARGET_USER"', '"$SYSTEMCTL"', '"$DAEMON_SERVICE"', '"$SYSTEMCTL"', '"$SERVICE"',
+            '"$SYSTEMCTL"', '"$SYSTEMCTL"', '\\', '"$SYSTEMCTL"', '"$APPLY_SERVICE"'])
 
-    def run_i2c_dev_block(self, modprobe_exit, etc_modules=""):
+    def run_i2c_dev_block(self, modprobe_exit, etc_modules="", own_conf=None):
         """Run the installer's i2c-dev lines with sudo/modprobe doubles."""
         block = self.source.split("  # >>> i2c-dev\n", 1)[1].split("  # <<< i2c-dev\n", 1)[0]
         with tempfile.TemporaryDirectory() as tmp:
@@ -363,7 +394,10 @@ class PowerServiceInstallTests(unittest.TestCase):
             (tmp / "bin" / "sudo").write_text('#!/bin/sh\n"$@"\n')
             for name in ("modprobe", "sudo"):
                 (tmp / "bin" / name).chmod(0o755)
-            script = (f'PATH="{tmp}/bin:$PATH"\nok() {{ echo "ok $*"; }}\nwarn() {{ echo "warn $*"; }}\n'
+            fake_install(tmp / "bin")
+            if own_conf is not None:
+                (tmp / "modules-load.d" / "mfruit-power.conf").write_text(own_conf, encoding="utf-8")
+            script = (f'PATH="{tmp}/bin:$PATH"\n' + HELPERS_PRELUDE +
                       f'I2C_DEV_CONF="{tmp}/modules-load.d/mfruit-power.conf"\n'
                       f'I2C_MODULE_LISTS="{tmp}/modules {tmp}/modules-load.d/*.conf"\n' + block)
             result = subprocess.run(["bash", "-euo", "pipefail", "-c", script], capture_output=True,
@@ -387,6 +421,13 @@ class PowerServiceInstallTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIsNone(conf)
         self.assertIn("already loaded at boot", result.stdout)
+
+    @unittest.skipUnless(shutil.which("bash"), "bash is required")
+    def test_its_own_list_file_stays_and_is_not_counted_as_another_list(self):
+        result, conf, _ = self.run_i2c_dev_block(0, own_conf="i2c-dev\n")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(conf, "i2c-dev\n")
+        self.assertNotIn("already loaded at boot", result.stdout)
 
     @unittest.skipUnless(shutil.which("bash"), "bash is required")
     def test_a_missing_i2c_dev_module_warns_and_does_not_stop_the_install(self):
@@ -435,8 +476,9 @@ class WifiSetupInstallTests(unittest.TestCase):
     def test_option_and_pisugar_service_hand_over(self):
         self.assertIn("--no-wifi-setup) WIFI_SETUP=0 ;;", self.source)
         block = self.source.split("for unit in sugar-wifi-config.service; do", 1)[1].split("done", 1)[0]
-        self.assertIn('sudo systemctl disable --now "$unit"', block)
+        self.assertIn('if disable_unit "$unit"; then', block)
         self.assertIn("pisugar-services-disabled", block)
+        self.assertIn('sudo systemctl disable --now "$1"', installer_block("root helpers"))
 
     def test_offline_packs_carry_the_tool(self):
         pack = (SCRIPTS / "make-offline-pack.sh").read_text(encoding="utf-8")

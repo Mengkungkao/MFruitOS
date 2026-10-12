@@ -99,6 +99,7 @@ def run_preview(outdir: str | None) -> int:
     from mfruitos.system.bluetooth import BtDevice, Prompt
     from mfruitos.launcher.ui.screens.boot import DONE, RUNNING
     from mfruitos.system.diagnostics import CheckResult
+    from mfruitos.system import system_setup
     from mfruitos.updater.github import Release
     from mfruitos.updater.service import UpdateInfo
 
@@ -209,6 +210,10 @@ def run_preview(outdir: str | None) -> int:
                              "stars": 3}]
         shot("34-discover", discover)
         shot("35-system-update", updater.SystemUpdateScreen(rt))
+        shot("35-system-setup-needed", updater.SystemUpdateScreen(rt, lambda: system_setup.SetupStatus(
+            installed=True, version="1.5.3", result="ok")))
+        shot("35-system-setup-done", updater.SystemUpdateScreen(rt, lambda: system_setup.SetupStatus(
+            installed=True, version=__version__, result="ok", reboot_required=True)))
         rt.updater.online = False
         shot("36-updater-offline", updater.UpdaterScreen(rt))
         rt.updater.online = True

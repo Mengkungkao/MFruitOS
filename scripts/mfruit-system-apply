@@ -1,0 +1,331 @@
+#!/usr/bin/python3 -I
+"""mFruit OS: apply the system setup of the version the user runs.
+
+A System update from the Fruit Store replaces mFruit OS's code in the user's
+folder. The system setup (what scripts/install.sh installs as root: systemd
+units, sudoers and polkit rules, the shutdown hook, the Whisplay driver,
+packages) is root's, so this applies it: installed by scripts/install.sh as a
+root-owned copy in /usr/local/lib/mfruit-os/mfruit-system-apply and run by
+mfruit-system-apply.service, which the launcher may start through one sudoers
+rule (docs/platform/ADR/0015-system-setup-from-releases.md).
+
+What it trusts is root's: /etc/mfruit-os/system.conf (written by
+install.sh) names the user, their mFruit OS folder and the GitHub repository.
+From the user's files it reads only the version number of the active
+mFruit OS, as that user. The code it runs as root is that version's release
+package from the repository, downloaded over HTTPS, checked against the
+SHA-256 published with it and unpacked into a folder only root can write;
+then its scripts/install.sh --system-only runs as root. The user's copy of
+the code is never run or imported as root.
+
+Writes /var/lib/mfruit-os/system-setup.json (read by the launcher) when it
+fails; install.sh writes it when the setup is done. Standard library only.
+
+    mfruit-system-apply           apply, unless this version's setup is done
+    mfruit-system-apply --force   apply again
+"""
+
+import contextlib
+import hashlib
+import json
+import os
+import pwd
+import re
+import shutil
+import stat
+import subprocess
+import sys
+import tarfile
+import tempfile
+import time
+import urllib.error
+import urllib.request
+
+CONF = "/etc/mfruit-os/system.conf"
+STATE_DIR = "/var/lib/mfruit-os"
+STATUS_FILE = os.path.join(STATE_DIR, "system-setup.json")
+LOG_FILE = os.path.join(STATE_DIR, "system-setup.log")
+# The first release whose install.sh has --system-only.
+MIN_VERSION = (1, 6, 0)
+PACKAGE_LIMIT = 100 * 1024 * 1024        # devices' default updater.max_download_mb
+UNPACKED_LIMIT = 400 * 1024 * 1024
+SETUP_TIMEOUT_SEC = 40 * 60
+SAFE_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ROOT_UID = 0    # who must own the record (tests, which are not root, change it)
+
+VERSION_RE = re.compile(r"(\d{1,4})\.(\d{1,4})\.(\d{1,6})")
+USER_RE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9._-]{0,31}")
+REPOSITORY_RE = re.compile(r"https://github\.com/([A-Za-z0-9][A-Za-z0-9-]{0,38})/([A-Za-z0-9._-]{1,100})")
+
+
+class SetupError(Exception):
+    """result: "failed", "offline" or "unsupported" (shown by the launcher)."""
+
+    def __init__(self, result, message):
+        super().__init__(message)
+        self.result = result
+        self.message = message
+
+
+LOG_STREAM = None    # the log file while main() runs
+
+
+def log(text):
+    print(time.strftime("%H:%M:%S ") + text, file=LOG_STREAM or sys.stdout, flush=True)
+
+
+def read_conf(path=None):
+    """The root-owned record install.sh wrote; refuse anything else."""
+    path = path or CONF
+    try:
+        info = os.lstat(path)
+    except OSError:
+        raise SetupError("failed", f"{path} is missing: run scripts/install.sh once")
+    if not stat.S_ISREG(info.st_mode) or info.st_uid != ROOT_UID or info.st_mode & 0o022:
+        raise SetupError("failed", f"{path} must be a file only root can change")
+    values = {}
+    with open(path, encoding="utf-8") as fp:
+        for line in fp:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, value = line.split("=", 1)
+                values[key.strip()] = value.strip()
+    user = values.get("TARGET_USER", "")
+    if not USER_RE.fullmatch(user):
+        raise SetupError("failed", f"{path}: no valid TARGET_USER")
+    try:
+        account = pwd.getpwnam(user)
+    except KeyError:
+        raise SetupError("failed", f"{path}: unknown user {user}")
+    if account.pw_uid == 0:
+        raise SetupError("failed", f"{path}: mFruit OS does not run as root")
+    home = values.get("OS_HOME", "")
+    if not home.startswith("/") or os.path.normpath(home) != home or "\n" in home:
+        raise SetupError("failed", f"{path}: OS_HOME must be an absolute path")
+    if not REPOSITORY_RE.fullmatch(values.get("REPOSITORY", "")):
+        raise SetupError("failed", f"{path}: REPOSITORY must be https://github.com/OWNER/NAME")
+    values["account"] = account
+    return values
+
+
+@contextlib.contextmanager
+def as_user(account):
+    """Act as the user (files in their folder are read with their rights)."""
+    if os.geteuid() != 0:
+        yield
+        return
+    groups = os.getgroups()
+    os.setgroups(os.getgrouplist(account.pw_name, account.pw_gid))
+    os.setegid(account.pw_gid)
+    os.seteuid(account.pw_uid)
+    try:
+        yield
+    finally:
+        os.seteuid(0)
+        os.setegid(0)
+        os.setgroups(groups)
+
+
+def parse_version(text):
+    match = VERSION_RE.fullmatch(text) if isinstance(text, str) else None
+    return tuple(int(part) for part in match.groups()) if match else None
+
+
+def running_version(conf):
+    """The version of the user's active mFruit OS: the only thing taken from
+    their files. Read as the user, a regular file of at most 64 KiB."""
+    path = os.path.join(conf["OS_HOME"], "system", "current", "manifest.json")
+    try:
+        with as_user(conf["account"]):
+            fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
+            try:
+                info = os.fstat(fd)
+                if not stat.S_ISREG(info.st_mode) or info.st_size > 65536:
+                    raise SetupError("failed", f"{path} is not a manifest")
+                data = os.read(fd, 65536)
+            finally:
+                os.close(fd)
+        manifest = json.loads(data.decode("utf-8"))
+    except (OSError, ValueError) as exc:
+        raise SetupError("failed", f"cannot read the installed version ({path}): {exc}")
+    version = manifest.get("version") if isinstance(manifest, dict) else None
+    if not isinstance(manifest, dict) or manifest.get("id") != "mfruit-os" or parse_version(version) is None:
+        raise SetupError("failed", f"{path} is not an mFruit OS manifest with a version")
+    return version
+
+
+def read_status(path=None):
+    try:
+        with open(path or STATUS_FILE, encoding="utf-8") as fp:
+            data = json.load(fp)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def write_status(data, path=None):
+    path = path or STATUS_FILE
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fp:
+        json.dump(data, fp, indent=1)
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, path)
+
+
+def download(url, target, limit):
+    """HTTPS only, also after redirects (GitHub sends assets elsewhere)."""
+    request = urllib.request.Request(url, headers={"User-Agent": "mfruit-system-apply"})
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response, open(target, "wb") as out:
+            if not response.geturl().startswith("https://"):
+                raise SetupError("failed", f"{url} was redirected away from HTTPS")
+            size = 0
+            while True:
+                chunk = response.read(65536)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > limit:
+                    raise SetupError("failed", f"{url} is larger than {limit // (1024 * 1024)} MB")
+                out.write(chunk)
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            raise SetupError("failed", f"no release package at {url}")
+        raise SetupError("offline", f"GitHub answered {exc.code} for {url}")
+    except (urllib.error.URLError, OSError) as exc:
+        reason = getattr(exc, "reason", exc)
+        raise SetupError("offline", f"cannot download {url}: {reason}")
+
+
+def verify(archive, checksum_file, name):
+    with open(checksum_file, encoding="utf-8", errors="replace") as fp:
+        fields = fp.read(4096).split()
+    if len(fields) < 2 or not re.fullmatch(r"[0-9a-f]{64}", fields[0]) or fields[1].lstrip("*") != name:
+        raise SetupError("failed", f"{os.path.basename(checksum_file)} is not a SHA-256 for {name}")
+    digest = hashlib.sha256()
+    with open(archive, "rb") as fp:
+        for block in iter(lambda: fp.read(1 << 20), b""):
+            digest.update(block)
+    if digest.hexdigest() != fields[0]:
+        raise SetupError("failed", f"{name} does not match its published SHA-256")
+
+
+def safe_extract(archive, target):
+    """Only files and folders, all inside mfruit-os/, owned by root and
+    writable only by root."""
+    with tarfile.open(archive, "r:gz") as tar:
+        members = tar.getmembers()
+        total = 0
+        for member in members:
+            parts = member.name.split("/")
+            if member.name.startswith("/") or ".." in parts or parts[0] != "mfruit-os":
+                raise SetupError("failed", f"the package holds an unexpected path: {member.name!r}")
+            if not (member.isfile() or member.isdir()):
+                raise SetupError("failed", f"the package holds a link or device: {member.name!r}")
+            total += member.size
+            if total > UNPACKED_LIMIT:
+                raise SetupError("failed", "the package unpacks to more than expected")
+        if hasattr(tarfile, "data_filter"):
+            tar.extractall(target, members=members, filter="data")
+        else:
+            tar.extractall(target, members=members)
+    for folder, dirs, files in os.walk(target):
+        for name in [folder] + [os.path.join(folder, f) for f in files]:
+            info = os.lstat(name)
+            if os.geteuid() == 0:
+                os.lchown(name, 0, 0)
+            os.chmod(name, stat.S_IMODE(info.st_mode) & 0o755)
+    return os.path.join(target, "mfruit-os")
+
+
+def check_package(package, version):
+    try:
+        with open(os.path.join(package, "manifest.json"), encoding="utf-8") as fp:
+            manifest = json.load(fp)
+    except (OSError, ValueError):
+        raise SetupError("failed", "the package has no manifest")
+    if (manifest.get("id"), manifest.get("type"), manifest.get("version")) != ("mfruit-os", "system", version):
+        raise SetupError("failed", f"the package is not mFruit OS {version}")
+    installer = os.path.join(package, "scripts", "install.sh")
+    try:
+        with open(installer, encoding="utf-8") as fp:
+            if "--system-only)" not in fp.read():
+                raise SetupError("unsupported", f"mFruit OS {version} has no system setup service")
+    except OSError:
+        raise SetupError("failed", "the package has no scripts/install.sh")
+    return installer
+
+
+def run_setup(installer, conf, log_fp):
+    command = ["/bin/bash", installer, "--system-only", "--user", conf["TARGET_USER"], "--yes"]
+    env = {"PATH": SAFE_PATH, "LANG": "C.UTF-8", "HOME": "/root", "WHISPLAY_OS_HOME": conf["OS_HOME"]}
+    log("running " + " ".join(command))
+    try:
+        return subprocess.run(command, cwd="/", env=env, stdin=subprocess.DEVNULL, stdout=log_fp,
+                              stderr=subprocess.STDOUT, timeout=SETUP_TIMEOUT_SEC).returncode
+    except subprocess.TimeoutExpired:
+        raise SetupError("failed", f"the system setup took longer than {SETUP_TIMEOUT_SEC // 60} minutes")
+
+
+def apply(conf, version, force=False, log_fp=None):
+    if parse_version(version) < MIN_VERSION:
+        raise SetupError("unsupported", f"mFruit OS {version} has no system setup service; update mFruit OS")
+    status = read_status()
+    if not force and status.get("version") == version and status.get("result") == "ok":
+        log(f"the system setup of mFruit OS {version} is already applied")
+        return version
+    owner, name = REPOSITORY_RE.fullmatch(conf["REPOSITORY"]).groups()
+    package = f"mfruit-os-{version}.tar.gz"
+    url = f"https://github.com/{owner}/{name}/releases/download/v{version}/{package}"
+    work = tempfile.mkdtemp(prefix="work.", dir=STATE_DIR)    # 0700, root's
+    try:
+        log(f"downloading {url}")
+        download(url + ".sha256", os.path.join(work, package + ".sha256"), 4096)
+        download(url, os.path.join(work, package), PACKAGE_LIMIT)
+        verify(os.path.join(work, package), os.path.join(work, package + ".sha256"), package)
+        log("SHA-256 verified")
+        installer = check_package(safe_extract(os.path.join(work, package), os.path.join(work, "src")), version)
+        if log_fp is not None:
+            log_fp.flush()
+        code = run_setup(installer, conf, log_fp)
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+    if code != 0:
+        raise SetupError("failed", f"the system setup stopped (install.sh exit {code}); see {LOG_FILE}")
+    done = read_status()
+    if done.get("version") != version or done.get("result") != "ok":
+        raise SetupError("failed", f"the system setup did not finish; see {LOG_FILE}")
+    return version
+
+
+def main(argv=None):
+    global LOG_STREAM
+    args = sys.argv[1:] if argv is None else argv
+    if args and args[0] in ("-h", "--help"):
+        print(__doc__.strip())
+        return 0
+    os.makedirs(STATE_DIR, mode=0o755, exist_ok=True)
+    if os.path.exists(LOG_FILE):
+        os.replace(LOG_FILE, LOG_FILE + ".1")
+    with open(LOG_FILE, "w", encoding="utf-8") as log_fp:
+        os.chmod(LOG_FILE, 0o644)
+        LOG_STREAM = log_fp
+        version = ""
+        try:
+            conf = read_conf()
+            version = running_version(conf)
+            apply(conf, version, force="--force" in args, log_fp=log_fp)
+            log("done")
+            return 0
+        except SetupError as exc:
+            log(exc.message)
+            write_status({"version": version, "result": exc.result, "message": exc.message,
+                          "finished_at": time.time(), "log": LOG_FILE, "by": "mfruit-system-apply"})
+            print(exc.message, file=sys.stderr)      # the journal
+            return 1
+        finally:
+            LOG_STREAM = None
+
+
+if __name__ == "__main__":
+    sys.exit(main())

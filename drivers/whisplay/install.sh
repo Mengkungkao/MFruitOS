@@ -437,6 +437,12 @@ EOF
   ok "driver files installed at $DRIVER_DIR (upstream $(upstream_commit))"
 }
 
+as_daemon_user() {  # USER COMMAND...
+  local user="$1"
+  shift
+  if [ "$(id -un)" = "$user" ]; then "$@"; else runuser -u "$user" -- "$@"; fi
+}
+
 install_daemon_service() {
   local user="$1" home uid group python_bin tmp groups
   home="$(getent passwd "$user" | cut -d: -f6)"
@@ -444,10 +450,17 @@ install_daemon_service() {
   group="$(id -gn "$user")"
   python_bin="$(command -v python3)"
   groups="$(daemon_groups)"
-  install -d -m 0755 -o "$user" -g "$group" "$home/.whisplay-daemon" "$home/.whisplay-daemon/app"
-  if [ ! -f "$home/.whisplay-daemon/settings.json" ]; then
-    printf '{\n  "apps_dir": "%s"\n}\n' "$home/.whisplay-daemon/app" >"$home/.whisplay-daemon/settings.json"
-    chown "$user:$group" "$home/.whisplay-daemon/settings.json"
+  # As the user, not root: root would follow any link put in their home
+  # (mfruit-system-apply.service runs this as root without the user present).
+  if ! as_daemon_user "$user" mkdir -p "$home/.whisplay-daemon/app" 2>/dev/null; then
+    # Left root-owned by an earlier installer: give the folder (never a link) back.
+    [ ! -L "$home/.whisplay-daemon" ] || die "$home/.whisplay-daemon is a link; not changed"
+    chown -h "$user:$group" "$home/.whisplay-daemon"
+    as_daemon_user "$user" mkdir -p "$home/.whisplay-daemon/app"
+  fi
+  if ! as_daemon_user "$user" test -e "$home/.whisplay-daemon/settings.json"; then
+    printf '{\n  "apps_dir": "%s"\n}\n' "$home/.whisplay-daemon/app" \
+      | as_daemon_user "$user" tee "$home/.whisplay-daemon/settings.json" >/dev/null
     ok "daemon settings created"
   else
     ok "daemon settings and app registrations kept"

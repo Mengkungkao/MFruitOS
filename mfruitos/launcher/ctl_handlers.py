@@ -263,6 +263,16 @@ def _wifi_setup(rt, args):
             "paused_by": sorted(service.paused), "mode": rt.settings.get("wifi_setup.mode")}
 
 
+def _system_setup(rt, args):
+    """mfruitctl system-setup apply: the same job as Settings > Software Update."""
+    if rt.tasks.busy("jobs"):
+        return {"ok": False, "error": f"busy: {rt.tasks.active.get('jobs')}"}
+    if not rt.apply_system_setup():
+        return {"ok": False, "error": "could not start the system setup"}
+    return {"ok": True, "message": "system setup started; progress is shown on the device; "
+                                   "result: mfruitctl system-setup"}
+
+
 COMMANDS = {
     "status": _status, "ping": _status, "summon": _summon, "gesture": _gesture,
     "action": _action, "button": _button, "key": _key, "screenshot": _screenshot,
@@ -271,6 +281,7 @@ COMMANDS = {
     "sideload": _sideload, "catalog": _catalog, "jobs": _jobs, "restart": _restart,
     "app.background": _app_background,
     "wifi-setup": _wifi_setup,
+    "system-setup": _system_setup,
     "uninstall": lambda rt, args: _package_action(rt, args, "uninstall"),
     "delete": lambda rt, args: _package_action(rt, args, "delete"),
     "reset": lambda rt, args: _package_action(rt, args, "reset"),

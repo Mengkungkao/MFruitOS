@@ -30,6 +30,12 @@
     mfruitctl power shutdown|reboot   power off or restart safely
     mfruitctl power probe             look for the battery board again
     mfruitctl power clock save|load   battery board clock <- system / system <- board
+    mfruitctl system-setup            the system setup (services, permissions, driver) of
+                                      this version: applied or not, and the last result
+    mfruitctl system-setup check      compare it with this device (read-only;
+                                      scripts/install.sh --check-system)
+    mfruitctl system-setup apply      apply it from this version's release (as on the device:
+                                      Settings > General > Software Update > System setup)
 """
 
 from __future__ import annotations
@@ -64,6 +70,23 @@ def _release() -> int:
     return 0
 
 
+def _system_setup(action: str) -> int:
+    """Status and check run here; apply goes through the launcher (a job)."""
+    import os
+    import subprocess
+    from dataclasses import asdict
+
+    from mfruitos import __version__
+    from mfruitos.system import system_setup
+    if action == "check":
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        return subprocess.call(["bash", os.path.join(root, "scripts", "install.sh"), "--check-system"])
+    status = system_setup.read_status()
+    print(json.dumps(dict(asdict(status), running=__version__, applied=status.applied(__version__),
+                          log=system_setup.LOG_FILE), indent=2))
+    return 0
+
+
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if not argv or argv[0] in ("-h", "--help", "help"):
@@ -72,6 +95,8 @@ def main(argv=None) -> int:
     command, rest = argv[0], argv[1:]
     if command == "release":
         return _release()
+    if command == "system-setup" and (not rest or rest[0] in ("status", "check")):
+        return _system_setup(rest[0] if rest else "status")
     if command == "power":
         # The power service is its own process with its own socket.
         from mfruitos.power.__main__ import main as power_main
@@ -98,6 +123,8 @@ def main(argv=None) -> int:
         cmd, args = command, {"app_id": rest[0]}
     elif command == "wifi-setup":
         cmd, args = "wifi-setup", {"action": rest[0] if rest else "status"}
+    elif command == "system-setup" and rest[0] == "apply":
+        cmd, args = "system-setup", {}
     elif command == "catalog":
         cmd, args = "catalog", {"app_id": rest[0] if rest else ""}
     elif command == "screenshot":

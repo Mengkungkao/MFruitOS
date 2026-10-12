@@ -23,4 +23,5 @@ rewritten to change its decision; a later record supersedes it.
 | [0012](0012-own-power-management.md) | mFruit OS has its own power management | Accepted 2026-10-10 |
 | [0013](0013-phone-wifi-setup.md) | Wi-Fi from a phone with PiSugar's sugar-wifi-conf, run by mFruit OS | Accepted 2026-10-10 |
 | [0014](0014-releases-and-catalogue-follow.md) | Releases publish themselves; the Fruit Store follows verified releases | Accepted 2026-10-12 |
+| [0015](0015-system-setup-from-releases.md) | The system setup follows System updates, from the official release | Accepted 2026-10-12 |
 | [0006](0006-settings-provider-apps.md) | Settings provider apps instead of a hard-coded Wi-Fi app | **Proposed** — awaiting the owner's decision |

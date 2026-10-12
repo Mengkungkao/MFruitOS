@@ -6,6 +6,7 @@ machine. Package installation, the sound card build and systemd are covered
 by device validation (docs/WHISPLAY_DRIVER.md).
 """
 
+import json
 import os
 import shutil
 import subprocess
@@ -231,6 +232,45 @@ class DaemonServiceGroups(unittest.TestCase):
                 self.assertEqual(line, f"SupplementaryGroups={expected}")
                 for listed in line.split("=", 1)[1].split():
                     self.assertIn(listed, groups.split(), f"{listed} does not exist on {system}")
+
+
+class DaemonSettingsWrittenAsTheUser(unittest.TestCase):
+    """~/.whisplay-daemon is written as its user, never by root: the system
+    setup service runs this installer as root with nobody watching, and a
+    link the user's programs put in their home must not send a root-owned
+    write elsewhere (docs/platform/ADR/0015-system-setup-from-releases.md)."""
+
+    def test_another_users_home_is_written_through_runuser(self):
+        tmp = tempfile.mkdtemp(prefix="mfruit-daemon-home-")
+        self.addCleanup(shutil.rmtree, tmp, True)
+        fakes = os.path.join(tmp, "bin")
+        os.makedirs(fakes)
+        log = os.path.join(tmp, "runuser.log")
+        home = os.path.join(tmp, "home")
+        os.makedirs(home)
+        real_id = shutil.which("id")
+        for name, body in (
+                ("runuser", f'echo "$*" >> "{log}"\nshift 3\nexec "$@"\n'),
+                ("id", 'case "$*" in "-u otheruser") echo 1001 ;; "-gn otheruser") echo otheruser ;;\n'
+                       f'*) exec {real_id} "$@" ;; esac\n'),
+                ("systemctl", "exit 0\n")):
+            with open(os.path.join(fakes, name), "w") as fp:
+                fp.write("#!/bin/sh\n" + body)
+            os.chmod(os.path.join(fakes, name), 0o755)
+        result = bash(f'UNIT_PATH="{tmp}/whisplay-daemon.service"; BACKUP_DIR="{tmp}/backup"; '
+                      f'DRIVER_DIR="{tmp}/driver"; PLATFORM=raspberry_pi; DAEMON_CHANGED=0; '
+                      f'getent() {{ if [ "$1" = passwd ]; then echo "otheruser:x:1001:1001::{home}:/bin/sh"; '
+                      f'else command getent "$@"; fi; }}; install_daemon_service otheruser',
+                      PATH=f"{fakes}:{os.environ['PATH']}")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        with open(log) as fp:
+            calls = fp.read().splitlines()
+        settings = os.path.join(home, ".whisplay-daemon", "settings.json")
+        self.assertEqual(calls, [f"-u otheruser -- mkdir -p {home}/.whisplay-daemon/app",
+                                 f"-u otheruser -- test -e {settings}",
+                                 f"-u otheruser -- tee {settings}"])
+        with open(settings) as fp:
+            self.assertEqual(json.load(fp), {"apps_dir": f"{home}/.whisplay-daemon/app"})
 
 
 class StagedDriverCopy(unittest.TestCase):

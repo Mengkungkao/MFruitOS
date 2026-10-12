@@ -45,6 +45,7 @@ MFruitOS/
 | `system/bluetooth.py` | BlueZ discovery, pairing agent, device actions | C (Linux/BlueZ-specific) |
 | `system/hardware.py` | backlight and LED policy; battery read from PiSugar's own server (fallback when the power service is not installed) | E (daemon + PiSugar) |
 | `system/sdnotify.py` | systemd notify protocol (launcher and power service) | C |
+| `system/system_setup.py` | the system setup's status, and starting `mfruit-system-apply.service` through its sudoers rule ([ADR 0015](ADR/0015-system-setup-from-releases.md)) | C |
 | `system/wifi_setup.py` | Wi-Fi from a phone: installs PiSugar's sugar-wifi-conf (pinned, SHA-256), writes its config, runs and stops it, parses its log ([ADR 0013](ADR/0013-phone-wifi-setup.md)) | C (Linux/BlueZ/NetworkManager-specific) |
 | `power/` | power service (own process, `mfruit-power.service`): `service.py` policies, `config.py` (`power.json`, PiSugar import), `server.py` sockets, `compat.py` PiSugar protocol, `client.py`, `__main__.py` CLI ([ADR 0012](ADR/0012-own-power-management.md)) | C |
 | `paths.py`, `logs.py`, `provision.py`, `ctl.py` | data layout and path safety, logging, first-install provisioning, `mfruitctl` client | C |
@@ -76,6 +77,7 @@ MFruitOS/
 | `boot-guard.sh` | device | rolls back a system update that fails to start three times |
 | `whisplay-daemon-mfruit.py` | device | starts whisplay-daemon with its UI in the background |
 | `mfruit-power-off` | device (root-owned copy in `/usr/lib/systemd/system-shutdown/`) | switches a PiSugar off at the end of a power-off |
+| `mfruit-system-apply` | device (root-owned copy in `/usr/local/lib/mfruit-os/`, run by `mfruit-system-apply.service`) | applies the system setup of the running version from its official release ([ADR 0015](ADR/0015-system-setup-from-releases.md)) |
 | `deploy.sh` | developer machine | make a device's `~/MFruitOS` an exact copy of this checkout (same commit when it is a clone, files mirrored, its `.git` and `offline/` kept), then install (`--sync-only` skips that) |
 | `sdk-sync.sh` | developer machine | vendor the SDK into an app; `--check` detects drift |
 | `check-app.py` | developer machine | read-only package preflight |
@@ -90,6 +92,7 @@ MFruitOS/
 | `tests/fresh_install/` | 4: fresh offline installation in a disposable container (`rehearse.sh`, `verify.sh`, `fakes/`) |
 | `tests/test_whisplay_driver.py`, `tests/test_whisplay_driver_install.py` | 1–2: the bundled Whisplay driver on recorded SPI/GPIO; its installer's detection, boot configuration and staged copy |
 | `tests/test_installer.py`, `test_update_flows.py`, `test_catalog.py`, `test_install_setup.py`, `test_device_setup.py` | 4: package and installer lifecycles with disposable data |
+| `tests/test_system_setup.py` | 1–4: the system setup (`install.sh --check-system`/`--system-only` with command doubles, `mfruit-system-apply` with a fake GitHub, the launcher's trigger and screen) |
 | `tests/test_pisugar_drivers.py`, `test_power.py`, `test_power_off_hook.py`, `test_battery_ui.py` | 1–2: PiSugar drivers, power service, shutdown hook and launcher power UI against register-level fakes |
 | `tests/test_wifi_setup.py` | 1–2: phone Wi-Fi setup with a fake tool process and Bluetooth |
 

@@ -10,12 +10,12 @@ import logging
 import os
 from typing import Any, Callable
 
-from mfruitos import OS_APP_ID, OS_NAME
+from mfruitos import OS_APP_ID, OS_NAME, __version__
 from mfruitos.apps.registry import AppEntry
 from mfruitos.launcher.navigation.gestures import gesture_label
 from mfruitos.launcher.ui.components import Item, back_item
 from mfruitos.launcher.ui.screens.dialogs import MessageScreen, ProgressScreen
-from mfruitos.system import diagnostics
+from mfruitos.system import diagnostics, system_setup
 from mfruitos.system.settings import GESTURE_KEYS
 from mfruitos.updater.installer import STEP_LABELS, STEPS, InstallError
 
@@ -380,6 +380,25 @@ class ScreenServices:
                        lambda progress: self.updater.update_system(version, progress),
                        lambda r: f"{OS_NAME} {r.version} installed. Restarting…",
                        on_success=on_success)
+
+    def apply_system_setup(self) -> bool:
+        """The running version's system setup (services, permissions, driver),
+        by mfruit-system-apply.service from the version's release. False if
+        another job runs."""
+        version = __version__
+
+        def work(progress):
+            progress("install", f"{OS_NAME} {version}: download, verify, set up", None)
+            return system_setup.apply()
+
+        def success(status) -> str:
+            if status.reboot_required:
+                return "System setup applied. Restart the device to finish it."
+            if not status.changed:
+                return f"The system setup matches {OS_NAME} {version}; nothing needed changing."
+            return f"System setup of {OS_NAME} {version} applied."
+        return self.start_job("System setup", work, success, log_path=system_setup.LOG_FILE,
+                              steps=("install",)) is not None
 
     def rollback_app(self, app_id: str) -> bool:
         """Start a roll back. False (and a toast) if it cannot start."""

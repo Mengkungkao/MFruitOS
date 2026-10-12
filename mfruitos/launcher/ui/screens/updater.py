@@ -11,6 +11,7 @@ from mfruitos.apps.registry import SETTINGS_APPS
 from mfruitos.launcher.ui.components import Item, back_item
 from mfruitos.launcher.ui.screens.base import ListScreen
 from mfruitos.launcher.ui.screens.dialogs import confirm
+from mfruitos.system import system_setup
 from mfruitos.updater.version import is_newer, parse_version
 
 log = logging.getLogger(__name__)
@@ -517,6 +518,52 @@ class DiscoverScreen(ListScreen):
 class SystemUpdateScreen(ListScreen):
     title = "System update"
 
+    def __init__(self, os, read_setup=system_setup.read_status):
+        super().__init__(os)
+        self.read_setup = read_setup
+        self.setup = None   # system_setup.SetupStatus, read when the screen shows
+
+    def on_show(self) -> None:
+        def done(status):
+            self.setup = status
+            self.redraw()
+        self.os.run_task("system setup status", self.read_setup, done, lambda exc: None)
+
+    def _setup_rows(self) -> list[Item]:
+        """The system setup (services, permissions, driver) of this version:
+        mfruit-system-apply brings it from the release (ADR 0015)."""
+        os = self.os
+        status = self.setup
+        if status is None:
+            return []
+        if not status.installed:
+            return [Item("System setup", lambda: os.show_message(
+                "System setup", "This device's services and permissions were set up by an "
+                "older installer, so updates cannot change them yet. Once, from a computer, "
+                f"run on the device:\n{system_setup.SETUP_COMMAND}\nAfter that, updates "
+                "bring them too.", icon="info"),
+                kind="nav", icon="warning", tone="warning", subtitle="Needs a computer once")]
+        if status.applied(__version__):
+            rows = [Item("System setup", kind="info", icon="check", tone="success",
+                         subtitle="Restart to finish" if status.reboot_required else "Up to date")]
+            if status.reboot_required:
+                rows.append(Item("Restart now", lambda: os.push(confirm(
+                    os, "Restart now?", "The device restarts to finish the system setup.",
+                    "Restart", lambda: os.power_shutdown(reboot=True), danger=False)),
+                    icon="refresh", tone="accent"))
+            return rows
+        mine = parse_version(status.version) == parse_version(__version__)
+        if mine and status.result in ("failed", "offline") and status.message:
+            subtitle = ("Offline: " if status.result == "offline" else "Failed: ") + status.message
+        else:
+            subtitle = f"Needed for {__version__}"
+        return [Item("System setup", kind="info", icon="warning", tone="warning",
+                     subtitle=subtitle[:60]),
+                Item("Apply setup", lambda: os.push(confirm(
+                    os, "Apply system setup?", f"Services and permissions are brought to "
+                    f"{__version__} from its release on GitHub. mFruit OS may restart.", "Apply",
+                    os.apply_system_setup, danger=False)), icon="download", tone="accent")]
+
     def items(self) -> list[Item]:
         os = self.os
         info = os.updater.info(OS_APP_ID)
@@ -550,5 +597,6 @@ class SystemUpdateScreen(ListScreen):
             rows.append(Item(f"Roll back to {version}", lambda: os.push(confirm(
                 os, "Roll back system?", "Restore the saved build and restart mFruit OS.",
                 "Roll back", os.rollback_system, danger=False)), icon="rollback"))
+        rows += self._setup_rows()
         rows += [Item("Check now", lambda: os.check_updates(), icon="refresh"), back_item()]
         return rows
