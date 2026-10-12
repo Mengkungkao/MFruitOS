@@ -19,7 +19,8 @@ what ([ADR 0015](docs/platform/ADR/0015-system-setup-from-releases.md),
 | S2 | `mfruit-system-apply.service` + `scripts/mfruit-system-apply` (root): version from the user's files only, release from root's `/etc/mfruit-os/system.conf` repository, SHA-256, safe unpack, `install.sh --system-only`; sudoers `systemctl start mfruit-system-apply.service` | IMPLEMENTED, AUTOMATED (fake GitHub) |
 | S3 | Launcher: once per version after a confirmed System update; Settings → General → Software Update → System setup; `mfruitctl system-setup [check|apply]` | IMPLEMENTED, AUTOMATED |
 | S4 | Driver installer writes `~/.whisplay-daemon` as the user | IMPLEMENTED, AUTOMATED |
-| S5 | Boards | see the record: Orange Pi offline; Pi Zero reachable only intermittently |
+| S5 | Release v1.6.0 | DONE by `release.yml`; the service's download/checksum/unpack checked against it from the dev machine |
+| S6 | Boards | NOT VERIFIED: Orange Pi offline all session; Pi Zero pings but every SSH session timed out |
 
 Next: on each board, once (asks for the owner's password; add the options it
 was installed with): `bash ~/.whisplay-os/system/current/scripts/install.sh

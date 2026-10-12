@@ -49,9 +49,22 @@ installed version; the only path was the installer run by hand with sudo.
 | Negative controls (each protection removed, its test run): user's Python run by root; sudo in check mode; links/devices extracted; checksum skipped; manifest link followed; driver writing the home as root; auto-start without the once-per-version marker; sudoers without the start rule | each FAILS without its protection |
 | `scripts/check.sh` (dev machine, Ubuntu 22.04 aarch64, Python 3.12) | All checks passed (740) |
 
+## Release
+
+| Step | Result |
+|---|---|
+| Push of 9d25fc8 (manifest 1.6.0) | `release.yml` published v1.6.0 by itself (check.sh, build, publish) |
+| The service's own download, checksum, unpack and package checks against that release (dev machine, functions of `scripts/mfruit-system-apply`, not as root, nothing run) | `mfruit-os-1.6.0.tar.gz` 1.6 MB in 1.3 s; SHA-256 `e92daef5…` matches the published `.sha256`; plain files only; manifest mfruit-os/system/1.6.0; its `install.sh` has `--system-only`; the applier inside equals the checkout's |
+
 ## Device results
 
-Pending at the time of writing; added below as they are made.
+| Board | Result |
+|---|---|
+| Orange Pi Zero 2W | offline the whole session (no ARP answer); NOT VERIFIED |
+| Raspberry Pi Zero 2 W | answers ping; every SSH connection timed out during the banner exchange (retried for over an hour); the read-only `--check-system` could not be run; NOT VERIFIED |
+
+Which board lacks what therefore rests on the history above (both: the
+system part of 9110008 and later), not on a per-file check.
 
 ## Not verified
 
