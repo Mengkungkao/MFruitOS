@@ -12,9 +12,10 @@ import time
 
 from mfruitos import __version__
 from mfruitos.apps.registry import AppRegistry
-from mfruitos.paths import Paths, package_root
+from mfruitos.paths import Paths
 from mfruitos.system.settings import Settings, atomic_write_json
-from mfruitos.updater.installer import Installer, InstallRequest
+from mfruitos.updater import bundled
+from mfruitos.updater.installer import Installer
 
 STARTER_APPS = ['whisplay-jump', 'whisplay-flappy-bird']
 log = logging.getLogger('mfruitos.provision')
@@ -48,14 +49,11 @@ def provision(paths: Paths, whisplay: str, first_install: bool = False) -> None:
     if not existing_wifi and ('connectwifi' in registrations or os.path.lexists(adopted)):
         print('Wi-Fi app: its folder is missing; installing the bundled Wi-Fi app')
     if not existing_wifi:
-        source = Path(package_root()) / 'bundled/connectwifi'
+        # An existing copy is brought up to the bundled version by the
+        # launcher instead (updater/bundled.py), never over an open app.
         with tempfile.TemporaryDirectory(prefix='mfruit-wifi-') as temp:
-            package = Path(temp) / 'connectwifi'
-            shutil.copytree(source, package, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
-            shutil.copytree(Path(package_root()) / 'mfruitos/sdk', package / 'mfruit_sdk',
-                            ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
             Installer(paths, __version__, settings).run(
-                InstallRequest(repository='', local_path=str(package), app_id='connectwifi'))
+                bundled.install_request('connectwifi', bundled.package('connectwifi', temp)))
     # Register the two shipped Whisplay games if the daemon hasn't done so yet.
     # Existing registrations and adopted launch commands are deliberately kept.
     starter_apps = []

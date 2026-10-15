@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+import tempfile
 from typing import Any, Callable
 
 from mfruitos import OS_APP_ID, OS_NAME, __version__
@@ -346,6 +347,34 @@ class ScreenServices:
                            lambda r: f"{r.name} installed", on_success=installed_ok)
         self.run_task("pending-installs", pick, start,
                       lambda exc: log.warning("Queued app check failed: %s", exc))
+
+    def update_bundled_apps(self) -> None:
+        """Bring an app shipped inside mFruit OS up to the version this OS
+        version carries (``updater/bundled.py``), through the installer job.
+        Once per bundled version; not while the app is open or another job
+        runs (called again after start-up and on the update timer). Its
+        place in the menu (hidden, order) stays as it was."""
+        from mfruitos.updater import bundled
+        if self.tasks.busy("jobs"):
+            return
+        for app_id, version in bundled.updates_due(self.paths).items():
+            entry = self.registry.get(app_id)
+            if bundled.tried(self.paths, app_id, version) or self._app_in_use(app_id):
+                continue
+            try:
+                bundled.note_tried(self.paths, app_id, version)
+            except OSError as exc:
+                log.warning("Not updating bundled %s: cannot record the attempt: %s", app_id, exc)
+                return
+            log.info("Updating bundled %s to %s", app_id, version)
+
+            def work(progress, app_id=app_id):
+                with tempfile.TemporaryDirectory(prefix="mfruit-bundled-") as temp:
+                    return self.installer.run(
+                        bundled.install_request(app_id, bundled.package(app_id, temp)), progress)
+            name = entry.name if entry is not None else app_id
+            self.start_job(f"Update {name}", work, lambda r: f"{r.name} {r.version} installed")
+            return
 
     def update_all(self) -> None:
         targets = [(a, self.updater.info(a.id)) for a in self.registry.apps()]

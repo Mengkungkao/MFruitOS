@@ -6,6 +6,29 @@ the OS version.
 
 ## Unreleased
 
+## [1.6.1] - 2026-10-13
+
+### Fixed
+- **Settings → Wi-Fi showed its page twice.** *Choose a network…* opened the
+  Wi-Fi app on its own Wi-Fi page (status, Choose a network, Hidden network,
+  Phone setup, Back to Settings), a copy of the page it came from, whose
+  Phone setup switch drove a different service from mFruit OS's Phone Setup.
+  Started by mFruit OS, the Wi-Fi app (1.2.0) now opens straight on the list
+  of networks; Back (the first row, Esc or four clicks) and a successful
+  connection return to Settings → Wi-Fi. Run on its own it keeps its menu.
+- Settings → Wi-Fi reads the network and address again when the Wi-Fi app
+  closes, instead of showing those from before a new network was joined.
+
+### Changed
+- **Apps shipped inside mFruit OS follow System updates.** An installed copy
+  of a bundled app (today the Wi-Fi app) used to stay at the version it was
+  first installed with, because a System update only swaps the OS code. The
+  launcher now brings it up to the version the running OS ships, through the
+  normal install job (previous version kept, data snapshotted, menu place
+  unchanged): once per version, never over the open app, not when it came
+  from GitHub or the user rolled back from that version
+  ([Update and rollback](docs/apps/UPDATE_ROLLBACK.md#apps-shipped-inside-mfruit-os)).
+
 ## [1.6.0] - 2026-10-12
 
 ### Added

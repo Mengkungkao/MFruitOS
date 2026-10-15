@@ -122,6 +122,7 @@ Physical device validation (level 5) is a recorded procedure, not a test file
 │                               wifi-setup.log, <app>.log
 ├── state/  (0700)              launcher.lock, tickets/, runs/, launch-policy, control.sock,
 │                               pending-installs.json (apps queued by install.sh --radio),
+│                               bundled-updates.json (bundled app versions tried),
 │                               keys.sock, power.sock, sugar-wifi-conf.json (generated),
 │                               pisugar-services-disabled (PiSugar
 │                               services the installer stopped), boot and update markers

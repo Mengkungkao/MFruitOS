@@ -39,6 +39,20 @@ A failed first install removes the partial app. Older versions beyond
 Stop a running app before changing its version. The updater refuses
 incompatible manifests and mismatched IDs, versions or repositories.
 
+## Apps shipped inside mFruit OS
+
+Apps in the OS package's `bundled/` folder (today the Wi-Fi app) are
+installed by provisioning when the device has none. A System update only
+swaps the OS code, so the launcher brings an installed copy up to the version
+the running OS ships (`mfruitos/updater/bundled.py`), through the pipeline
+above, after start-up and on its update timer. It does so only when the copy
+came from a local package (provisioning or a sideload, no repository), is
+older than the bundled version, was not rolled back from that version or a
+newer one, and is not open; hidden and order flags stay as they were. Each
+bundled version is tried once (`state/bundled-updates.json`): after a
+failure the progress screen says why, the previous version keeps working, and
+only a later bundled version is tried again.
+
 ## Apps installed as Git checkouts
 
 For an app whose folder is inside a Git repository (including nested app

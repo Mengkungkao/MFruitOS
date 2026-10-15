@@ -137,7 +137,9 @@ What the installer does, in order:
    2.2.3 runs from 2.30), checked by SHA-256, from the offline pack or GitHub, into
    `~/.whisplay-os/system/tools/` (as the user; without it Settings → Wi-Fi
    from phone says *Not installed*).
-   Provisions bundled ConnectWifi when no Wi-Fi app exists; a first install
+   Provisions bundled ConnectWifi when no Wi-Fi app exists (an older copy is
+   brought up to date by the launcher:
+   [Update and rollback](../apps/UPDATE_ROLLBACK.md#apps-shipped-inside-mfruit-os)); a first install
    seeds the Apps menu with available starter games, Fruit Store and
    Settings. Reruns preserve existing apps, settings, order and launch policy.
 6. With the service: the system changes listed below, then enables and starts

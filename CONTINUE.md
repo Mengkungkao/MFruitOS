@@ -6,6 +6,24 @@ History: [docs/quality/records/](docs/quality/records/README.md) (the previous
 hand-off is preserved verbatim in
 [2026-10-01-handoff.md](docs/quality/records/2026-10-01-handoff.md)).
 
+## Session 2026-10-13 — Settings → Wi-Fi shown twice (1.6.1, uncommitted)
+
+The owner: on both boards *Choose a network…* opened a second copy of the
+Wi-Fi settings instead of the networks
+([record](docs/quality/records/2026-10-13-wifi-chooser.md)).
+
+| # | Step | Status |
+|---|---|---|
+| W1 | Wi-Fi app 1.2.0: started by mFruit OS (`MFRUIT_HOME`) it opens on the network list; Back, Esc, 4× and a successful connection return to Settings → Wi-Fi; on its own it keeps its menu. Same change in `~/ConnectWifi` (uncommitted, 144 tests) | IMPLEMENTED, AUTOMATED (negative controls), DEVICE VERIFIED on both boards with `mfruitctl key` |
+| W2 | Bundled apps follow the OS: `updater/bundled.py`, `ScreenServices.update_bundled_apps` (start-up and update timer; once per version; not while open; not GitHub copies or after a roll back from that version) | IMPLEMENTED, AUTOMATED, DEVICE VERIFIED on the Orange Pi (launcher start, 1.1.0 → 1.2.0, hidden kept) |
+| W3 | Settings → Wi-Fi reads the network again when the Wi-Fi app closes | IMPLEMENTED, AUTOMATED; not checked on a board (needs joining another network) |
+| W4 | Boards | Pi Zero: **1.6.0 release** kept (system setup applied by the owner), Wi-Fi 1.2.0. Orange Pi: `1.6.1-local` build (reports 1.6.1: a 1.6.1 release is not offered there, only later ones), Wi-Fi 1.2.0 |
+
+Next: commit and push when the owner asks (manifest 1.6.1 + CHANGELOG
+section = release; the Pi Zero then updates from its screen, and its system
+setup follows); commit the ConnectWifi change in `~/ConnectWifi` too. If the
+release differs from this tree, reinstall the Orange Pi from the release.
+
 ## Session 2026-10-12 (evening) — the system setup follows System updates (1.6.0)
 
 The owner: what still needed a computer after 1.5.x (the parts `install.sh`

@@ -1,6 +1,10 @@
 """The app: a menu, a Wi-Fi scan list, SSID and password entry from a USB
 or Bluetooth keyboard, and a switch for the BLE setup service.
 
+Started by mFruit OS, the app is only the network chooser behind Settings >
+Wi-Fi > Choose a network: that page already shows the connection and runs
+Phone Setup, so the app opens on the scan list and Back returns there.
+
 The mFruit controller handles both button gestures and keyboard input.
 Typing needs a keyboard; without one, the BLE service is the way on.
 """
@@ -45,10 +49,15 @@ def _start_daemon_thread(target):
     threading.Thread(target=target, daemon=True).start()
 
 
+def _started_by_mfruit_os() -> bool:
+    """mfruit-run sets MFRUIT_HOME for every app mFruit OS starts."""
+    return bool(os.environ.get("MFRUIT_HOME"))
+
+
 class ConnectWifiApp:
     def __init__(self, board, commands: Commands | None = None, ble: BleService | None = None,
                  start_thread=_start_daemon_thread, keyboard_paths=keyboard_device_paths,
-                 input_factory=InputController):
+                 input_factory=InputController, chooser: bool | None = None):
         self.board = board
         self.commands = commands or Commands()
         self.ble = ble or BleService(self.commands)
@@ -57,9 +66,11 @@ class ConnectWifiApp:
         self.screens = Screens(board.LCD_WIDTH, board.LCD_HEIGHT)
         self.status_monitor = StatusMonitor(interval=5.0)
         self.running = True
+        # Network chooser for mFruit OS Settings: no menu page of its own.
+        self.chooser = _started_by_mfruit_os() if chooser is None else chooser
 
         self.lock = threading.RLock()
-        self.mode = MODE_MENU
+        self.mode = MODE_SCAN if self.chooser else MODE_MENU
         self.menu_index = MENU_SCAN
         self.ssid_buffer = ""
         self.password_buffer = ""
@@ -197,7 +208,8 @@ class ConnectWifiApp:
     # ---------- navigation ----------
 
     def _scan_row_count(self) -> int:
-        return len(SCAN_LEADING) + len(self.networks) + 2  # Rescan, Back to Settings
+        # Rescan, then Back to Settings (the leading Back already leaves the chooser)
+        return len(SCAN_LEADING) + len(self.networks) + (1 if self.chooser else 2)
 
     def _move_scan(self, delta: int):
         total = self._scan_row_count()
@@ -209,6 +221,9 @@ class ConnectWifiApp:
         self.scan_window = max(0, min(self.scan_window, max(0, total - VISIBLE_SCAN_ROWS)))
 
     def _leave_scan(self):
+        if self.chooser:
+            self.running = False        # back to Settings > Wi-Fi
+            return
         self.mode = MODE_MENU
         self.status_line = ""
 
@@ -236,7 +251,7 @@ class ConnectWifiApp:
 
     def _activate_scan_row(self):
         index = self.scan_index
-        if index == self._scan_row_count() - 1:
+        if not self.chooser and index == self._scan_row_count() - 1:
             self.running = False
             return
         if index == 0:
@@ -271,7 +286,10 @@ class ConnectWifiApp:
         self.status_line = ""
 
     def _dismiss_result(self):
-        self.mode = MODE_MENU if self.result_ok or not self.networks else MODE_SCAN
+        if self.chooser and self.result_ok:
+            self.running = False        # Settings > Wi-Fi shows the new network
+            return
+        self.mode = MODE_SCAN if self.chooser or (self.networks and not self.result_ok) else MODE_MENU
         self.result_message = ""
         self.status_line = ""
 
@@ -281,7 +299,7 @@ class ConnectWifiApp:
             self.mode = self.password_return
             self.status_line = "Type the network name" if self.mode == MODE_SSID else ""
             return
-        self.mode = MODE_SCAN if self.networks else MODE_MENU
+        self.mode = MODE_SCAN if self.networks or self.chooser else MODE_MENU
         self.ssid_buffer = ""
         self.password_buffer = ""
         self.status_line = ""
@@ -475,7 +493,7 @@ class ConnectWifiApp:
         self.ssid_buffer = ssid
         self.password_buffer = ""
         self.password_known_secured = True
-        self.password_return = MODE_SCAN if self.networks else MODE_MENU
+        self.password_return = MODE_SCAN if self.networks or self.chooser else MODE_MENU
         self.status_line = "Wrong password - type it again" if tried_one else "This network needs a password"
 
     # ---------- status ----------
@@ -496,7 +514,8 @@ class ConnectWifiApp:
         return ssid, ipv4
 
     def poll_status(self):
-        ble_status = self.ble.status()
+        # mFruit OS runs Phone Setup itself; the chooser never shows this service.
+        ble_status = BleStatus() if self.chooser else self.ble.status()
         ssid, ipv4 = self._wifi_state()
         keyboard_ready = bool(self._keyboard_paths())
         with self.lock:
@@ -513,6 +532,7 @@ class ConnectWifiApp:
             device = self.status_monitor.sample()
             return View(
                 mode=self.mode,
+                chooser=self.chooser,
                 menu_index=self.menu_index,
                 ssid=self.ssid_buffer,
                 password_len=len(self.password_buffer),
@@ -610,6 +630,11 @@ class ConnectWifiApp:
             def prepare():
                 self.probe()
                 self.poll_status()
+                if self.chooser:
+                    with self.lock:
+                        self.status_line = "Checking nearby..."
+                    self._scan(wide=False)
+                    return
                 with self.lock:
                     self.status_line = ""
             self._start_thread(lambda: self._run_worker(prepare))

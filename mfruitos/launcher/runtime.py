@@ -245,6 +245,7 @@ class Runtime(ScreenServices):
         self._check_system_update_state()
         self._maybe_autostart()
         self.install_pending_apps()
+        self.update_bundled_apps()
         if self.settings.get("updater.auto_check") and self.updater.check_due():
             self.loop.call_later(20.0, lambda: self.check_updates(quiet=True))
         self._schedule_update_checks()
@@ -257,6 +258,7 @@ class Runtime(ScreenServices):
                 self.check_updates(quiet=True)
             else:
                 self.install_pending_apps()
+            self.update_bundled_apps()
             self.loop.call_later(UPDATE_TICK_SEC, tick)
         self.loop.call_later(UPDATE_TICK_SEC, tick)
 
@@ -395,8 +397,14 @@ class Runtime(ScreenServices):
     def on_session_ended(self, session) -> None:
         self.lifecycle.revoke_ticket(session.app_id)
         from mfruitos.launcher.ui.screens.dialogs import LoadingScreen
+        uncovered = False
         while isinstance(self.router.top, LoadingScreen):
-            self.router.pop()
+            uncovered = self.router.pop() or uncovered
+        if not uncovered and session.kind == "app" and self.router.top is not None:
+            # Opened without an Opening screen (Settings > Wi-Fi > Choose a
+            # network): the page it was opened from reads its state again, as
+            # a page uncovered by a pop does.
+            self.router.top.on_show()
         self._close_app_after_session(session)
         self.refresh_registry(query_daemon=True)
         if self.router.top is self.home_screen:

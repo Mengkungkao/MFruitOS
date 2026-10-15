@@ -41,6 +41,7 @@ class View:
     """Everything a frame shows. Equal views produce equal frames."""
 
     mode: str = MODE_MENU
+    chooser: bool = False       # opened from mFruit OS Settings: no menu page
     menu_index: int = 0
     ssid: str = ""
     password_len: int = 0
@@ -88,7 +89,8 @@ def scan_rows(view: View) -> list[tuple[str, str]]:
             meta = f"{signal}% open" if is_open else f"{signal}%"
         rows.append((ssid, meta))
     rows.append(("Rescan" if view.scan_wide else "Rescan wider range", ""))
-    rows.append(("Back to Settings", ""))
+    if not view.chooser:
+        rows.append(("Back to Settings", ""))
     return rows
 
 
@@ -189,10 +191,12 @@ class Screens:
                 subtitle, tone = "Password required", ""
             rows.append(Row(ssid, subtitle=subtitle, value=f"{signal}%", kind="nav", tone=tone))
         rows.append(Row("Rescan" if view.scan_wide else "Rescan wider range", kind="action"))
-        rows.append(Row("Back to Settings", kind="back"))
+        if not view.chooser:
+            rows.append(Row("Back to Settings", kind="back"))
         draw_list(c, rows, view.scan_index, top=58 if view.status else CONTENT_TOP,
                   bottom=CONTENT_BOTTOM)
-        action = "back" if view.scan_index in (0, len(rows) - 1) else "select"
+        leaving = (0,) if view.chooser else (0, len(rows) - 1)
+        action = "back" if view.scan_index in leaving else "select"
         footer(c, self._list_hints(view, action))
 
     @staticmethod
