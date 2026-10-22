@@ -20,11 +20,11 @@
     "name": "RadioConnect",
     "description": "LoRa voice, chats and pairing; needs the radio set up",
     "repository": "https://github.com/Mengkungkao/RadioConnect",
-    "ref": "e4c9b535c0573083bd42f088ac45ab63e54c0f5d",
-    "url": "https://github.com/Mengkungkao/RadioConnect/releases/download/v0.6.0/radioconnect-0.6.0.tar.gz",
-    "sha256": "aa5331367ee15320d46d6d1c95e1b17116f313990685a2280859d0d0f0d0ad46",
+    "ref": "977847383df1ed18cc51b2e6afbdbd9b7f13aeac",
+    "url": "https://github.com/Mengkungkao/RadioConnect/releases/download/v0.6.1/radioconnect-0.6.1.tar.gz",
+    "sha256": "c3fbc05894cd9b3e7d40a8af034b83332baf315e55ce7a8d82938f7ee9399de5",
     "native": true,
-    "version": "0.6.0",
+    "version": "0.6.1",
     "requires": [
       "radio"
     ]
@@ -34,11 +34,11 @@
     "name": "AI Chatbot",
     "description": "Voice assistant; needs your API keys in its .env file",
     "repository": "https://github.com/Mengkungkao/ai-chatbot",
-    "ref": "1d6f2564c2b9d17141ea04851a3675c9057e6836",
-    "url": "https://github.com/Mengkungkao/ai-chatbot/releases/download/v1.1.0/whisplay-ai-chatbot-1.1.0-linux-arm64.tar.gz",
-    "sha256": "df495d0dbde7ee166c28330923cc3db3e69e1b2b84832d46ca15d06bcc76f11a",
+    "ref": "02358dfd2580989b6bce2d905b49310eff941c84",
+    "url": "https://github.com/Mengkungkao/ai-chatbot/releases/download/v1.1.1/whisplay-ai-chatbot-1.1.1-linux-arm64.tar.gz",
+    "sha256": "d43708298f615dd2f3d3e58f341da650ea40f9564484feedf848358b234c7575",
     "native": true,
-    "version": "1.1.0",
+    "version": "1.1.1",
     "system_packages": [
       "sox",
       "libsox-fmt-mp3",
