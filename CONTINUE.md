@@ -6,6 +6,17 @@ History: [docs/quality/records/](docs/quality/records/README.md) (the previous
 hand-off is preserved verbatim in
 [2026-10-01-handoff.md](docs/quality/records/2026-10-01-handoff.md)).
 
+## Session 2026-10-22 (later) — RadioConnect's mic recorded nothing on opi2w
+
+An AI Chatbot `sox` recorder outlived the app (4-click exit in the same second
+as a quick press) and held the Whisplay capture device; RadioConnect's
+`arecord` got "Device or resource busy" and recorded 0 bytes per press. Fixed
+in the apps and pushed for release: AI Chatbot 1.1.1 kills recorders on exit
+(`src/device/audio.ts`, `scripts/test-recorder-exit.js`); RadioConnect 0.6.1
+reports a busy mic and reopens the card on the next press (its CONTINUE.md
+M1). The orphan was killed on the board by hand. The platform gap is KI-21;
+the owner chose to leave the platform as it is.
+
 ## Session 2026-10-22 — new Orange Pi found no radio to pair with (1.6.2, uncommitted)
 
 The owner installed a new Orange Pi (`opi2w`, `ssh orangepi@192.168.0.248`,

@@ -234,6 +234,27 @@ AUTOMATED (negative controls); DEVICE VERIFIED on the old Orange Pi: the
 boot check restored its module at boot, then the two boards paired. NOT
 VERIFIED: a System update installing the boot check.
 
+### KI-21 Processes an app leaves behind outlive its session
+
+Seen 2026-10-22 on the Orange Pi opi2w (mFruit OS 1.6.1): AI Chatbot 1.1.0
+left a `sox` recorder running when it exited (a press, a quick release and
+the 4-click exit in the same second, 16:46:59). The `sox` kept the Whisplay
+capture device (`hw:whisplaysound,0`), so RadioConnect's `arecord` failed
+with "Device or resource busy" and every press recorded 0 bytes until the
+`sox` was killed by hand at about 16:52. The `sox` was still in the app's
+process group and session (the daemon starts apps with
+`start_new_session=True`), with parent PID 1. The platform gap:
+`mfruit-run` waits for its direct child only, and
+`AppLifecycle.ensure_stopped` returns `exited` once the wrapper has gone, so
+nothing looks at the rest of the group. The app faults are fixed in the apps:
+AI Chatbot 1.1.1 stops its recorders on exit; RadioConnect 0.6.1 says "mic
+busy" and opens the card again on the next press. The platform part stays as
+it is (the owner's decision, 2026-10-22); the change considered was to stop,
+with TERM and then KILL, whatever is left in the app's process group once the
+app has exited, which would also end helpers an app leaves running on
+purpose. Workaround: kill the leftover process (`ps -eo pid,ppid,pgid,args`,
+parent PID 1).
+
 ## Physical checks outstanding
 
 Button feel and gestures, physical USB/Bluetooth key routing and hotplug,
