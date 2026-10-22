@@ -6,6 +6,19 @@ the OS version.
 
 ## Unreleased
 
+### Added
+- **Settings → Audio → Test microphone** (also in Diagnostics): speak for
+  three seconds and hear it played back, with the level of each channel and
+  what to do when it fails: the program holding the microphone (*busy: used
+  by sox (7221)*), a missing Whisplay sound card, or a recording that is very
+  quiet or silent. The microphone is recorded in stereo, as the Whisplay
+  driver uses the card.
+- **Diagnostics → Microphone**: a quick check that the microphone is there,
+  opens and gives a signal. When the Whisplay driver is installed and its
+  card is missing, it says so instead of passing on another card (on
+  2026-10-22 the Audio check said OK on an Orange Pi whose Whisplay card had
+  not started: the board has a sound card of its own).
+
 ## [1.6.2] - 2026-10-22
 
 ### Fixed

@@ -13,6 +13,7 @@ from mfruitos.launcher.ui.screens.phone_setup import STATUS_TEXT, PhoneSetupScre
 from mfruitos.launcher.ui.screens.apps import ApplicationsScreen
 from mfruitos.launcher.ui.screens.base import ListScreen
 from mfruitos.launcher.ui.screens.dialogs import ChoiceScreen, LogScreen, RangeScreen, confirm
+from mfruitos.launcher.ui.screens.diagnostics import MicTestScreen
 from mfruitos.system import system_info
 from mfruitos.system.settings import (DIM_CHOICES, GESTURE_ACTIONS, GESTURE_KEYS, LED_COLORS,
                                       SCHEMA, TIMEOUT_CHOICES)
@@ -232,6 +233,7 @@ class AudioScreen(ListScreen):
                              icon="volume", subtitle="Daemon volume page"))
         rows += [
             Item("Test speaker", os.test_speaker, icon="play"),
+            Item("Test microphone", lambda: os.push(MicTestScreen(os)), kind="nav", icon="mic"),
             Item("Output", lambda: os.push(choice(os, "Output device", "audio.device",
                                                          self.DEVICES)),
                  kind="nav", value=label),

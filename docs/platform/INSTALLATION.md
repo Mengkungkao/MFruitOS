@@ -185,7 +185,10 @@ journalctl -u whisplay-os.service -n 80 --no-pager
 
 Expect the services active, the launcher at Home and the self-test passing.
 On a board without a PiSugar, `mfruitctl power` reports `present: false` with
-the reason; that is not an error.
+the reason; that is not an error. On the device, *Settings → General →
+Diagnostics* runs the checks again (Microphone included), and *Settings →
+Audio → Test speaker* and *Test microphone* check the sound both ways; a
+failure says what to do ([Troubleshooting](../quality/TROUBLESHOOTING.md#symptoms)).
 Screenshots and previews show mFruit OS's rendering; they do not verify the
 physical LCD ([Validation](../quality/VALIDATION.md)). At Home, `mfruitctl key
 down`, `mfruitctl key enter` and `mfruitctl back` exercise navigation over SSH;

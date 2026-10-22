@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from mfruitos import OS_NAME, __version__
-from mfruitos.launcher.ui.components import FOOTER_Y, Item, back_item
+from mfruitos.launcher.ui.components import FOOTER_Y, Item, back_item, draw_footer
 from mfruitos.launcher.ui.painter import Painter
 from mfruitos.launcher.ui.screens.base import ListScreen, Screen
 from mfruitos.launcher.ui.theme import SCREEN_H, SCREEN_W
@@ -11,7 +11,7 @@ from mfruitos.launcher.navigation.gestures import gesture_label
 from mfruitos.system import diagnostics, system_info
 
 CHECK_ORDER = ("Hardware service", "Hardware desktop", "Display", "Button", "Keyboard", "RGB LED",
-               "Audio", "Network", "Storage", "Internet", "GitHub")
+               "Audio", "Microphone", "Network", "Storage", "Internet", "GitHub")
 
 
 class DiagnosticsScreen(ListScreen):
@@ -41,6 +41,7 @@ class DiagnosticsScreen(ListScreen):
                 diagnostics.check_keyboard(os.keyboard.devices),
                 diagnostics.check_led(client, os.led.current),
                 diagnostics.check_audio(),
+                diagnostics.check_microphone(),
                 diagnostics.check_network(),
                 diagnostics.check_storage(os.paths.home),
                 diagnostics.check_internet(),
@@ -74,6 +75,7 @@ class DiagnosticsScreen(ListScreen):
             Item("Test button", os.open_button_test, kind="nav", icon="button"),
             Item("Test LED", os.test_led, icon="led"),
             Item("Test speaker", os.test_speaker, icon="audio"),
+            Item("Test microphone", lambda: os.push(MicTestScreen(os)), kind="nav", icon="mic"),
             Item("Check daemon", lambda: self._single(lambda: diagnostics.check_daemon(os.client)),
                  icon="system"),
             Item("Check internet", lambda: self._single(diagnostics.check_internet), icon="network"),
@@ -185,6 +187,161 @@ class ButtonTestScreen(Screen):
             p.text(cx, y, line, 15 if index == 0 else 13, "semibold" if index == 0 else "regular",
                    t.text if index == 0 else t.text_faint, anchor="ma")
             y += 22
+
+
+class MicTestScreen(Screen):
+    """Record a few seconds while the user speaks, show each channel's level
+    and play the recording back. Select tests again; back leaves."""
+    title = "Microphone"
+    select_label = "test again"
+    SECONDS = 3
+    BAR_FLOOR_DB = -60.0
+
+    def __init__(self, os):
+        super().__init__(os)
+        self.state = "idle"                  # recording -> playing -> done
+        self.test: diagnostics.MicTest | None = None
+        self.playback = ""                   # why playing it back failed
+        self.remaining = 0
+        self.visible = False
+        self._timer = None
+
+    def on_show(self) -> None:
+        self.visible = True
+        if self.state == "idle":
+            self.start()
+
+    def on_hide(self) -> None:
+        self.visible = False
+        self._cancel_timer()
+
+    def _cancel_timer(self) -> None:
+        if self._timer is not None:
+            self._timer.cancel()
+            self._timer = None
+
+    def start(self) -> None:
+        if self.state in ("recording", "playing"):
+            return
+        self.state, self.test, self.playback = "recording", None, ""
+        self.remaining = self.SECONDS
+        self._timer = self.os.loop.call_later(1.0, self._count_down)
+        self.os.run_task("mic-test", lambda: diagnostics.record_microphone(self.SECONDS),
+                         self._recorded, self._failed)
+        self.redraw()
+
+    def _count_down(self) -> None:
+        self._timer = None
+        if self.state != "recording":
+            return
+        self.remaining = max(0, self.remaining - 1)
+        self.redraw()
+        if self.remaining:
+            self._timer = self.os.loop.call_later(1.0, self._count_down)
+
+    def _recorded(self, test: diagnostics.MicTest) -> None:
+        self._cancel_timer()
+        self.test = test
+        if test.audio and self.visible:
+            self.state = "playing"
+            device = self.os.settings.get("audio.device")
+            cache = self.os.paths.cache_dir
+            self.os.run_task("mic-playback",
+                             lambda: diagnostics.play_recording(test.audio, cache, device),
+                             self._played, self._failed)
+        else:
+            self.state = "done"           # nothing to play, or the user has left
+        self.redraw()
+
+    def _played(self, result: diagnostics.CheckResult) -> None:
+        self.state = "done"
+        if not result.ok:
+            self.playback = result.detail
+        self.redraw()
+
+    def _failed(self, exc: BaseException) -> None:
+        self._cancel_timer()
+        detail = str(exc)[:40] or type(exc).__name__
+        if self.test is None:
+            self.test = diagnostics.MicTest(diagnostics.CheckResult("Microphone", False, detail))
+        else:
+            self.playback = detail
+        self.state = "done"
+        self.redraw()
+
+    def handle(self, action: str) -> bool:
+        if action == "select":
+            if self.state == "done":
+                self.start()
+            return True
+        return False
+
+    def footer_hints(self) -> list[tuple[str, str]]:
+        """Only what a press does here: nothing to step through, and no
+        second test until this one has finished."""
+        hints = [hint for hint in self.os.hints(select=self.select_label) if hint[1] != "next"]
+        if self.state != "done":
+            hints = [hint for hint in hints if hint[1] != self.select_label]
+        return hints
+
+    def footer(self, p: Painter) -> None:
+        draw_footer(p, self.footer_hints())
+
+    def advice(self) -> str:
+        """What the user can do about the result."""
+        if self.test is None:
+            return ""
+        result, levels = self.test.result, self.test.levels
+        detail = result.detail.lower()
+        if self.playback:
+            return f"Could not play it back: {self.playback}"
+        if detail.startswith("busy"):
+            return "Close the app that uses it, or restart the device."
+        if "missing" in detail:
+            return "Restart the device. If it is still missing, see Troubleshooting."
+        if result.ok is False and levels is not None:
+            return "Speak close to the device. If it stays quiet, restart it."
+        if result.ok:
+            return "Did you hear yourself?"
+        return ""
+
+    def draw(self, p: Painter) -> None:
+        t = p.theme
+        cx = SCREEN_W // 2
+        active = self.state in ("recording", "playing")
+        ring = {"recording": t.error, "playing": t.accent}.get(self.state, t.surface_hi)
+        p.draw.ellipse((cx - 28, 42, cx + 28, 98), fill=ring)
+        p.icon("mic", cx - 15, 55, 30, (255, 255, 255) if active else t.text_muted)
+        if self.state == "recording":
+            p.text(cx, 112, "Speak now", 18, "bold", t.text, anchor="ma")
+            p.text(cx, 138, f"recording · {self.remaining} s", 12, "regular", t.text_muted,
+                   anchor="ma")
+            return
+        if self.test is None:
+            return
+        result, levels = self.test.result, self.test.levels
+        if self.state == "playing":
+            headline, color = "Playing it back…", t.text
+        elif result.ok:
+            headline, color = "Microphone works", t.success
+        else:
+            headline, color = "Microphone problem", t.error
+        p.text(cx, 108, headline, 16, "bold", color, anchor="ma")
+        p.text(cx, 130, result.detail[:30], 12, "regular", t.text_muted, anchor="ma")
+        y = 154
+        if levels is not None:
+            for label, peak in (("Left", levels.left_peak), ("Right", levels.right_peak)):
+                fraction = (peak - self.BAR_FLOOR_DB) / -self.BAR_FLOOR_DB
+                bar = (t.success if peak >= diagnostics.MIC_QUIET_DB else
+                       t.warning if peak > diagnostics.MIC_DEAD_DB else t.text_faint)
+                p.text(16, y, label, 12, "medium", t.text_muted)
+                p.progress((58, y + 3, 172, y + 11), fraction, fg=bar)
+                p.text(SCREEN_W - 16, y, "—" if peak <= diagnostics.SILENT_DB else f"{peak:.0f} dB",
+                       12, "regular", t.text_muted, anchor="ra")
+                y += 22
+        for line in p.wrap(self.advice(), 12, "regular", SCREEN_W - 32, max_lines=3):
+            p.text(cx, y + 6, line, 12, "regular", t.text_faint, anchor="ma")
+            y += 16
 
 
 class SystemInfoScreen(ListScreen):

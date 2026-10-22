@@ -54,7 +54,7 @@ python3 -m mfruitos.system.settings --dump-defaults > config/default.json
 | `led.enabled` | true | bool | RGB LED on/off |
 | `led.idle_color` / `running_color` / `update_color` / `error_color` | blue / green / orange / red | LED colour name | colour per platform state |
 | `led.brightness` | 30 | 0–100 | LED brightness |
-| `audio.device` | `""` | string ≤64 | ALSA device for the speaker test (empty = default) |
+| `audio.device` | `""` | string ≤64 | ALSA device for the speaker test and for playing back the microphone test (empty = default); the microphone test records from the Whisplay card itself |
 | `updater.auto_check` | true | bool | periodic update checks |
 | `updater.check_interval_hours` | 12 | 1–168 | check interval |
 | `updater.include_prereleases` | false | bool | offer pre-release versions |

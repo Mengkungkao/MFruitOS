@@ -98,7 +98,7 @@ def run_preview(outdir: str | None) -> int:
                                               updater)
     from mfruitos.system.bluetooth import BtDevice, Prompt
     from mfruitos.launcher.ui.screens.boot import DONE, RUNNING
-    from mfruitos.system.diagnostics import CheckResult
+    from mfruitos.system.diagnostics import CheckResult, MicLevels, MicTest
     from mfruitos.system import system_setup
     from mfruitos.updater.github import Release
     from mfruitos.updater.service import UpdateInfo
@@ -242,7 +242,7 @@ def run_preview(outdir: str | None) -> int:
         diag.results = {n: CheckResult(n, ok, d) for n, ok, d in [
             ("Hardware service", True, "4 ms"), ("Display", True, "OK"),
             ("Button", True, "released"), ("RGB LED", True, "OK"), ("Audio", True, "wm8960"),
-            ("Network", True, "192.168.0.33"), ("Storage", True, "15.1 GB free"),
+            ("Microphone", True, "whisplaysound"), ("Network", True, "192.168.0.33"), ("Storage", True, "15.1 GB free"),
             ("Internet", True, "reachable"), ("GitHub", False, "rate limited")]}
         shot("50-diagnostics", diag)
         sysinfo = diagnostics.SystemInfoScreen(rt)
@@ -253,6 +253,20 @@ def run_preview(outdir: str | None) -> int:
         test.history = ["hold  long press", "2×  double click"]
         test.pressed = True
         shot("52-button-test", test)
+        # State set before showing: the preview never records (it is also an
+        # update's TEST step on the device).
+        mic = diagnostics.MicTestScreen(rt)
+        mic.state, mic.remaining = "recording", 2
+        shot("52b-mic-recording", mic)
+        mic = diagnostics.MicTestScreen(rt)
+        mic.state = "done"
+        mic.test = MicTest(CheckResult("Microphone", True, "OK (-9 dB, left)"),
+                           MicLevels(3.0, -9.2, -90.3, -24.0, -95.0), b"", "whisplaysound")
+        shot("52c-mic-test", mic)
+        mic = diagnostics.MicTestScreen(rt)
+        mic.state = "done"
+        mic.test = MicTest(CheckResult("Microphone", False, "busy: used by sox (7221)"))
+        shot("52d-mic-busy", mic)
         shot("53-fallback", fallback.DaemonUnavailableScreen(rt, "failed"))
         log_path = os.path.join(paths.logs_dir, "sample.log")
         with open(log_path, "w") as fp:

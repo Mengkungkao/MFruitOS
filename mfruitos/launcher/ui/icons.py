@@ -98,6 +98,13 @@ def _speaker(p: _Pen):
     p.arc(0.52, 0.5, 0.3, -50, 50)
 
 
+def _mic(p: _Pen):
+    p.rrect(0.37, 0.1, 0.63, 0.58, 0.13, fill=True)
+    p.arc(0.5, 0.44, 0.24, 0, 180)
+    p.line((0.5, 0.68), (0.5, 0.84))
+    p.line((0.36, 0.86), (0.64, 0.86))
+
+
 def _power(p: _Pen):
     p.arc(0.5, 0.54, 0.32, -60, 240)
     p.line((0.5, 0.14), (0.5, 0.48))
@@ -252,7 +259,7 @@ def _dot(p: _Pen):
 
 ICONS = {
     "settings": _gear, "updater": _download, "download": _download, "refresh": _refresh,
-    "wifi": _wifi, "bluetooth": _bluetooth, "volume": _speaker, "audio": _speaker,
+    "wifi": _wifi, "bluetooth": _bluetooth, "volume": _speaker, "audio": _speaker, "mic": _mic,
     "power": _power, "system": _chip, "diagnostics": _pulse, "developer": _code,
     "info": _info, "apps": _grid, "display": _sun, "button": _button, "led": _bulb,
     "network": _globe, "check": _check, "cross": _cross, "up": _arrow_up,

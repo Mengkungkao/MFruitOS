@@ -255,6 +255,22 @@ app has exited, which would also end helpers an app leaves running on
 purpose. Workaround: kill the leftover process (`ps -eo pid,ppid,pgid,args`,
 parent PID 1).
 
+### KI-22 A PiSugar 3 on the Orange Pi opi2w broke the Whisplay codec's I2C
+
+Seen 2026-10-22 on the Orange Pi Zero 2W `opi2w` with a PiSugar 3 (I2C bus
+2, 0x57, firmware 1.3.4) under the Whisplay HAT: the kernel logged
+`mv64xxx_i2c_fsm: Ctlr Error -- state: 0x2, status: 0x0` (a bus error at
+START) for both the PiSugar and the WM8960 (0x1a), about two failed codec
+writes each time the codec powered up or down. One boot had no sound card
+(`wm8960 2-001a: Failed to issue reset`), another failed its boot defaults
+(the microphone recorded near silence). The same error rate with
+`mfruit-power` paused (8 and 9 errors over five power cycles), so the
+polling is not the trigger; the Orange Pi .130 with a PiSugar 2 had none in
+two hours. With the PiSugar 3 removed the errors stopped (0 after the next
+boot). Not known: whether reseating it, another PiSugar 3 or USB power
+straight to the board changes that. Diagnose with `dmesg | grep "Ctlr Error"`
+(readable without root on these boards).
+
 ## Physical checks outstanding
 
 Button feel and gestures, physical USB/Bluetooth key routing and hotplug,

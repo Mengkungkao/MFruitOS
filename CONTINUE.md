@@ -6,6 +6,20 @@ History: [docs/quality/records/](docs/quality/records/README.md) (the previous
 hand-off is preserved verbatim in
 [2026-10-01-handoff.md](docs/quality/records/2026-10-01-handoff.md)).
 
+## Session 2026-10-22 (evening) — Test microphone in Settings (uncommitted; the owner commits)
+
+The owner asked for a microphone test in Settings after opi2w's microphone
+failed three ways in one afternoon with nothing on the device saying so
+(leftover recorder holding it, KI-21; Whisplay card missing after a boot and
+I2C bus errors from a PiSugar 3, KI-22; RadioConnect recording one channel,
+fixed in RadioConnect 0.6.2).
+
+| # | Step | Status |
+|---|---|---|
+| T1 | `mfruitos/system/diagnostics.py`: `find_microphone` (Whisplay card first; *Whisplay sound card missing* when the driver is installed and its card is not there, instead of passing on another card), stereo recording at 48 kHz, per-channel levels and verdict (`MIC_QUIET_DB` -30, `MIC_DEAD_DB` -80), `mic_holder` (who has `/dev/snd/pcmC<N>D0c` open), `check_microphone` (Diagnostics row), `record_microphone`, `play_recording` | IMPLEMENTED, AUTOMATED |
+| T2 | `MicTestScreen` (Settings → Audio and Diagnostics → Test microphone): speak 3 s, played back, Left/Right bars, advice; select tests again; no playback after the user left; footer offers only what a press does; `mic` icon; previews 52b–52d | IMPLEMENTED, AUTOMATED (`tests/test_mic_test.py`, 18; negative controls: no missing-card rule, one channel, no left-screen guard each fail their test) |
+| T3 | On a board | NOT VERIFIED (not deployed) |
+
 ## Session 2026-10-22 (later) — RadioConnect's mic recorded nothing on opi2w
 
 An AI Chatbot `sox` recorder outlived the app (4-click exit in the same second
