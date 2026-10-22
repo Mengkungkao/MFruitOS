@@ -6,6 +6,22 @@ History: [docs/quality/records/](docs/quality/records/README.md) (the previous
 hand-off is preserved verbatim in
 [2026-10-01-handoff.md](docs/quality/records/2026-10-01-handoff.md)).
 
+## Session 2026-10-22 (night) — mDisplay in the Fruit Store (uncommitted; the owner commits)
+
+The owner built **mDisplay** (`~/mDisplay`, own repository and hand-off) and
+asked to add it to the Fruit Store. v0.1.0 on GitHub had been made by hand
+without a package (the app's release workflow had stopped on a pasted file);
+0.1.1, the same app, was released by its workflow with
+`mdisplay-0.1.1.tar.gz` + `SHA256SUMS`.
+
+| # | Step | Status |
+|---|---|---|
+| S1 | `config/catalog.json`: native entry `mdisplay` 0.1.1 (`ref` ca64e44, release asset, SHA-256 b5765e6e…0501), `system_packages` libsdl2-2.0-0, python3-numpy, python3-pil; description says it needs a desktop on HDMI (no requirement name exists for that) | DONE |
+| S2 | Download checked against SHA256SUMS and GitHub's digest; manifest 0.1.1, min OS 1.4.0; `check-app.py` on the unpacked package; installed and uninstalled through `UpdateService.install_catalog` in a scratch home (verified, install.sh + test.sh passed); `catalog-sync.py --dry-run`: "mdisplay: 0.1.1 is the newest release" | DONE (dev machine) |
+| S3 | On a board: Store shows mDisplay, *Needs setup first*, `setup-app.sh mdisplay`, install, launch | NOT VERIFIED |
+
+Next: commit and push (devices see the entry next time the Store opens).
+
 ## Session 2026-10-22 (evening) — Test microphone in Settings (uncommitted; the owner commits)
 
 The owner asked for a microphone test in Settings after opi2w's microphone

@@ -7,6 +7,12 @@ the OS version.
 ## Unreleased
 
 ### Added
+- **mDisplay in the Fruit Store** (0.1.1, `Mengkungkao/mDisplay`): galaxies,
+  night skies, auroras and a galaxy projector on the HDMI screen, with the
+  Whisplay LCD as its remote. It needs a desktop session on the HDMI screen
+  and the system packages `libsdl2-2.0-0`, `python3-numpy`, `python3-pil`
+  (*Needs setup first* until `setup-app.sh mdisplay` has run). The hourly
+  catalogue sync follows its later releases.
 - **Settings → Audio → Test microphone** (also in Diagnostics): speak for
   three seconds and hear it played back, with the level of each channel and
   what to do when it fails: the program holding the microphone (*busy: used

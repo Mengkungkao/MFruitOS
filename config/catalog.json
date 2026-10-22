@@ -50,5 +50,21 @@
       "python3-spidev",
       "python3-libgpiod"
     ]
+  },
+  {
+    "id": "mdisplay",
+    "name": "mDisplay",
+    "description": "Galaxies, auroras and a galaxy projector on HDMI; needs a desktop on the HDMI screen",
+    "repository": "https://github.com/Mengkungkao/mDisplay",
+    "ref": "ca64e4433c42423ee26fd560db76015e2bef4d2f",
+    "url": "https://github.com/Mengkungkao/mDisplay/releases/download/v0.1.1/mdisplay-0.1.1.tar.gz",
+    "sha256": "b5765e6e36729aac369f12b5026b0fb90acee4327a0bc476d596233a7e920501",
+    "native": true,
+    "version": "0.1.1",
+    "system_packages": [
+      "libsdl2-2.0-0",
+      "python3-numpy",
+      "python3-pil"
+    ]
   }
 ]
