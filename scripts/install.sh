@@ -767,9 +767,40 @@ TimeoutStartSec=45min
 EOF
 [ "$MODE" = check ] || ok "$APPLY_SERVICE (System updates from the Fruit Store also bring their system setup)"
 
+# ------------------------------------------------------------------ radio boot check
+# The LoRa module keeps its settings in its own memory, and radio.json only
+# records what it was given once: a new, swapped or reset module (factory
+# settings: 868 MHz, sent transparently) hears none of the other radios while
+# every screen still shows the recorded frequency (2026-10-22). Where
+# scripts/setup-radio.sh recorded a radio, this unit compares the module with
+# that record at every boot, before whisplay-daemon takes its lines, and writes
+# the settings back where it differs. setup-radio.sh installs the same unit
+# (the same generator); this brings it to radios set up before it existed.
+# It runs as the user, never as root.
+RADIO_UNIT=mfruit-radio-setup.service
+RADIO_CHECK=0
+# >>> radio boot check
+if as_user test -f "$OS_HOME/shared/radio/radio.json"; then
+  RADIO_UNIT_TMP="$(mktemp)"
+  TMP_FILES+=("$RADIO_UNIT_TMP")
+  # -I: no working folder or user site on the path when root renders it.
+  if "$HELPER_PYTHON" -I -c 'import sys; sys.path.insert(0, sys.argv[1])
+from mfruitos.hosts.lora.__main__ import main; sys.exit(main(sys.argv[2:]))' "$SRC" \
+       boot-unit --port /dev/ttyS0 --code "$OS_HOME/system/current" --home "$OS_HOME" \
+       --owner "$TARGET_USER" > "$RADIO_UNIT_TMP"; then
+    put_file 644 "/etc/systemd/system/$RADIO_UNIT" < "$RADIO_UNIT_TMP"
+    RADIO_CHECK=1
+    [ "$MODE" = check ] || ok "$RADIO_UNIT (the LoRa module's settings are checked at every boot)"
+  else
+    warn "could not write $RADIO_UNIT; run: bash $OS_HOME/system/current/scripts/setup-radio.sh"
+  fi
+fi
+# <<< radio boot check
+
 if [ "$MODE" = check ]; then
   CHECK_UNITS=("$SERVICE")
   [ "$INSTALL_POWER" = 0 ] || CHECK_UNITS+=("$POWER_SERVICE")
+  [ "$RADIO_CHECK" = 0 ] || CHECK_UNITS+=("$RADIO_UNIT")
   for unit in "${CHECK_UNITS[@]}"; do
     if systemctl is-enabled --quiet "$unit" 2>/dev/null; then ok "$unit enabled"
     else drift "$unit is not enabled"; fi
@@ -791,6 +822,7 @@ fi
 sudo systemctl daemon-reload
 sudo systemctl enable "$SERVICE" >/dev/null 2>&1
 [ "$INSTALL_POWER" = 0 ] || sudo systemctl enable "$POWER_SERVICE" >/dev/null 2>&1
+[ "$RADIO_CHECK" = 0 ] || sudo systemctl enable "$RADIO_UNIT" >/dev/null 2>&1
 
 # The launcher reads this (Settings > General > Software Update): which
 # version's system setup is on the device, and whether it waits for a reboot.

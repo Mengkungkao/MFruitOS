@@ -6,7 +6,7 @@ is a daemon foreground app that provides the launcher, settings, app manager,
 updater and diagnostics.
 """
 
-__version__ = "1.6.1"
+__version__ = "1.6.2"
 
 OS_NAME = "mFruit OS"
 

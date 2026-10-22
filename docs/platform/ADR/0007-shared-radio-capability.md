@@ -71,3 +71,39 @@ legacy adoption), `tests/test_radio_host.py` (register encoding, handshake,
 provisioning, readiness), installer/CLI requirement tests; on a device:
 `setup-radio.sh --check`, then the setup, `mfruitctl catalog`, and a radio
 exchange between two provisioned radios.
+
+## Amendment (2026-10-22): the module is checked, not trusted
+
+**Context.** Provisioning wrote the module once and recorded `radio.json`;
+afterwards everything trusted the record. On 2026-10-22 a new Orange Pi found
+no radio to pair with: the other board's module was on its factory settings
+(868 MHz, transparent, no signal reports) while its `radio.json`, RadioConnect
+and `setup-radio.sh` all said 920 MHz. `setup-radio.sh` would have skipped it
+("already provisioned"), and provisioning's read-back compared the frequency
+only ([record](../../quality/records/2026-10-22-radio-module-settings.md)).
+
+**Decision.** `radio.json` is the wanted state and the module is compared
+with it: at every boot by `mfruit-radio-setup.service`
+(`python3 -m mfruitos.hosts.lora ensure`, as the user, before whisplay-daemon
+takes M0/M1), and by every `setup-radio.sh`/`provision` run. All readable
+registers are compared (`sx126x.differences`), only differences are written,
+and the whole read-back must match. The result goes to `module.json` and
+into the readiness check. The system setup installs the unit wherever a radio
+is recorded, so System updates bring it to radios set up earlier.
+
+**Alternatives.** Root-owned unit with a copy of the code: rejected, the
+user already holds the lines and the port (the daemon runs as the user), and
+root would run user-writable code at every boot. A check inside RadioConnect:
+rejected, the app has no mode lines and other radio apps would need the same.
+
+**Compatibility.** Same unit name; the old one-time unit is replaced in place.
+A module that matches is never written (no flash wear); `provisioned_at`
+changes only when the module is written, which makes RadioConnect learn the
+module's abilities again. An OS rolled back below the check leaves a unit
+whose `ensure` is unknown: it fails at boot without stopping the daemon.
+
+**Validation.** `tests/test_radio_host.py` (both boards' register dumps,
+boot check, provisioning read-back with a negative control),
+`tests/test_autoinstall.py` (unit), `tests/test_system_setup.py` (installer);
+on a device: a module on factory settings restored at boot and two radios
+pairing.

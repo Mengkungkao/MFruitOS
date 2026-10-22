@@ -152,7 +152,8 @@ PNGs. `mfruitctl help` lists the control commands.
 
 | File | Written by | Content |
 |---|---|---|
-| `radio.json` | `setup-radio.sh` only | `frequency_mhz`, `air_speed`, `power_dbm`, `net_id`, `port`, `band`, `module`, `provisioned_at`, `schema` |
+| `radio.json` | `setup-radio.sh`; the boot check sets a new `provisioned_at` when it writes the module | `frequency_mhz`, `air_speed`, `power_dbm`, `net_id`, `port`, `band`, `module`, `provisioned_at`, `schema` |
+| `module.json` | `python3 -m mfruitos.hosts.lora` (boot check, `provision`) | `result` (`ok`, `restored`, `no_reply`, `failed`, `invalid`), `checked_at`, `by`, `differences`, `frequency_mhz`, `air_speed` |
 | `device.json` | radio apps (first use) | this radio's Device ID (`address`, 1–65534) and `name` |
 | `keys.json` | radio apps | this radio's X25519 key and broadcast key, and each paired radio's keys — **secret** |
 | `contacts.json` | radio apps | names of paired radios |

@@ -149,6 +149,15 @@ by hand (`sudo rm -rf` of that build). Proposed fix, not made yet: run the root
 Python with bytecode writing off; let the installer remove such a build with
 sudo after its containment check, or warn and go on.
 
+2026-10-22: seen again on the new Orange Pi (the one-time unit's provisioning
+at its first boot) and on both Orange Pis after a register dump run with sudo.
+Since then the radio boot check runs as the user and `setup-radio.sh` runs its
+root Python with `PYTHONDONTWRITEBYTECODE=1`, so the radio setup no longer
+creates such files. Still open: the installer does not cope with ones already
+there; remove them once with
+`sudo find ~/.whisplay-os/system/versions -name __pycache__ -user root -prune -exec rm -rf {} +`
+and `sudo find ~/.whisplay-os/system/versions -name '*.pyc' -user root -delete`.
+
 ### KI-16 An app that just exited can stay "running" in the launcher (fixed)
 
 Seen on the Orange Pi (16:32) and the Pi Zero 2 W (17:23), 2026-10-10, with
@@ -204,6 +213,26 @@ kernels before 6.12, but that name was removed in 6.8, so it did not compile
 on Ubuntu 24.04's 6.8 kernel. mFruit OS maps the name with kbuild's `KCFLAGS`
 on 6.8 to 6.11 (`soundcard_kcflags`, tested); the files stay upstream's. Next:
 report to PiSugar (the switch belongs at 6.8, or 6.7 where both names exist).
+
+### KI-20 A LoRa module without its settings went unnoticed (fixed in source)
+
+Seen 2026-10-22: a newly installed Orange Pi found no radio to pair with. The
+other board's module was on its factory settings (868 MHz, transparent, no
+signal reports) while its `radio.json`, RadioConnect and `setup-radio.sh` all
+said 920 MHz; the module had worked at 920 MHz until 2026-10-17. Why it lost
+its settings is unknown (no mFruit OS or RadioConnect code writes them outside
+provisioning; a swapped or replaced module would look the same). The platform
+fault: nothing compared the module with the record after provisioning, and
+provisioning compared the frequency only
+([record](records/2026-10-22-radio-module-settings.md)). Fixed in source
+(1.6.2): every boot compares all readable registers with `radio.json` and
+writes them back where they differ, before whisplay-daemon starts, as the user
+([Installation](../platform/INSTALLATION.md#the-module-is-checked-at-every-boot),
+ADR 0007 amendment); `setup-radio.sh` compares the module itself;
+`module.json` and the readiness check report a module that does not answer.
+AUTOMATED (negative controls); DEVICE VERIFIED on the old Orange Pi: the
+boot check restored its module at boot, then the two boards paired. NOT
+VERIFIED: a System update installing the boot check.
 
 ## Physical checks outstanding
 

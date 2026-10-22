@@ -60,7 +60,8 @@ sudo rm -f /etc/sudoers.d/whisplay-os /usr/local/bin/mfruitctl \
   /etc/polkit-1/rules.d/49-mfruit-wifi.rules \
   /etc/polkit-1/localauthority/50-local.d/49-mfruit-wifi.pkla
 if [ -f /etc/systemd/system/mfruit-radio-setup.service ]; then
-  # Left by scripts/setup-radio.sh when the radio settings were never written.
+  # The LoRa module's boot check (scripts/setup-radio.sh, install.sh); the
+  # module keeps its settings, the shared radio files stay.
   sudo systemctl disable mfruit-radio-setup.service 2>/dev/null || true
   sudo rm -f /etc/systemd/system/mfruit-radio-setup.service
   sudo systemctl daemon-reload

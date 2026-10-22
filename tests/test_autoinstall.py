@@ -12,7 +12,7 @@ from unittest.mock import Mock, patch
 
 from helpers import ROOT, TempHomeTestCase
 from mfruitos.apps.registry import AppEntry, AppRegistry
-from mfruitos.hosts.lora.__main__ import BOOT_UNIT, boot_unit
+from mfruitos.hosts.lora.__main__ import boot_unit
 from mfruitos.launcher.services import ScreenServices
 from mfruitos.launcher.tasks import TaskRunner
 from mfruitos.system.settings import Settings
@@ -169,26 +169,41 @@ class TaskLaneTests(TempHomeTestCase):
 
 
 class BootUnitTests(TempHomeTestCase):
+    """The LoRa module's boot check (2026-10-22: a module on factory settings
+    stayed deaf to the other radios while radio.json said 920 MHz)."""
+
     def args(self, **changes):
-        values = dict(band="au915", frequency=None, air_speed=2400, port="/dev/ttyS0",
-                      code="/home/pi/.whisplay-os/system/current", home="/home/pi/.whisplay-os",
-                      owner="pi")
+        values = dict(port="/dev/ttyS0", code="/home/pi/.whisplay-os/system/current",
+                      home="/home/pi/.whisplay-os", owner="pi")
         values.update(changes)
         return Namespace(**values)
 
-    def test_unit_provisions_once_before_the_daemon_and_disables_itself(self):
-        text = boot_unit(self.args())
+    def unit(self, groups=(), **changes):
+        with patch("mfruitos.hosts.lora.__main__._device_groups", return_value=list(groups)):
+            return boot_unit(self.args(**changes))
+
+    def test_unit_checks_the_module_at_every_boot_before_the_daemon(self):
+        text = self.unit()
         self.assertIn("Before=whisplay-daemon.service whisplay-os.service", text)
         self.assertIn("ConditionPathExists=/dev/ttyS0", text)
         self.assertIn("Environment=PYTHONPATH=/home/pi/.whisplay-os/system/current", text)
-        self.assertIn("ExecStart=/usr/bin/python3 -m mfruitos.hosts.lora provision --band au915 "
-                      "--frequency 920 --air-speed 2400 --port /dev/ttyS0 "
-                      "--home /home/pi/.whisplay-os --owner pi", text)
-        self.assertIn(f"ExecStartPost=/usr/bin/systemctl disable {BOOT_UNIT}", text)
+        self.assertIn("ExecStart=/usr/bin/python3 -m mfruitos.hosts.lora ensure "
+                      "--home /home/pi/.whisplay-os\n", text)
         self.assertIn("WantedBy=multi-user.target", text)
-        self.assertIn("--frequency 868", boot_unit(self.args(band="eu868", frequency=868)))
+        # Every boot: it no longer switches itself off after the first success.
+        self.assertNotIn("disable", text.split("[Unit]", 1)[1])
+        self.assertNotIn("ExecStartPost", text)
 
-    def test_unsafe_paths_are_refused(self):
-        for changes in ({"home": "/home/a b"}, {"owner": "pi;rm"}, {"code": "$HOME"}):
+    def test_unit_runs_as_the_user_with_the_device_groups(self):
+        text = self.unit(groups=["dialout", "gpio"])
+        self.assertIn("User=pi\n", text)
+        self.assertIn("SupplementaryGroups=dialout gpio\n", text)
+        # Root never runs the user's code from it.
+        self.assertNotIn("User=root", text)
+        self.assertNotIn("SupplementaryGroups", self.unit(groups=[]))
+
+    def test_unsafe_values_are_refused(self):
+        for changes in ({"home": "/home/a b"}, {"owner": "pi;rm"}, {"code": "$HOME"},
+                        {"port": "/etc/passwd"}, {"port": "/dev/ttyS0x;"}):
             with self.subTest(changes=changes), self.assertRaises(ValueError):
-                boot_unit(self.args(**changes))
+                self.unit(**changes)

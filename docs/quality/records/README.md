@@ -10,6 +10,7 @@ Name new records `YYYY-MM-DD-topic.md` and add them to the top of this list.
 
 | Date | Record | Scope |
 |---|---|---|
+| 2026-10-22 | [A new board found no radio to pair with](2026-10-22-radio-module-settings.md) | 1.6.2: one module back on factory settings (868 MHz) while `radio.json` said 920; the module is now compared at every boot; register dumps of both Orange Pis |
 | 2026-10-13 | [Settings → Wi-Fi shown twice](2026-10-13-wifi-chooser.md) | 1.6.1: the Wi-Fi app (1.2.0) opens on the network list from Settings; bundled apps follow the OS; both boards checked |
 | 2026-10-12 | [The system setup follows System updates](2026-10-12-system-setup.md) | 1.6.0: `install.sh --check-system`/`--system-only`, `mfruit-system-apply.service` from the official release; which board lacked what |
 | 2026-10-12 | [New software from the Fruit Store](2026-10-12-store-updates.md) | releases publish themselves, the Store list follows them; Orange Pi updated from its screens (AI Chatbot 1.1.0, mFruit OS 1.5.3) |

@@ -182,9 +182,29 @@ esac
                      "/etc/systemd/system/mfruit-system-apply.service",
                      "/etc/systemd/system/mfruit-power.service"):
             self.assertIn(path, out)
+        # No radio recorded: no boot check for its module.
+        self.assertNotIn("mfruit-radio-setup.service", out)
         commands = self.log.read_text() if self.log.exists() else ""
         self.assertNotIn("sudo", commands)
         self.assertFalse(self.os_home.exists(), "check mode created the mFruit OS folder")
+
+    def test_check_system_wants_the_radio_boot_check_where_a_radio_is_recorded(self):
+        write_command(self.bin, "id", '''case "$*" in
+  -u|"-u fixture") echo 1000 ;;
+  -un|"-gn fixture") echo fixture ;;
+  *) exit 99 ;;
+esac
+''')
+        write_command(self.bin, "sudo", 'echo "sudo $*" >> "$LOG"; exit 1\n')
+        self.env["SUDO_USER"] = "fixture"
+        (self.os_home / "shared" / "radio").mkdir(parents=True)
+        (self.os_home / "shared" / "radio" / "radio.json").write_text(
+            '{"frequency_mhz": 920, "band": "au915", "schema": 1}')
+        result = self.run_installer("--check-system")
+        out = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 1, out)
+        self.assertIn("/etc/systemd/system/mfruit-radio-setup.service is missing", out)
+        self.assertIn("mfruit-radio-setup.service is not enabled", out)
 
     def test_system_only_as_root_installs_the_system_setup_and_never_runs_the_users_python(self):
         # The process is root; files root installs land in FAKE_ROOT.
@@ -210,6 +230,10 @@ exit 0
                                            f'exec {sys.executable} "$@"\n')
         (self.os_home / "system" / "current" / "mfruitos").mkdir(parents=True)
         (self.os_home / "system" / "current" / "mfruitos" / "__init__.py").write_text("")
+        # A radio set up before the boot check existed (both Orange Pis, 2026-10-22).
+        (self.os_home / "shared" / "radio").mkdir(parents=True)
+        (self.os_home / "shared" / "radio" / "radio.json").write_text(
+            '{"frequency_mhz": 920, "band": "au915", "schema": 1}')
         result = self.run_installer("--system-only", "--user", "fixture")
         out = result.stdout + result.stderr
         self.assertEqual(result.returncode, 0, out)
@@ -228,6 +252,11 @@ exit 0
                          (SCRIPTS / "mfruit-system-apply").read_text(encoding="utf-8"))
         self.assertIn("ExecStart=/usr/bin/python3 -I /usr/local/lib/mfruit-os/mfruit-system-apply",
                       installed("/etc/systemd/system/mfruit-system-apply.service"))
+        radio = installed("/etc/systemd/system/mfruit-radio-setup.service")
+        self.assertIn("User=fixture\n", radio)
+        self.assertIn(f"ExecStart=/usr/bin/python3 -m mfruitos.hosts.lora ensure --home {self.os_home}\n",
+                      radio)
+        self.assertIn("sudo systemctl enable mfruit-radio-setup.service", self.log.read_text())
         status = json.loads(installed("/var/lib/mfruit-os/system-setup.json"))
         self.assertEqual((status["version"], status["result"], status["by"]),
                          (__version__, "ok", "install.sh --system-only"))

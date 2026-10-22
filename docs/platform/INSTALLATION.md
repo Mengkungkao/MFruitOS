@@ -378,11 +378,11 @@ bash ~/.whisplay-os/system/current/scripts/setup-radio.sh           # asks befor
 runs the same script at the end of the install and needs nothing more:
 
 1. packages, UART, serial console and `dialout` are set up; when the UART
-   needs a reboot, the script installs the one-time `mfruit-radio-setup.service`
-   and the installer includes the reboot in its own;
+   needs a reboot, the script records the settings in `radio.json`, installs
+   the boot check `mfruit-radio-setup.service` (below) and the installer
+   includes the reboot in its own;
 2. at the next boot that service writes the module settings before
-   whisplay-daemon starts (nothing has to be stopped), records them and
-   disables itself; a failed attempt runs again at the following boot;
+   whisplay-daemon starts (nothing has to be stopped);
 3. the Fruit Store apps that need the radio (`requires: ["radio"]`, today
    RadioConnect) are queued in `state/pending-installs.json`; the launcher
    installs them by itself once the radio is ready and the network is up
@@ -392,6 +392,37 @@ runs the same script at the end of the install and needs nothing more:
 Run by hand, `setup-radio.sh` offers the same next-boot service instead of a
 second run. Without the radio set up, RadioConnect's install from the Fruit
 Store fails cleanly and is rolled back.
+
+### The module is checked at every boot
+
+The LoRa module keeps its settings in its own memory; `radio.json` only
+records what it was given. A module that is new, swapped for another or reset
+to its factory settings (868 MHz, sending transparently) hears none of the
+other radios, while every screen still shows the recorded frequency: on
+2026-10-22 a new board found no radio to pair with for exactly that reason
+([record](../quality/records/2026-10-22-radio-module-settings.md)). So nothing
+trusts the record alone any more:
+
+- `mfruit-radio-setup.service` runs at **every boot**, as the user (the
+  groups of the serial port and the GPIO chip, never root), before
+  whisplay-daemon takes the module's M0/M1 lines. It reads the module,
+  compares every readable register with `radio.json` and writes the recorded
+  settings back where they differ, then checks the read-back. It adds 1-3 s
+  to the boot.
+- `setup-radio.sh` always compares the module itself (stopping whisplay-daemon
+  for a few seconds), and writes only what differs; `--check` reports the last
+  boot check instead, because reading the module would stop the daemon.
+- The result is in `shared/radio/module.json` (`ok`, `restored`, `no_reply`,
+  `failed`, `invalid`, with the differences found). A module that did not
+  answer or did not take its settings is a readiness problem: the Fruit Store
+  and `mfruitctl catalog` show it next to the radio apps.
+- The system setup (`install.sh`, also from System updates) installs the boot
+  check wherever a radio is recorded, so radios set up before it get it too.
+
+By hand, read-only (stops whisplay-daemon for a few seconds):
+`sudo env PYTHONPATH=$HOME/.whisplay-os/system/current python3 -m
+mfruitos.hosts.lora check --home $HOME/.whisplay-os`; the same with `ensure`
+instead of `check` writes the recorded settings back where they differ.
 
 Options: `--band au915|eu868|us915` (default `au915`, 920 MHz), `--frequency`,
 `--air-speed` (default 2400), `--yes`, `--no-reboot` (never reboot; exit code 3 when a reboot is due). Use a band that is legal where you
@@ -403,14 +434,16 @@ are, and the same band, frequency and air rate on every radio.
 | Raspberry Pi: `enable_uart=1` in `config.txt`; serial console removed from `cmdline.txt` (backups `*.mfruit.bak`); `serial-getty@ttyS0` disabled | the HAT talks on `/dev/ttyS0`; a console there corrupts packets | restore the `.mfruit.bak` files |
 | Orange Pi: `console=` (and `extraargs`) in `orangepiEnv.txt`/`armbianEnv.txt` (backup `*.mfruit.bak`); `serial-getty@ttyS0` masked | same | restore the backup, `systemctl unmask serial-getty@ttyS0` |
 | user added to `dialout` | apps open the serial port | `sudo gpasswd -d $USER dialout` |
-| module registers written (persistent): band frequency, air rate, power | every radio must match | run the setup again with other values |
-| `~/.whisplay-os/shared/radio/radio.json` | the settings every radio app reads | written again by the next setup |
-| `/etc/systemd/system/mfruit-radio-setup.service` (only when a reboot is due; enabled once) | writes the module settings at the next boot, before whisplay-daemon | disables itself after success; the next successful `setup-radio.sh` run and `uninstall.sh` remove the file |
+| module registers written (persistent) where they differ: band frequency, air rate, power, addressed transmission, signal reports | every radio must match | run the setup again with other values |
+| `~/.whisplay-os/shared/radio/radio.json` | the settings every radio app reads, and the boot check restores | written again by the next setup |
+| `~/.whisplay-os/shared/radio/module.json` | what the last read of the module found | rewritten by every check |
+| `/etc/systemd/system/mfruit-radio-setup.service` (enabled) | at every boot, as the user, before whisplay-daemon: gives the module the recorded settings where it differs | `uninstall.sh` removes it; by hand `sudo systemctl disable mfruit-radio-setup.service` |
 | `~/.whisplay-os/state/pending-installs.json` (only with `install.sh --radio`) | radio apps the launcher installs by itself | removed when the apps are installed; delete it to cancel |
 
 UART and console changes need a reboot; the script stops, asks to reboot, and
-provisions at the next boot (the service above) or when run again. Provisioning stops whisplay-daemon for
-a few seconds (closing an open app). Afterwards the launcher is restarted
+provisions at the next boot (the service above) or when run again. Comparing
+or writing the module from the script stops whisplay-daemon for a few seconds
+(closing an open app). Afterwards the launcher is restarted
 unless an install job is running. `mfruitctl catalog` then shows the radio
 apps without missing requirements.
 

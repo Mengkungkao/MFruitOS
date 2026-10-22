@@ -78,7 +78,7 @@ be unmounted by then.
 | Page key input | keys for an internal daemon page | wrapper command `mfruit.page.key` | No |
 | Keyboard bridge for apps without the key hub | Esc and Space for foreground apps that read keys the Whisplay way | `Runtime._bridge_key` → wrapper command `mfruit.app.key`: Esc runs the daemon's own Esc handling (closes the app unless `disable_esc_exit_key`), Space is broadcast as `button_pressed`/`button_released` to that app | No |
 | Recovery display | show recovery UI when the host service is down | `launcher/direct.DirectDisplay` | No |
-| LoRa radio | provision the shared SX126X module, report readiness | `hosts/lora/` (`sx126x`, `modelines`, `readiness`, CLI), `scripts/setup-radio.sh`; settings in the shared radio store ([ADR 0007](ADR/0007-shared-radio-capability.md)) | Yes (module boundary) |
+| LoRa radio | provision the shared SX126X module, compare it with the record at every boot, report readiness | `hosts/lora/` (`sx126x`, `modelines`, `readiness`, CLI), `scripts/setup-radio.sh`; settings in the shared radio store ([ADR 0007](ADR/0007-shared-radio-capability.md)) | Yes (module boundary) |
 
 ## whisplay-daemon facts the design depends on
 

@@ -71,7 +71,36 @@ def describe(reg: bytes) -> dict:
         "frequency_mhz": BAND_START + reg[8],
         "fixed_transmission": bool(reg[9] & 0x40),
         "rssi_appended": bool(reg[9] & 0x80),
+        "channel_level": bool(reg[7] & 0x20),
     }
+
+
+# Registers 03H-09H (address, net id, REG0-REG3) read back as written; the two
+# key bytes after them are write-only and always read back as zero.
+_READABLE = slice(3, 10)
+_FIELD_NAMES = {
+    "frequency_mhz": "frequency", "air_speed": "air speed", "power_dbm": "power",
+    "uart_baud": "serial speed", "fixed_transmission": "addressed (fixed) transmission",
+    "rssi_appended": "signal strength after each packet", "channel_level": "channel level replies",
+    "net_id": "net id", "address": "module address", "buffer_size": "packet size",
+}
+
+
+def differences(found: bytes, wanted: bytes) -> list:
+    """What a module's register dump has that ``wanted`` (an ``encode()``
+    result) does not, in words; empty when the module has those settings.
+
+    A module that answers with other settings is not ready even when its
+    frequency matches: a factory-fresh or reset E22 module sends
+    transparently on 868 MHz, so radios set up by mFruit OS never hear it.
+    """
+    have, want = describe(found), describe(wanted)
+    listed = [f"{_FIELD_NAMES[key]} {have[key]} (wanted {want[key]})"
+              for key in _FIELD_NAMES if have[key] != want[key]]
+    if not listed and found[_READABLE] != wanted[_READABLE]:
+        listed.append(f"registers {found[_READABLE].hex(' ')} "
+                      f"(wanted {wanted[_READABLE].hex(' ')})")
+    return listed
 
 
 class Configurator:

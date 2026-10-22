@@ -6,6 +6,24 @@ the OS version.
 
 ## Unreleased
 
+## [1.6.2] - 2026-10-22
+
+### Fixed
+- **A LoRa radio whose module lost its settings found nobody to pair with,
+  while every screen said it was fine.** The module keeps its settings in its
+  own memory, and mFruit OS trusted what `radio.json` recorded at the first
+  setup. On 2026-10-22 one Orange Pi's module was back on its factory settings
+  (868 MHz, sent transparently) while RadioConnect and the radio setup showed
+  920 MHz, so a newly installed board could not pair with it. Now the module
+  is compared with the record at every boot, before whisplay-daemon starts
+  (`mfruit-radio-setup.service`, as the user), and the recorded settings are
+  written back where it differs; `setup-radio.sh` compares the module itself
+  instead of skipping it, every readable register must read back, and a module
+  that does not answer is shown as a missing requirement next to radio apps
+  ([Installation](docs/platform/INSTALLATION.md#the-module-is-checked-at-every-boot)).
+  The system setup brings the boot check to radios set up before it.
+- The radio setup no longer leaves root-owned bytecode in a build (KI-15).
+
 ## [1.6.1] - 2026-10-13
 
 ### Fixed

@@ -6,6 +6,27 @@ History: [docs/quality/records/](docs/quality/records/README.md) (the previous
 hand-off is preserved verbatim in
 [2026-10-01-handoff.md](docs/quality/records/2026-10-01-handoff.md)).
 
+## Session 2026-10-22 — new Orange Pi found no radio to pair with (1.6.2, uncommitted)
+
+The owner installed a new Orange Pi (`opi2w`, `ssh orangepi@192.168.0.248`,
+same image as the old one: same machine-id) and could not pair it with the
+old one (`orangepi@192.168.0.130`)
+([record](docs/quality/records/2026-10-22-radio-module-settings.md), KI-20).
+
+| # | Step | Status |
+|---|---|---|
+| M1 | Cause: the old board's module was on factory settings (868 MHz, transparent; register dump), its `radio.json` said 920 MHz; nothing compared the module with the record. Why it lost its settings: unknown (swap or reset; no code writes it) | FOUND (dumps run by the owner with sudo) |
+| M2 | Boot check: `python3 -m mfruitos.hosts.lora ensure` in `mfruit-radio-setup.service`, every boot, as the user, before whisplay-daemon; all readable registers (`sx126x.differences`); `module.json` + readiness; `setup-radio.sh` always compares the module, `record` for the next boot; `install.sh` system setup installs the unit where `radio.json` exists; full read-back in `provision`; no root bytecode from the radio setup (KI-15) | IMPLEMENTED, AUTOMATED (negative controls; check.sh green, 763); version 1.6.2, CHANGELOG, ADR 0007 amendment, Installation |
+| M3 | Boards | Old board: `try-boot-check.sh` run; at boot the check found 868 MHz/transparent and restored 920 MHz before whisplay-daemon (`module.json` `restored`); the boards then paired both ways (16:29:46, -32 dBm). DEVICE VERIFIED. Its unit runs `~/mfruit-radio-fix` until 1.6.2 is installed. New board: script NOT run (old one-time unit, root-owned bytecode still there) |
+
+Next (owner): commit and push (1.6.2 = release). Then on each board update to
+1.6.2 from the screen; the old board first needs the one-time
+`bash ~/.whisplay-os/system/current/scripts/install.sh --system-only` (it has
+no `mfruit-system-apply` yet), which also points its unit at `system/current`;
+on the new board the System update's system setup installs the boot check.
+Then `rm -rf ~/mfruit-radio-fix` on both. Consider giving each board its own
+`/etc/machine-id` (`sudo rm /etc/machine-id && sudo systemd-machine-id-setup`).
+
 ## Session 2026-10-13 — Settings → Wi-Fi shown twice (1.6.1, uncommitted)
 
 The owner: on both boards *Choose a network…* opened a second copy of the
