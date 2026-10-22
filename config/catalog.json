@@ -20,11 +20,11 @@
     "name": "RadioConnect",
     "description": "LoRa voice, chats and pairing; needs the radio set up",
     "repository": "https://github.com/Mengkungkao/RadioConnect",
-    "ref": "977847383df1ed18cc51b2e6afbdbd9b7f13aeac",
-    "url": "https://github.com/Mengkungkao/RadioConnect/releases/download/v0.6.1/radioconnect-0.6.1.tar.gz",
-    "sha256": "c3fbc05894cd9b3e7d40a8af034b83332baf315e55ce7a8d82938f7ee9399de5",
+    "ref": "9a37efd75eb8cb9a26cdfd16aa8b8360aa6fbfcc",
+    "url": "https://github.com/Mengkungkao/RadioConnect/releases/download/v0.6.2/radioconnect-0.6.2.tar.gz",
+    "sha256": "20bffeb6998c922908fae59af7d118c834bb90f6ed78b99ee1416022613f87c8",
     "native": true,
-    "version": "0.6.1",
+    "version": "0.6.2",
     "requires": [
       "radio"
     ]
